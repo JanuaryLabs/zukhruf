@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { DockerTestbed } from './index.ts';
+import { DockerTestbed, forLogMessage } from './index.ts';
 
 const image = 'alpine:latest';
 
@@ -49,13 +49,7 @@ test('a container runs its command with the hostname, environment, labels and vo
       'echo "$GREETING from $(hostname)" > /data/greeting; echo written; exec sleep 600',
     ],
   });
-  const decoder = new TextDecoder();
-  let log = '';
-  for await (const { data } of container.followLogs({ signal: t.signal })) {
-    log += decoder.decode(data, { stream: true });
-    if (log.includes('written\n')) break;
-  }
-  assert.match(log, /written\n/);
+  await forLogMessage('written')({ container }, t.signal);
   assert.equal(
     (await container.exec({ Cmd: ['cat', '/data/greeting'] })).stdout,
     'hello from holder\n',

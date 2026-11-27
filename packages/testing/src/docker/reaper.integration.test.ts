@@ -611,14 +611,18 @@ async function secondEngine({
       },
       {
         internalPort: 2375,
-        healthy: ({ port }) =>
-          retryUntilReady(
-            async () => {
-              const ping = await fetch(`http://127.0.0.1:${port}/_ping`);
-              if (!ping.ok) throw new Error(`The ping answered ${ping.status}`);
-            },
-            { maxRetryTime: 60_000 },
-          ),
+        wait: {
+          until: ({ port }) =>
+            retryUntilReady(
+              async () => {
+                const ping = await fetch(`http://127.0.0.1:${port}/_ping`);
+                if (!ping.ok)
+                  throw new Error(`The ping answered ${ping.status}`);
+              },
+              { maxRetryTime: 60_000 },
+            ),
+          timeout: 60_000,
+        },
       },
     ),
   );
@@ -2963,11 +2967,17 @@ async function droppableSshEngine() {
       },
       {
         internalPort: 22,
-        healthy: ({ port }, exited) =>
-          waitFor(async () => assert.match(await banner(port), /^SSH-2\.0-/), {
-            signal: exited,
-            interval: 200,
-          }),
+        wait: {
+          until: ({ port }, exited) =>
+            waitFor(
+              async () => assert.match(await banner(port), /^SSH-2\.0-/),
+              {
+                signal: exited,
+                interval: 200,
+              },
+            ),
+          timeout: 60_000,
+        },
       },
     ),
   );

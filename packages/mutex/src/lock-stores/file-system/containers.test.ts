@@ -4,7 +4,7 @@ import { type TestContext, test } from 'node:test';
 import { build } from 'esbuild';
 
 import { describe } from '@zukhruf/parameterized-test';
-import { DockerTestbed } from '@zukhruf/testing/docker';
+import { DockerTestbed, forLogMessage } from '@zukhruf/testing/docker';
 
 /**
  * Containers are platform setup that no operation of the stores exposes. Two
@@ -99,20 +99,11 @@ async function holdingIn(
   t: TestContext,
   container: Container,
 ): Promise<{ pid: number; token: string }> {
-  const decoder = new TextDecoder();
-  let stdout = '';
-  let line: string | undefined;
-  for await (const { stream, data } of container.followLogs({
-    signal: t.signal,
-  })) {
-    if (stream !== 'stdout') continue;
-    stdout += decoder.decode(data, { stream: true });
-    line = stdout
-      .split('\n')
-      .slice(0, -1)
-      .find((candidate) => candidate.includes('"holding"'));
-    if (line !== undefined) break;
-  }
+  await forLogMessage('"holding"')({ container }, t.signal);
+  const { stdout } = await container.logs();
+  const line = stdout
+    .split('\n')
+    .find((candidate) => candidate.includes('"holding"'));
   assert.ok(line, `The holder in ${container.id} must take the key`);
   return JSON.parse(line);
 }

@@ -1,6 +1,6 @@
 # A service waits until it is ready with a wait strategy that the testbed runs under a startup time limit, and a container that stops fails with its exit
 
-Status: Proposed 2026-11-27 (backlog #6219). When it is accepted, it supersedes [ADR 0035](./0035-a-database-fixture-waits-for-the-ready-line-of-its-server-in-the-logs-of-its-container-and-then-sends-one-query.md) in part, for the query after the ready line.
+Status: Accepted 2026-11-27 (backlog #6219). It supersedes [ADR 0035](./0035-a-database-fixture-waits-for-the-ready-line-of-its-server-in-the-logs-of-its-container-and-then-sends-one-query.md) in part, for the query after the ready line.
 
 Decision-makers: the zukhruf session push-based-docker-waits, from a 5-whys chain, a map of every readiness site and the sources of testcontainers-node 12.2.2 and testcontainers-go v0.45.0. Ezz asked for the 5 whys and approved this paper ("Write the paper").
 

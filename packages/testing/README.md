@@ -55,17 +55,17 @@ test('a holder in another container', async () => {
 });
 ```
 
-| Member                                           | Gives                                                                                                                                                                                                                              | Returns                           |
-| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| `start(body, { name? })`                         | A container this process owns. It stays after it stops, so its logs remain, until disposal removes it.                                                                                                                             | `OwnedContainer`                  |
-| `serve(body, { internalPort, name?, healthy? })` | A dedicated server whose `internalPort` answers on `127.0.0.1` of this machine. Failure or disposal removes it.                                                                                                                    | `ServiceContainer`                |
-| `reuse(body, { internalPort, name?, healthy? })` | One server per request on the engine, shared across processes, runs and versions of this package.                                                                                                                                  | `ServiceContainer`                |
-| `run(body, { name? })`                           | A container that runs to completion. It gives the output and the exit code, and removes the container. A non-zero exit code does not throw.                                                                                        | `ExecResult`                      |
-| `volume()`                                       | A named volume.                                                                                                                                                                                                                    | `OwnedVolume`                     |
-| `directory()`                                    | A directory on the engine's host, for bind mounts. It has `mkdir`, `writeFile`, `readFile`, `chmod` and `symlink`.                                                                                                                 | `DockerDirectory`                 |
-| `client()`                                       | The `@zukhruf/docker` client of the engine, for each other Engine API call, such as `info()` or `containers.find(id)`.                                                                                                             | `Docker` (from `@zukhruf/docker`) |
-| `image(tag, build)`                              | The image `tag` on the engine. When the engine has none, one process at a time holds the build lease of the tag and calls `build(docker)`, which must tag the image `tag`; the other processes wait for that lease and look again. | `void`                            |
-| `defaults()`                                     | The run's labels and the default resources, in the shape of a body: `{ Labels, HostConfig: { Memory, NanoCpus } }`. In a run, it holds the run's reaper first.                                                                     |                                   |
+| Member                                        | Gives                                                                                                                                                                                                                              | Returns                           |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| `start(body, { name?, wait? })`               | A container this process owns. It stays after it stops, so its logs remain, until disposal removes it.                                                                                                                             | `OwnedContainer`                  |
+| `serve(body, { internalPort, name?, wait? })` | A dedicated server whose `internalPort` answers on `127.0.0.1` of this machine. Failure or disposal removes it.                                                                                                                    | `ServiceContainer`                |
+| `reuse(body, { internalPort, name?, wait? })` | One server per request on the engine, shared across processes, runs and versions of this package.                                                                                                                                  | `ServiceContainer`                |
+| `run(body, { name? })`                        | A container that runs to completion. It gives the output and the exit code, and removes the container. A non-zero exit code does not throw.                                                                                        | `ExecResult`                      |
+| `volume()`                                    | A named volume.                                                                                                                                                                                                                    | `OwnedVolume`                     |
+| `directory()`                                 | A directory on the engine's host, for bind mounts. It has `mkdir`, `writeFile`, `readFile`, `chmod` and `symlink`.                                                                                                                 | `DockerDirectory`                 |
+| `client()`                                    | The `@zukhruf/docker` client of the engine, for each other Engine API call, such as `info()` or `containers.find(id)`.                                                                                                             | `Docker` (from `@zukhruf/docker`) |
+| `image(tag, build)`                           | The image `tag` on the engine. When the engine has none, one process at a time holds the build lease of the tag and calls `build(docker)`, which must tag the image `tag`; the other processes wait for that lease and look again. | `void`                            |
+| `defaults()`                                  | The run's labels and the default resources, in the shape of a body: `{ Labels, HostConfig: { Memory, NanoCpus } }`. In a run, it holds the run's reaper first.                                                                     |                                   |
 
 The `body` is the body of a container create in the Engine API: `EngineApi.ContainerCreateRequest` of `@zukhruf/docker`. Write it with the fields of the Engine API, for example `Image`, `Cmd`, `Entrypoint`, `Env` (strings `KEY=value`), `Hostname`, `Labels`, and in `HostConfig`: `Binds`, `Tmpfs`, `Memory`, `NanoCpus`, `IpcMode` and `MemorySwappiness`. The testbed adds these values to each body before it creates the container:
 
@@ -73,19 +73,19 @@ The `body` is the body of a container create in the Engine API: `EngineApi.Conta
 - `HostConfig.Memory` of 1 GiB and `HostConfig.NanoCpus` of 1 CPU, when the body does not set them. These limits protect a shared engine from a test container, for example an SSH engine that also runs real applications.
 - For `serve` and `reuse`: `internalPort`, published on `127.0.0.1` of the engine's host.
 
-Without `name`, the engine gives the container a name. `reuse` without `name` uses the name `zukhruf-testing-<fingerprint>` (see [Shared servers](#shared-servers)). `healthy` is a function that throws until the server is ready; it runs on every acquisition. Pass the `signal` that `healthy` gets as its second argument to each wait inside it: the signal aborts when the container exits first. When the server writes a line to its console when it is ready, wait for that line in `container.followLogs()`, which gives the logs from the start of the container, and then send one query, as the database fixtures do ([ADR 0035](./docs/adr/0035-a-database-fixture-waits-for-the-ready-line-of-its-server-in-the-logs-of-its-container-and-then-sends-one-query.md)). When the server writes no such line, poll with `retryUntilReady`. When the engine does not have the image, the acquisition pulls it, as `docker run` does.
+Without `name`, the engine gives the container a name. `reuse` without `name` uses the name `zukhruf-testing-<fingerprint>` (see [Shared servers](#shared-servers)). `wait` says how the acquisition waits until the server is ready, on every acquisition (see [Wait strategies](#wait-strategies)). When the engine does not have the image, the acquisition pulls it, as `docker run` does.
 
 `OwnedContainer`, `OwnedVolume`, `ExecResult` and `Docker` are types of `@zukhruf/docker`. A container has `id`, `exec({ Cmd })`, `logs()`, `kill(signal)` and `inspect()`. `exec` gives `exitCode`, `stdout`, `stderr` and `output`, and it does not throw for a non-zero exit code. The text keeps its last newline. Disposal removes the container with its anonymous volumes.
 
-A `ServiceContainer` has `container`, `host` and `port`. On an SSH engine, the port is a local forward that belongs to the acquiring process. `disconnect()` closes that forward and leaves the container running for its other users. If the forward ended before, for example because the SSH connection died, `disconnect()` rejects with the error of that loss. `cleanup()` and disposal also remove the container of a dedicated server. When the removal fails too, `cleanup()` rejects with a `SuppressedError` that holds both errors. Nothing is written to stderr. A probe in `healthy` gets the `ServiceContainer`: call `container.exec(...)` on it, and do not destructure `exec`.
+A `ServiceContainer` has `container`, `host` and `port`. On an SSH engine, the port is a local forward that belongs to the acquiring process. `disconnect()` closes that forward and leaves the container running for its other users. If the forward ended before, for example because the SSH connection died, `disconnect()` rejects with the error of that loss. `cleanup()` and disposal also remove the container of a dedicated server. When the removal fails too, `cleanup()` rejects with a `SuppressedError` that holds both errors. Nothing is written to stderr. A wait strategy of `serve` and `reuse` gets the `ServiceContainer`: call `container.exec(...)` on it, and do not destructure `exec`.
 
-A server is not ready when `healthy` throws, or when its container exits first. An exit ends the wait at once: the readiness error is "Container … exited with code … before it was ready", with the output of the container. The acquisition attaches to the container before it starts it, so it has this exit code and output also for a container that exits at once. Then `serve` reads the output of the container, removes the container, and rejects. The message of the error has that output. Its `cause` is the readiness error. `reuse` rejects with the readiness error.
+A server is not ready when its wait strategy rejects or reaches its time limit ("Container … was not ready within … ms"), or when its container exits first. An exit ends the wait at once: the readiness error is "Container … exited with code … before it was ready", with the output of the container. The acquisition attaches to the container before it starts it, so it has this exit code and output also for a container that exits at once. Then `serve` reads the output of the container, removes the container, and rejects. The message of the error has that output. Its `cause` is the readiness error. `reuse` rejects with the readiness error.
 
-### Wait strategies (proposed)
+### Wait strategies
 
-This section is on paper for review ([ADR 0036](./docs/adr/0036-a-service-waits-until-it-is-ready-with-a-wait-strategy-that-the-testbed-runs-under-a-startup-time-limit-and-a-container-that-stops-fails-with-its-exit.md), Proposed, backlog #6219). The package exports `forLogMessage`; the `wait` option of `serve()`, `reuse()` and `start()` comes next, and until then `healthy` stays.
+A container waits until it is ready by a wait strategy that the testbed runs under a startup time limit ([ADR 0036](./docs/adr/0036-a-service-waits-until-it-is-ready-with-a-wait-strategy-that-the-testbed-runs-under-a-startup-time-limit-and-a-container-that-stops-fails-with-its-exit.md)).
 
-A service says how to wait until it is ready with `wait: { until, timeout }`. `until` is a wait strategy: `(target, signal) => Promise<void>`. `timeout` is the startup time limit in milliseconds. `serve()`, `reuse()` and `start()` take it, and `healthy` goes:
+A service says how to wait until it is ready with `wait: { until, timeout }`. `until` is a wait strategy: `(target, signal) => Promise<void>`. `timeout` is the startup time limit in milliseconds. `serve()`, `reuse()` and `start()` take it:
 
 ```ts
 await testbed.reuse(body, {
@@ -402,7 +402,7 @@ Wait for an event when one exists; `waitFor` is for a fact that only a read show
 
 A wait for an event in a test is `untilAborted(promise, t.signal)` of `@zukhruf/async`, and an operation that accepts an `AbortSignal` gets `t.signal`. A test sets no number of its own. `AbortSignal.timeout(ms)` sets one, and `zukhruf/no-own-wait-limit` of `@zukhruf/eslint` reports it in a test, as it reports `t.waitFor`. `t.signal` aborts only when the runner has a test limit, so a direct `node --test` run needs `--test-timeout=<ms>` (the nx test target sets 300000). Then a hung wait ends.
 
-`retryUntilReady(fn, options)` retries `fn` until it stops throwing, every 250 ms for at most 30 seconds by default. It takes every p-retry option. It is for readiness where no test context exists, such as the `healthy` check of a container. A test that polls an assertion uses `waitFor(check, { signal: t.signal })`, and `zukhruf/no-assert-in-retry-until-ready` of `@zukhruf/eslint` reports a `retryUntilReady` call that polls one.
+`retryUntilReady(fn, options)` retries `fn` until it stops throwing, every 250 ms for at most 30 seconds by default. It takes every p-retry option. It is for readiness where no test context exists, such as the wait strategy of a server that writes no ready line. A test that polls an assertion uses `waitFor(check, { signal: t.signal })`, and `zukhruf/no-assert-in-retry-until-ready` of `@zukhruf/eslint` reports a `retryUntilReady` call that polls one.
 
 ## Worker processes
 
@@ -626,8 +626,20 @@ interface DockerTestbedOptions {
 interface ServiceOptions {
   internalPort: number;
   name?: string;
-  healthy?: (service: ServiceContainer, signal: AbortSignal) => unknown;
+  wait?: Wait<ServiceContainer>;
 }
+type WaitStrategy<Target> = (
+  target: Target,
+  signal: AbortSignal,
+) => Promise<void>;
+interface Wait<Target> {
+  until: WaitStrategy<Target>;
+  timeout: number;
+}
+function forLogMessage(
+  message: string | RegExp,
+  options?: { times?: number },
+): WaitStrategy<{ container: Container }>;
 class DockerTestbed {
   constructor({ environment }: DockerTestbedOptions);
   defaults(): Promise<{
@@ -639,7 +651,7 @@ class DockerTestbed {
   volume(): Promise<OwnedVolume>;
   start(
     body: EngineApi.ContainerCreateRequest,
-    options?: { name?: string },
+    options?: { name?: string; wait?: Wait<{ container: Container }> },
   ): Promise<OwnedContainer>;
   serve(
     body: EngineApi.ContainerCreateRequest,
@@ -912,7 +924,7 @@ function globalTeardown(): void;
 - [ADR 0033](./docs/adr/0033-a-process-that-creates-its-runs-reaper-takes-a-creator-lease-first-and-a-new-reaper-waits-for-its-first-hold-until-that-lease-is-gone.md): a process that creates its run's reaper takes a creator lease first, and a new reaper waits for its first hold until that lease is gone.
 - [ADR 0034](./docs/adr/0034-a-reaper-stops-with-sigkill-the-signal-that-already-ended-it-at-each-stop.md): a reaper stops with SIGKILL, the signal that already ended it at each stop.
 - [ADR 0035](./docs/adr/0035-a-database-fixture-waits-for-the-ready-line-of-its-server-in-the-logs-of-its-container-and-then-sends-one-query.md): a database fixture waits for the ready line of its server in the logs of its container, and then sends one query.
-- [ADR 0036](./docs/adr/0036-a-service-waits-until-it-is-ready-with-a-wait-strategy-that-the-testbed-runs-under-a-startup-time-limit-and-a-container-that-stops-fails-with-its-exit.md) (proposed): a service waits until it is ready with a wait strategy that the testbed runs under a startup time limit, and a container that stops fails with its exit.
+- [ADR 0036](./docs/adr/0036-a-service-waits-until-it-is-ready-with-a-wait-strategy-that-the-testbed-runs-under-a-startup-time-limit-and-a-container-that-stops-fails-with-its-exit.md): a service waits until it is ready with a wait strategy that the testbed runs under a startup time limit, and a container that stops fails with its exit.
 
 **Copied code**: [Code copied into this package](./docs/copied-code.md) records each copy of code in this package, as the Rule of Three asks.
 

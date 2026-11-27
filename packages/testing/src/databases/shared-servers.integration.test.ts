@@ -130,14 +130,17 @@ void test.each(
       const probes: AbortSignal[] = [];
       const options = {
         internalPort: 1433,
-        healthy: async (service: ServiceContainer, signal: AbortSignal) => {
-          probes.push(signal);
-          if (exit !== 'at once')
-            await service.container.exec({
-              Cmd: ['sh', '-c', 'echo > /tmp/exit'],
-            });
-          // The server never answers: only the exit ends the acquisition.
-          await aborted(AbortSignal.any([t.signal, signal]), service);
+        wait: {
+          until: async (service: ServiceContainer, signal: AbortSignal) => {
+            probes.push(signal);
+            if (exit !== 'at once')
+              await service.container.exec({
+                Cmd: ['sh', '-c', 'echo > /tmp/exit'],
+              });
+            // The server never answers: only the exit ends the acquisition.
+            await aborted(AbortSignal.any([t.signal, signal]), service);
+          },
+          timeout: 60_000,
         },
       };
       try {

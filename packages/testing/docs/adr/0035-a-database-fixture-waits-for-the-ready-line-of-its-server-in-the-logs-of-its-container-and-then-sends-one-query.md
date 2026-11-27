@@ -1,5 +1,7 @@
 # A database fixture waits for the ready line of its server in the logs of its container, and then sends one query
 
+Superseded in part on 2026-11-27 (#6219) for the query after the ready line: a fixture waits for its ready line only, with `forLogMessage` as its wait strategy ([ADR 0036](./0036-a-service-waits-until-it-is-ready-with-a-wait-strategy-that-the-testbed-runs-under-a-startup-time-limit-and-a-container-that-stops-fails-with-its-exit.md)).
+
 Status: Accepted 2026-11-27 (backlog #6085).
 
 Decision-makers: the zukhruf session mutex-0a, from the probes below.

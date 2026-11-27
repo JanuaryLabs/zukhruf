@@ -16,7 +16,7 @@ import { retryUntilReady } from '../async/index.ts';
 import { engine, proxyless } from '../testing/current-engine.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';
 import { library } from '../testing/global-setup-run.ts';
-import { DockerTestbed } from './index.ts';
+import { DockerTestbed, forLogMessage } from './index.ts';
 
 const image = 'alpine:latest';
 
@@ -51,16 +51,19 @@ test('a served database answers on 127.0.0.1 of this machine, and the engine pub
     { Image: 'postgres:18-alpine', Env: ['POSTGRES_PASSWORD=test'] },
     {
       internalPort: 5432,
-      healthy: ({ container }) =>
-        retryUntilReady(
-          async () => {
-            const { exitCode, output } = await container.exec({
-              Cmd: ['pg_isready', '-h', '127.0.0.1', '-U', 'postgres'],
-            });
-            if (exitCode !== 0) throw new Error(output);
-          },
-          { maxRetryTime: 60_000 },
-        ),
+      wait: {
+        until: ({ container }) =>
+          retryUntilReady(
+            async () => {
+              const { exitCode, output } = await container.exec({
+                Cmd: ['pg_isready', '-h', '127.0.0.1', '-U', 'postgres'],
+              });
+              if (exitCode !== 0) throw new Error(output);
+            },
+            { maxRetryTime: 60_000 },
+          ),
+        timeout: 60_000,
+      },
     },
   );
 
@@ -203,9 +206,12 @@ test('a served server whose readiness fails is removed, and the failure has the 
       },
       {
         internalPort: 8080,
-        healthy: ({ container }) => {
-          served.push(container.id);
-          throw new Error('not ready');
+        wait: {
+          until: ({ container }) => {
+            served.push(container.id);
+            throw new Error('not ready');
+          },
+          timeout: 60_000,
         },
       },
     )
@@ -244,12 +250,15 @@ test('a served server whose container exits before it is ready is removed, and t
       },
       {
         internalPort: 8080,
-        healthy: async ({ container }, exited) => {
-          served.push(container.id);
-          await container.exec({ Cmd: ['sh', '-c', 'echo > /tmp/exit'] });
-          // The signal aborts after the exit has failed the acquisition.
-          await aborted(exited, container);
-          throw new Error('the server stopped');
+        wait: {
+          until: async ({ container }, exited) => {
+            served.push(container.id);
+            await container.exec({ Cmd: ['sh', '-c', 'echo > /tmp/exit'] });
+            // The signal aborts after the exit has failed the acquisition.
+            await aborted(exited, container);
+            throw new Error('the server stopped');
+          },
+          timeout: 60_000,
         },
       },
     )
@@ -534,3 +543,93 @@ test(
     }
   },
 );
+
+test('a wait strategy that never settles, and ignores its signal, rejects at its startup time limit', async () => {
+  // Arrange
+  const testbed = new DockerTestbed({ environment: process.env });
+
+  // Act, Assert
+  await assert.rejects(
+    testbed.serve(
+      { Image: 'alpine:latest', Cmd: ['sleep', '600'] },
+      {
+        internalPort: 80,
+        wait: {
+          until: () => new Promise<void>(() => {}),
+          timeout: 1000,
+        },
+      },
+    ),
+    (error: unknown) =>
+      Error.isError(error) &&
+      /was not ready within 1000 ms/.test(String(error.cause)),
+  );
+});
+
+test('start with a wait resolves when the container is ready', async () => {
+  // Arrange
+  const testbed = new DockerTestbed({ environment: process.env });
+
+  // Act
+  await using container = await testbed.start(
+    {
+      Image: 'alpine:latest',
+      Cmd: ['sh', '-c', 'sleep 1; echo ready; sleep 600'],
+    },
+    { wait: { until: forLogMessage('ready'), timeout: 30_000 } },
+  );
+
+  // Assert
+  assert.match((await container.logs()).stdout, /ready/);
+});
+
+test('start with a wait rejects with the exit code and output of a container that exits first, and removes it', async () => {
+  // Arrange
+  const testbed = new DockerTestbed({ environment: process.env });
+  const client = await testbed.client();
+  const name = `zukhruf-testing-start-${randomUUID()}`;
+
+  // Act
+  await assert.rejects(
+    testbed.start(
+      { Image: 'alpine:latest', Cmd: ['sh', '-c', 'echo bye; exit 3'] },
+      { name, wait: { until: forLogMessage('ready'), timeout: 30_000 } },
+    ),
+    /exited with code 3 before it was ready:\nbye/,
+  );
+
+  // Assert
+  assert.equal(await client.containers.find(name), undefined);
+});
+
+test('a wait strategy that rejects once its container stopped gets the exit of the container, not its own error (#4913)', async (t) => {
+  // Arrange: the strategy rejects as soon as the engine says that the
+  // container stopped, which can come before the end of the attach.
+  const testbed = new DockerTestbed({ environment: process.env });
+
+  // Act, Assert
+  await assert.rejects(
+    testbed.serve(
+      {
+        Image: 'alpine:latest',
+        Cmd: ['sh', '-c', 'sleep 1; echo bye; exit 3'],
+      },
+      {
+        internalPort: 80,
+        wait: {
+          until: async ({ container }) => {
+            await container.wait({
+              condition: 'not-running',
+              signal: t.signal,
+            });
+            throw new Error('the server stopped');
+          },
+          timeout: 30_000,
+        },
+      },
+    ),
+    (error: unknown) =>
+      Error.isError(error) &&
+      /exited with code 3 before it was ready:\nbye/.test(String(error.cause)),
+  );
+});

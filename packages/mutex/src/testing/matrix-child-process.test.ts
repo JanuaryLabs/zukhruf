@@ -8,7 +8,7 @@ import { type TestContext, test } from 'node:test';
 import { Docker } from '@zukhruf/docker';
 import { TemporaryFiles } from '@zukhruf/fs';
 import { waitFor } from '@zukhruf/testing/async';
-import { DockerTestbed } from '@zukhruf/testing/docker';
+import { DockerTestbed, forLogMessage } from '@zukhruf/testing/docker';
 import { startWorker } from '@zukhruf/testing/process';
 
 import { mutexUrl } from './module-urls.ts';
@@ -153,18 +153,13 @@ async function secondEngine(relay: string): Promise<SecondEngine> {
         // dockerd logs `API listen on <address>` right before it serves the
         // listener, after the daemon and its routes are ready (moby
         // v28.5.2 cmd/dockerd/daemon.go).
-        healthy: async ({ container, port }, exited) => {
-          const decoder = new TextDecoder();
-          let log = '';
-          for await (const { data } of container.followLogs({
-            signal: exited,
-          })) {
-            log += decoder.decode(data, { stream: true });
-            if (/API listen on \S*:2375/.test(log)) break;
-          }
-          assert.match(log, /API listen on \S*:2375/);
-          const ping = await fetch(`http://127.0.0.1:${port}/_ping`);
-          if (!ping.ok) throw new Error(`The ping answered ${ping.status}`);
+        wait: {
+          until: async (service, signal) => {
+            await forLogMessage(/API listen on \S*:2375/)(service, signal);
+            const ping = await fetch(`http://127.0.0.1:${service.port}/_ping`);
+            if (!ping.ok) throw new Error(`The ping answered ${ping.status}`);
+          },
+          timeout: 60_000,
         },
       },
     ),

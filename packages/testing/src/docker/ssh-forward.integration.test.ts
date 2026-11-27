@@ -128,11 +128,14 @@ function echoService(signal: AbortSignal): Promise<ServiceContainer> {
     { Image: 'alpine:latest', Cmd: ['nc', '-lk', '-p', '80', '-e', 'cat'] },
     {
       internalPort: 80,
-      healthy: (service, exited) =>
-        waitFor(
-          async () => assert.equal(await echo(service.port, 'up'), 'up'),
-          { signal: AbortSignal.any([signal, exited]) },
-        ),
+      wait: {
+        until: (service, exited) =>
+          waitFor(
+            async () => assert.equal(await echo(service.port, 'up'), 'up'),
+            { signal: AbortSignal.any([signal, exited]) },
+          ),
+        timeout: 60_000,
+      },
     },
   );
 }
@@ -406,12 +409,12 @@ test(
           { Image: 'alpine:latest', Cmd: ['nc', '-lk', '-p', '80', '-e', 'cat'] },
           {
             internalPort: 80,
-            healthy: (service, signal) =>
+            wait: { until: (service, signal) =>
               retryUntilReady(async () => {
                 const socket = connect(service.port, '127.0.0.1');
                 socket.end('up');
                 if ((await text(socket)) !== 'up') throw new Error('not up yet');
-              }, { signal }),
+              }, { signal }), timeout: 60_000 },
           },
         );
         await service.disconnect();

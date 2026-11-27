@@ -9,10 +9,10 @@ import { Docker, ImageNotFoundError } from '@zukhruf/docker';
 import { readRun } from '../docker/run-records.ts';
 import type { ServiceContainer } from '../docker/service-container.ts';
 import { DockerTestbed, type DockerTestbedOptions } from '../docker/testbed.ts';
+import { forLogMessage } from '../docker/wait-strategy.ts';
 import { KIND_LABEL } from './collector.ts';
 import { createSharedDatabase } from './database-record.ts';
 import type { Database, DatabaseOptions } from './database.ts';
-import { waitForLogMessage } from './log-message.ts';
 import { type OwnedPool, OwnedPools } from './owned-pools.ts';
 import {
   type SqlServerServer,
@@ -368,13 +368,12 @@ export class SqlServer {
         internalPort: 1433,
         // SQL Server prints `SQL Server is now ready for client connections`
         // first, and `Recovery is complete` when its databases are up.
-        healthy: async (container, signal) => {
-          await waitForLogMessage(container.container, 'Recovery is complete', {
-            timeout: 180_000,
-            clock: globalThis,
-            signal,
-          });
-          await this.#ping(container, image);
+        wait: {
+          until: async (service, signal) => {
+            await forLogMessage('Recovery is complete')(service, signal);
+            await this.#ping(service, image);
+          },
+          timeout: 180_000,
         },
       },
     );

@@ -20,7 +20,7 @@ What an acquisition returns. Disposing it cleans up the fixture.
 _Avoid_: Instance, connection
 
 **Wait strategy**:
-A function that resolves when the service of a container is ready, such as `forLogMessage`. The testbed runs it under the startup time limit (proposed, ADR 0036).
+A function that resolves when the service of a container is ready, such as `forLogMessage`. The testbed runs it under the startup time limit (ADR 0036).
 _Avoid_: Healthy (Docker's word for the status of a HEALTHCHECK), readiness check
 
 **Startup time limit**:

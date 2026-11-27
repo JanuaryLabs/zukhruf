@@ -25,16 +25,22 @@ export class ClickHouse {
       },
       {
         internalPort: 8123,
-        healthy: (service, signal) =>
-          retryUntilReady(
-            () =>
-              succeeded(service.container, [
-                'clickhouse-client',
-                '--query',
-                'SELECT 1',
-              ]),
-            { maxRetryTime: 60_000, signal },
-          ),
+        // The server logs to /var/log/clickhouse-server, so its console
+        // gets no ready line: poll a query, within the limit of the wait.
+        wait: {
+          until: async (service, signal) => {
+            await retryUntilReady(
+              () =>
+                succeeded(service.container, [
+                  'clickhouse-client',
+                  '--query',
+                  'SELECT 1',
+                ]),
+              { maxRetryTime: Number.POSITIVE_INFINITY, signal },
+            );
+          },
+          timeout: 60_000,
+        },
       },
     );
   }

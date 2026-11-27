@@ -17,7 +17,7 @@ import { untilAborted } from '@zukhruf/async';
 import { Docker, type EngineApi } from '@zukhruf/docker';
 import { TemporaryFiles } from '@zukhruf/fs';
 import { waitFor } from '@zukhruf/testing/async';
-import { DockerTestbed } from '@zukhruf/testing/docker';
+import { DockerTestbed, forLogMessage } from '@zukhruf/testing/docker';
 import { startWorker } from '@zukhruf/testing/process';
 
 import { Mutex } from '../../index.ts';
@@ -205,17 +205,12 @@ async function droppableSshEngine() {
       },
       {
         internalPort: 22,
-        healthy: async ({ container, port }, exited) => {
-          const decoder = new TextDecoder();
-          let log = '';
-          for await (const { data } of container.followLogs({
-            signal: exited,
-          })) {
-            log += decoder.decode(data, { stream: true });
-            if (log.includes('Server listening on ')) break;
-          }
-          assert.match(log, /Server listening on /);
-          assert.match(await banner(port), /^SSH-2\.0-/);
+        wait: {
+          until: async (service, signal) => {
+            await forLogMessage('Server listening on ')(service, signal);
+            assert.match(await banner(service.port), /^SSH-2\.0-/);
+          },
+          timeout: 60_000,
         },
       },
     ),

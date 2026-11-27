@@ -1,7 +1,9 @@
 import { hash, randomUUID } from 'node:crypto';
+import { aborted } from 'node:util';
 
 import pMemoize from 'p-memoize';
 
+import { timeout } from '@zukhruf/async';
 import {
   ConnectionFailedError,
   type Container,
@@ -31,6 +33,7 @@ import {
   servedConnection,
 } from './run-records.ts';
 import { ServiceContainer } from './service-container.ts';
+import type { Wait } from './wait-strategy.ts';
 
 export interface ServiceOptions {
   /** The container's port that answers on 127.0.0.1 of this machine. */
@@ -38,12 +41,11 @@ export interface ServiceOptions {
   /** Without it, the engine names a dedicated server; a shared server's name comes from its request. */
   name?: string;
   /**
-   * Runs on every acquisition, and resolves when the server is ready. Wait for
-   * the server's ready line in `followLogs()` and then send one query
-   * (ADR 0035); poll with retryUntilReady only for a server that writes no
-   * ready line. `signal` aborts when the container exits first: pass it on.
+   * How the acquisition waits until the server is ready, on every acquisition
+   * (ADR 0036): a wait strategy, such as forLogMessage, and its startup time
+   * limit. A server that stops first fails with its exit.
    */
-  healthy?: (service: ServiceContainer, signal: AbortSignal) => unknown;
+  wait?: Wait<ServiceContainer>;
 }
 
 export interface DockerTestbedOptions {
@@ -185,17 +187,38 @@ export class DockerTestbed {
     );
   }
 
-  /** Starts a container this process owns. It stays after it stops, until disposal removes it. */
+  /**
+   * Starts a container this process owns. It stays after it stops, until
+   * disposal removes it. With `wait`, it resolves when the container is ready,
+   * and a container that is not ready is removed.
+   */
   async start(
     body: EngineApi.ContainerCreateRequest,
-    options?: { name?: string },
+    options: { name?: string; wait?: Wait<{ container: Container }> } = {},
   ): Promise<OwnedContainer> {
+    const { wait } = options;
     const engine = await this.#engine();
     const container = await this.#creating(engine, () =>
       engine.client.containers.create(this.#owned(body), options),
     );
-    await this.#startOrRemove(container);
-    return container;
+    if (wait === undefined) {
+      await this.#startOrRemove(container);
+      return container;
+    }
+    try {
+      return await this.#ready(
+        container,
+        () => this.#startOrRemove(container),
+        async (signal, exited) => {
+          await waitUntilReady(container, { container }, wait, signal, exited);
+          return container;
+        },
+      );
+    } catch (error) {
+      await using removal = new AsyncDisposableStack();
+      removal.defer(() => container.remove({ force: true, v: true }));
+      throw error;
+    }
   }
 
   /**
@@ -213,8 +236,14 @@ export class DockerTestbed {
     );
     const remove = () => container.remove({ force: true, v: true });
     try {
-      return await this.#ready(engine, container, options, remove, () =>
-        this.#startOrRemove(container),
+      return await this.#ready(
+        container,
+        () => this.#startOrRemove(container),
+        (signal, exited) =>
+          this.#answering(engine, container, options, remove, {
+            signal,
+            exited,
+          }),
       );
     } catch (error) {
       await using removal = new AsyncDisposableStack();
@@ -278,9 +307,17 @@ export class DockerTestbed {
       throw new Error(
         `Container ${name} does not match the shared test configuration`,
       );
-    return this.#ready(engine, container, options, undefined, async () => {
-      if (inspected.State?.Status !== 'running') await container.start();
-    });
+    return this.#ready(
+      container,
+      async () => {
+        if (inspected.State?.Status !== 'running') await container.start();
+      },
+      (signal, exited) =>
+        this.#answering(engine, container, options, undefined, {
+          signal,
+          exited,
+        }),
+    );
   }
 
   /** Runs a container to completion and gives its output and exit code. The container is removed afterwards. */
@@ -414,13 +451,11 @@ export class DockerTestbed {
    * dies at once are not lost, also when AutoRemove removes it. A container
    * that exits first ends the wait and rejects with its exit code and output.
    */
-  async #ready(
-    engine: Engine,
+  async #ready<Ready>(
     container: Container,
-    options: ServiceOptions,
-    remove: (() => Promise<void>) | undefined,
     start: () => Promise<void>,
-  ): Promise<ServiceContainer> {
+    answer: (signal: AbortSignal, exited: Promise<never>) => Promise<Ready>,
+  ): Promise<Ready> {
     const watching = new AbortController();
     const attached = await container.attach({ signal: watching.signal });
     const exited = attached.collect().then(({ exitCode, output }) => {
@@ -431,34 +466,21 @@ export class DockerTestbed {
     try {
       return await Promise.race([
         exited,
-        this.#answering(engine, container, options, remove, {
-          start,
-          exited,
-          signal: watching.signal,
-        }),
+        start().then(() => answer(watching.signal, exited)),
       ]);
     } finally {
       watching.abort();
     }
   }
 
-  /** The service of `container` once `healthy` passes. An abort of `signal` disconnects it. */
+  /** The service of `container` once its wait passes. An abort of `signal` disconnects it. */
   async #answering(
     engine: Engine,
     container: Container,
-    { internalPort, healthy }: ServiceOptions,
+    { internalPort, wait }: ServiceOptions,
     remove: (() => Promise<void>) | undefined,
-    {
-      start,
-      exited,
-      signal,
-    }: {
-      start: () => Promise<void>;
-      exited: Promise<never>;
-      signal: AbortSignal;
-    },
+    { exited, signal }: { exited: Promise<never>; signal: AbortSignal },
   ): Promise<ServiceContainer> {
-    await start();
     const published = await container
       .port(internalPort, 'tcp', { signal })
       .catch((error: unknown) => {
@@ -475,7 +497,7 @@ export class DockerTestbed {
       remove,
     );
     try {
-      await healthy?.(service, signal);
+      if (wait) await waitUntilReady(container, service, wait, signal, exited);
       signal.throwIfAborted();
       return service;
     } catch (error) {
@@ -518,5 +540,46 @@ export class DockerTestbed {
         PortBindings: { [port]: [{ HostIp: '127.0.0.1', HostPort: '' }] },
       },
     };
+  }
+}
+
+/**
+ * Runs the wait strategy under its startup time limit. When the strategy
+ * rejects and the container no longer runs, the exit of the container is the
+ * error (ADR 0036, #4913): `exited` rejects with its exit code and output.
+ */
+async function waitUntilReady<Target>(
+  container: Container,
+  target: Target,
+  { until, timeout: limitMs }: Wait<Target>,
+  signal: AbortSignal,
+  exited: Promise<never>,
+): Promise<void> {
+  // ref: a readiness wait keeps the process alive until it settles.
+  using limit = timeout(limitMs, { clock: globalThis, ref: true });
+  const waiting = AbortSignal.any([signal, limit.signal]);
+  try {
+    // The abort ends the wait also for a strategy that ignores its signal.
+    await Promise.race([
+      until(target, waiting),
+      aborted(waiting, target).then(() => waiting.throwIfAborted()),
+    ]);
+  } catch (error) {
+    if (!(await running(container))) return await exited;
+    if (limit.signal.aborted)
+      throw new Error(
+        `Container ${container.id} was not ready within ${limitMs} ms`,
+        { cause: error },
+      );
+    throw error;
+  }
+}
+
+async function running(container: Container): Promise<boolean> {
+  try {
+    return (await container.inspect()).State?.Running === true;
+  } catch (error) {
+    if (error instanceof ContainerNotFoundError) return false;
+    throw error;
   }
 }

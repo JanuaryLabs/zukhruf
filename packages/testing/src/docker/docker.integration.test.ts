@@ -96,32 +96,38 @@ test('Docker identity preserves configuration, ownership, and unfinished creatio
     await assert.rejects(
       testbed.reuse(body, {
         ...options,
-        healthy: () => {
-          throw new Error('readiness failed');
+        wait: {
+          until: () => {
+            throw new Error('readiness failed');
+          },
+          timeout: 60_000,
         },
       }),
       /readiness failed/,
     );
     await using healthy = await testbed.reuse(body, {
       ...options,
-      healthy: ({ container }) =>
-        retryUntilReady(
-          async () => {
-            const { exitCode, output } = await container.exec({
-              Cmd: [
-                'psql',
-                '-h',
-                '127.0.0.1',
-                '-U',
-                'postgres',
-                '-c',
-                'SELECT 1',
-              ],
-            });
-            if (exitCode !== 0) throw new Error(output);
-          },
-          { maxRetryTime: 60_000 },
-        ),
+      wait: {
+        until: ({ container }) =>
+          retryUntilReady(
+            async () => {
+              const { exitCode, output } = await container.exec({
+                Cmd: [
+                  'psql',
+                  '-h',
+                  '127.0.0.1',
+                  '-U',
+                  'postgres',
+                  '-c',
+                  'SELECT 1',
+                ],
+              });
+              if (exitCode !== 0) throw new Error(output);
+            },
+            { maxRetryTime: 60_000 },
+          ),
+        timeout: 60_000,
+      },
     });
     assert.equal(healthy.container.id, first.container.id);
 
@@ -139,8 +145,11 @@ test('Docker identity preserves configuration, ownership, and unfinished creatio
       testbed.serve(body, {
         ...options,
         name: failedName,
-        healthy: () => {
-          throw new Error('owned startup failed');
+        wait: {
+          until: () => {
+            throw new Error('owned startup failed');
+          },
+          timeout: 60_000,
         },
       }),
       { cause: new Error('owned startup failed') },

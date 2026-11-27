@@ -10,6 +10,7 @@ import { test } from '@zukhruf/parameterized-test';
 
 import { waitFor } from '../async/wait-for.ts';
 import { DockerTestbed } from '../docker/testbed.ts';
+import { forLogMessage } from '../docker/wait-strategy.ts';
 import { SqlServer, type SqlServerDatabase } from './sqlserver.ts';
 
 // SQL Server 2025 crashes at start about once in 41 starts when an arm64
@@ -314,13 +315,7 @@ test('a base whose tag moved in its registry since the engine pulled it gives th
     // The registry logs `listening on <address>` after it binds its listener
     // (distribution release/2.8 registry/registry.go, ListenAndServe).
     const listening = `listening on 127.0.0.1:${port}`;
-    const decoder = new TextDecoder();
-    let log = '';
-    for await (const { data } of registry.followLogs({ signal: t.signal })) {
-      log += decoder.decode(data, { stream: true });
-      if (log.includes(listening)) break;
-    }
-    assert.ok(log.includes(listening), log);
+    await forLogMessage(listening)({ container: registry }, t.signal);
     const base = `127.0.0.1:${port}/zukhruf-testing-fts-base:moving`;
     const labelled = (version: string, tag: string) =>
       docker.images.build(
