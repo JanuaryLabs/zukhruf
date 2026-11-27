@@ -81,5 +81,5 @@ The state of `Editable` while a save is in flight: the owner's `saving` prop, or
 _Avoid_: Pending (a pending promise is a different thing), loading (the loading of `TheButton`), busy
 
 **Final focus**:
-The element that gets focus one frame after an edit ends: the `finalFocus` ref, or by default the preview. It gets focus only when focus is on `body`, so a user who moved focus keeps it. The name is Base UI's.
+The element that gets focus one frame after a key ends an edit (Escape, or Enter that commits or cancels): the `finalFocus` ref, or by default the preview. An edit that a blur ended does not move focus, so a user who moved focus keeps it. How the edit ended decides, not where focus is, since a dialog's focus guard takes focus when the input leaves. The name is Base UI's.
 _Avoid_: Restore focus, return focus target

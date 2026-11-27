@@ -115,7 +115,7 @@ type PromiseSave = {
 type EditableProps = (OwnerSave | PromiseSave) & {
   /** The saved value. Each edit starts from it. */
   value: string;
-  /** Gets focus when the edit ends. Default: the Preview. */
+  /** Gets focus when a key ends the edit; a blur leaves focus where the user put it. Default: the Preview. */
   finalFocus?: RefObject<HTMLElement | null>;
   disabled?: boolean;
   placeholder?: string;
@@ -193,19 +193,19 @@ Promise mode, uncontrolled. A click on the Preview opens the edit, and the Previ
 
 ### What each event does
 
-| Event                                  | What happens                                                                                                                                        |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Click on the Preview                   | `onEditingChange(true)`; an uncontrolled root opens itself. Nothing when `disabled`.                                                                |
-| The Input appears                      | It takes focus with its whole text selected, and again one frame later, so a closing menu can not move focus away.                                  |
-| Enter                                  | Commit. `preventDefault`.                                                                                                                           |
-| Blur                                   | Commit, but only once the Input has held focus for one frame.                                                                                       |
-| Escape                                 | Cancel. `preventDefault` and `stopPropagation`, so a sheet or a dialog around the Input stays open.                                                 |
-| A key while an input method composes   | Nothing. A key whose event is already `defaultPrevented` does nothing too.                                                                          |
-| Commit                                 | The draft is trimmed. Empty or equal to `value`: cancel. Else `onValueCommit(trimmed)`. Ignored while saving.                                       |
-| Cancel                                 | `onEditingChange(false)`; an uncontrolled root closes itself.                                                                                       |
-| Saving                                 | The Input is disabled.                                                                                                                              |
-| Saving ends and the edit is still open | The Input takes focus with its text selected again, so the user can fix the value.                                                                  |
-| The edit ends                          | One frame later, `finalFocus` (default: the Preview) gets focus, but only when focus is on `body`. A user who moved focus elsewhere keeps it there. |
+| Event                                  | What happens                                                                                                                                                                                                                                                                                                                                                    |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Click on the Preview                   | `onEditingChange(true)`; an uncontrolled root opens itself. Nothing when `disabled`.                                                                                                                                                                                                                                                                            |
+| The Input appears                      | It takes focus with its whole text selected, and again one frame later, so a closing menu can not move focus away.                                                                                                                                                                                                                                              |
+| Enter                                  | Commit. `preventDefault`.                                                                                                                                                                                                                                                                                                                                       |
+| Blur                                   | Commit, but only once the Input has held focus for one frame.                                                                                                                                                                                                                                                                                                   |
+| Escape                                 | Cancel. `preventDefault` and `stopPropagation`, so a sheet or a dialog around the Input stays open.                                                                                                                                                                                                                                                             |
+| A key while an input method composes   | Nothing. A key whose event is already `defaultPrevented` does nothing too.                                                                                                                                                                                                                                                                                      |
+| Commit                                 | The draft is trimmed. Empty or equal to `value`: cancel. Else `onValueCommit(trimmed)`. Ignored while saving.                                                                                                                                                                                                                                                   |
+| Cancel                                 | `onEditingChange(false)`; an uncontrolled root closes itself.                                                                                                                                                                                                                                                                                                   |
+| Saving                                 | The Input is disabled.                                                                                                                                                                                                                                                                                                                                          |
+| Saving ends and the edit is still open | The Input takes focus with its text selected again, so the user can fix the value.                                                                                                                                                                                                                                                                              |
+| The edit ends                          | One frame later, `finalFocus` (default: the Preview) gets focus when a key ended the edit: Escape, Enter that commits or cancels, or the owner closing after a save that Enter started. An edit that a blur ended leaves focus where the user put it. Where focus is when the Input leaves does not decide, so a dialog that takes focus then does not keep it. |
 
 Each part throws `<Editable.Preview> must be rendered inside <Editable>` (or `<Editable.Input>`) outside a root.
 

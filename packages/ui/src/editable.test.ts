@@ -490,6 +490,76 @@ test('focus goes to finalFocus when Enter ends the edit, stays on a button the u
   }
 });
 
+test('inside a dialog that takes focus when its focused child leaves, Escape, Enter that cancels and Enter that commits each put focus on finalFocus', async () => {
+  // Arrange
+  GlobalRegistrator.register();
+  try {
+    Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', true);
+    const { act, createElement, createRef } = await import('react');
+    const { createRoot } = await import('react-dom/client');
+    const { Editable } = await import('@zukhruf/ui');
+    // A modal's focus guard: when the focused element leaves the DOM, the
+    // dialog focuses itself before the next frame, as Base UI's Dialog does.
+    const dialog = document.body.appendChild(document.createElement('div'));
+    dialog.setAttribute('role', 'dialog');
+    dialog.tabIndex = -1;
+    const guard = new MutationObserver(() => {
+      const active = document.activeElement;
+      if (active === null || active === document.body || !active.isConnected) {
+        dialog.focus();
+      }
+    });
+    guard.observe(dialog, { childList: true, subtree: true });
+    const row = dialog.appendChild(document.createElement('a'));
+    row.href = '#row';
+    const finalFocus = createRef<HTMLElement>();
+    finalFocus.current = row;
+    const root = createRoot(dialog.appendChild(document.createElement('div')));
+    const focusAfter = async (key: string, text?: string) => {
+      await act(async () => {
+        root.render(
+          createElement(Editable, {
+            key: `${key}-${text}`,
+            value: 'Draft',
+            defaultEditing: true,
+            finalFocus,
+            onValueCommit: async () => undefined,
+            children: createElement(Editable.Input, { 'aria-label': 'Title' }),
+          }),
+        );
+      });
+      await act(nextFrame);
+      if (text !== undefined) await act(async () => typeInto(input(), text));
+      await act(async () => press(input(), key));
+      await act(nextFrame);
+      const focused = document.activeElement;
+      return focused === row ? 'row' : (focused?.getAttribute('role') ?? null);
+    };
+    try {
+      // Act
+      const afterEscape = await focusAfter('Escape', 'Changed');
+      const afterUnchangedEnter = await focusAfter('Enter');
+      const afterCommitEnter = await focusAfter('Enter', 'Renamed');
+
+      // Assert
+      assert.deepEqual(
+        { afterEscape, afterUnchangedEnter, afterCommitEnter },
+        {
+          afterEscape: 'row',
+          afterUnchangedEnter: 'row',
+          afterCommitEnter: 'row',
+        },
+      );
+    } finally {
+      guard.disconnect();
+      await act(async () => root.unmount());
+    }
+  } finally {
+    Reflect.deleteProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT');
+    await GlobalRegistrator.unregister();
+  }
+});
+
 test('an uncontrolled Preview click opens the edit and reports it, and after a cancel the Preview has focus', async () => {
   // Arrange
   GlobalRegistrator.register();

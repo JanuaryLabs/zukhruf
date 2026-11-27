@@ -46,7 +46,7 @@ type PromiseSave = {
 type EditableProps = (OwnerSave | PromiseSave) & {
   /** The saved value. Each edit starts from it. */
   value: string;
-  /** Gets focus when the edit ends, unless the user moved focus. Default: the Preview. */
+  /** Gets focus when a key ends the edit; a blur leaves focus where the user put it. Default: the Preview. */
   finalFocus?: RefObject<HTMLElement | null>;
   disabled?: boolean;
   placeholder?: string;
@@ -205,11 +205,6 @@ function EditablePreview({
 const fieldReset =
   '-mx-1 max-w-full rounded-sm bg-muted px-1 text-inherit outline-none field-sizing-content placeholder:text-muted-foreground/60 disabled:cursor-not-allowed disabled:opacity-60';
 
-function hasNoFocus(): boolean {
-  const active = document.activeElement;
-  return active === null || active === document.body;
-}
-
 /** A bare input that edits the draft. Rendered only while editing. */
 function EditableInput({
   className,
@@ -225,11 +220,16 @@ function EditableInput({
   // Blur commits only one frame after the input gets focus: the menu that
   // opened the edit may still move focus while it closes.
   const armed = useRef(false);
+  // How the edit ended: by a key (Escape or Enter) or by a blur. It is read
+  // when the input leaves the DOM, also after an owner closes a save that
+  // Enter started.
+  const endedByKey = useRef(false);
 
   // Runs when the input appears and again each time saving changes. When it
   // is not saving, the input takes focus with its text selected, also after
   // a refused save. When the input leaves the DOM the edit has ended, and
-  // focus goes to finalFocus unless the user moved it.
+  // focus goes to finalFocus if a key ended it. Where focus is does not
+  // decide: a dialog's focus guard takes it when the input leaves.
   const attach = useCallback(
     (element: HTMLInputElement) => {
       let frame = 0;
@@ -246,9 +246,9 @@ function EditableInput({
         cancelAnimationFrame(frame);
         armed.current = false;
         requestAnimationFrame(() => {
-          if (!element.isConnected && hasNoFocus()) {
-            finalFocus.current?.focus();
-          }
+          if (element.isConnected) return;
+          if (endedByKey.current) finalFocus.current?.focus();
+          endedByKey.current = false;
         });
       };
     },
@@ -263,11 +263,13 @@ function EditableInput({
       event.preventDefault();
       // Escape ends the edit only, not a sheet or a dialog the input is in.
       event.stopPropagation();
+      endedByKey.current = true;
       actions.cancel();
       return;
     }
     if (event.key === 'Enter') {
       event.preventDefault();
+      endedByKey.current = true;
       actions.commit();
     }
   };
@@ -280,7 +282,9 @@ function EditableInput({
       value={state.draft}
       onChange={(event) => actions.setDraft(event.target.value)}
       onBlur={() => {
-        if (armed.current) actions.commit();
+        if (!armed.current) return;
+        endedByKey.current = false;
+        actions.commit();
       }}
       onKeyDown={handleKeyDown}
       disabled={saving || meta.disabled}
