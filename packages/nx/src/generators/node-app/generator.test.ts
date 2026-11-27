@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdir, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, symlink } from 'node:fs/promises';
 import { findPackageJSON } from 'node:module';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
@@ -596,15 +596,14 @@ async function wideEventOfThrow(
 ): Promise<Record<string, unknown>> {
   const tree = generatorTree();
   await nodeAppGenerator(tree, { directory: 'apps/backend' });
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
+  const written = (path: string) =>
+    tree.read(`apps/backend/${path}`, 'utf-8') ??
+    assert.fail(`node-app wrote no ${path}`);
   const files = {
-    'package.json': tree.read('apps/backend/package.json', 'utf-8'),
-    'src/app.ts': tree.read('apps/backend/src/app.ts', 'utf-8'),
-    'src/logging.ts': tree.read('apps/backend/src/logging.ts', 'utf-8'),
-    'src/routes/healthz.route.ts': tree.read(
-      'apps/backend/src/routes/healthz.route.ts',
-      'utf-8',
-    ),
+    'package.json': written('package.json'),
+    'src/app.ts': written('src/app.ts'),
+    'src/logging.ts': written('src/logging.ts'),
+    'src/routes/healthz.route.ts': written('src/routes/healthz.route.ts'),
     'probe.ts': `import { HTTPException } from 'hono/http-exception';
 
 import app from './src/app.ts';
@@ -617,11 +616,9 @@ await app.request('/api/probe');
 await flushLogs();
 `,
   };
-  for (const [file, content] of Object.entries(files)) {
-    const path = join(folder.path, file);
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, content ?? '');
-  }
+  await using folder = await new TemporaryFiles().directory('zukhruf-nx-', {
+    files,
+  });
   for (const name of ['evlog', 'hono', '@sdk-it/hono']) {
     const manifest =
       findPackageJSON(import.meta.resolve(name)) ??
