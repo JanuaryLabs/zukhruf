@@ -105,17 +105,97 @@ export const sqlServerStoreOn = (
     ...options,
   });
 
+type Connected = Awaited<ReturnType<typeof sqlServerSession>>;
+
 /**
- * The store gets a new connection for each statement and closes each one, so
- * nothing is left to end. A waiter tries each 500 ms, and the key of a killed
- * holder is free 2 s after its last renewal.
+ * Connected sessions of `server`, as a host keeps them: `connect` gives an
+ * idle one or connects a new one, and its `close` gives it back. An idle
+ * session closes after 1 s on a timer that keeps nothing alive, so a worker
+ * thread whose store is idle can exit; a session whose query failed closes.
+ * A new connection for each statement took 0.6 to 1.3 s over a link of about
+ * 80 ms, more than a renewal has (#5973).
  */
-export const sqlServerStore = (location: string) =>
-  sqlServerStoreOn(() => sqlServerSession(serverAt(location)), {
+function sessionsOf(server: Server) {
+  const idle: { connected: Connected; timer: NodeJS.Timeout }[] = [];
+  const open = new Set<Connected>();
+  const lend = (connected: Connected): SqlServerSession => {
+    // The phases of one loan, each with what its close does: a lent session
+    // goes back to the pool, a broken one closes, a returned one does nothing.
+    const returned = { close: () => {} };
+    const broken = {
+      close: () => {
+        open.delete(connected);
+        connected.close();
+      },
+    };
+    const lent = {
+      close: () => {
+        const timer = setTimeout(() => {
+          const index = idle.findIndex(
+            (entry) => entry.connected === connected,
+          );
+          if (index !== -1) idle.splice(index, 1);
+          broken.close();
+        }, 1_000);
+        timer.unref();
+        idle.push({ connected, timer });
+      },
+    };
+    let phase = lent;
+    return {
+      async query(text, parameters) {
+        try {
+          return await connected.query(text, parameters);
+        } catch (error) {
+          if (phase === lent) phase = broken;
+          throw error;
+        }
+      },
+      on: () => undefined,
+      close() {
+        const ending = phase;
+        phase = returned;
+        ending.close();
+      },
+    };
+  };
+  return {
+    async connect(): Promise<SqlServerSession> {
+      const entry = idle.pop();
+      if (entry !== undefined) {
+        clearTimeout(entry.timer);
+        return lend(entry.connected);
+      }
+      const connected = await sqlServerSession(server);
+      // A driver can emit `error` after the close, and an `error` with no listener stops the process.
+      connected.on('error', () => {});
+      open.add(connected);
+      return lend(connected);
+    },
+    close(): void {
+      for (const entry of idle.splice(0)) clearTimeout(entry.timer);
+      for (const connected of open) connected.close();
+      open.clear();
+    },
+  };
+}
+
+/**
+ * The store over sessions of its own. A waiter tries each 500 ms, and the key
+ * of a killed holder is free 2 s after its last renewal.
+ */
+const pooledStore = (location: string) => {
+  const sessions = sessionsOf(serverAt(location));
+  const store = sqlServerStoreOn(() => sessions.connect(), {
     heartbeatInterval: 500,
     leaseDuration: 2_000,
     clock: globalThis,
   });
+  return { store, close: () => sessions.close() };
+};
+
+/** The store of a child process or a worker thread: its idle sessions close after 1 s, or with the process. */
+export const sqlServerStore = (location: string) => pooledStore(location).store;
 
 /** The store of a child process or a worker thread over `location`. */
 export const openInProcess = sqlServerStore;
@@ -128,10 +208,15 @@ const module: StoreModule = {
 export const subject: Subject<Host> = {
   name: 'SqlServerStore',
   fixture: sqlServerFixture,
-  open: (location) => ({
-    store: sqlServerStore(location),
-    async [Symbol.asyncDispose]() {},
-  }),
+  open: (location) => {
+    const { store, close } = pooledStore(location);
+    return {
+      store,
+      async [Symbol.asyncDispose]() {
+        close();
+      },
+    };
+  },
   process: { module, admit() {} },
   // A waiter sees a release only at its next try.
   grantLatency: 500,
