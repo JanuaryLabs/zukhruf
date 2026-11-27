@@ -7,8 +7,8 @@ The Rule of Three counts places, not packages. Code that a second place needs is
 **The start of a process under the keeper.**
 
 - Places: `run` and `start` of `Command` (`src/command.ts`).
-- Same: the environment without its `undefined` values, the folder, the file found before the start or a `StartError` that names the command, and the arguments of the keeper of [ADR 0004](./adr/0004-a-started-process-ends-with-its-parent-also-when-the-parent-is-killed.md) with the fixes of the environment, started detached.
-- Differs: `run` keeps the output (the buffer of execa, `all`, `input`); `start` streams it (`buffer: false`, and the stdio that the caller gives).
+- Same: the environment without its `undefined` values, the folder, the file found before the start or a `StartError` that names the command, and the arguments to the keeper of [ADR 0004](./adr/0004-a-started-process-ends-with-its-parent-also-when-the-parent-is-killed.md) with the fixes of the environment, started detached.
+- Differs: `run` keeps the output (the buffer of execa, `all`, `input`) and runs `KEEPER`; `start` streams it (`buffer: false`, and the stdio that the caller gives) and runs `REPORTING_KEEPER`, with one more pipe at fd 4 for the pid of the program.
 - The third place is `NodeCommand` (unit 3 of backlog #6077). Then the start moves into one private method of the class.
 
 **The helpers that read processes and process groups (tests).**
