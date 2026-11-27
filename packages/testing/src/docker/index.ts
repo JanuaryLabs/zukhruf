@@ -5,3 +5,8 @@ export {
   type ServiceOptions,
 } from './testbed.ts';
 export { ServiceContainer } from './service-container.ts';
+export {
+  forLogMessage,
+  type Wait,
+  type WaitStrategy,
+} from './wait-strategy.ts';

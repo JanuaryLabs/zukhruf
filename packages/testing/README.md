@@ -83,7 +83,7 @@ A server is not ready when `healthy` throws, or when its container exits first. 
 
 ### Wait strategies (proposed)
 
-This section is on paper for review ([ADR 0036](./docs/adr/0036-a-service-waits-until-it-is-ready-with-a-wait-strategy-that-the-testbed-runs-under-a-startup-time-limit-and-a-container-that-stops-fails-with-its-exit.md), Proposed, backlog #6219). The package does not do it yet.
+This section is on paper for review ([ADR 0036](./docs/adr/0036-a-service-waits-until-it-is-ready-with-a-wait-strategy-that-the-testbed-runs-under-a-startup-time-limit-and-a-container-that-stops-fails-with-its-exit.md), Proposed, backlog #6219). The package exports `forLogMessage`; the `wait` option of `serve()`, `reuse()` and `start()` comes next, and until then `healthy` stays.
 
 A service says how to wait until it is ready with `wait: { until, timeout }`. `until` is a wait strategy: `(target, signal) => Promise<void>`. `timeout` is the startup time limit in milliseconds. `serve()`, `reuse()` and `start()` take it, and `healthy` goes:
 
