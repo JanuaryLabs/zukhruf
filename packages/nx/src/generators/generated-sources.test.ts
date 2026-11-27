@@ -6,7 +6,6 @@ import { isDeepStrictEqual, stripVTControlCharacters } from 'node:util';
 
 import type { NxJsonConfiguration, PluginConfiguration } from '@nx/devkit';
 
-import { TemporaryFiles } from '@zukhruf/fs';
 import { test } from '@zukhruf/parameterized-test';
 
 import { changes, generatorTree } from '../testing/generator-tree.ts';
@@ -128,42 +127,45 @@ async function generatedFiles() {
 }
 
 /**
- * The generated workspace in `root`, with the lockfile entries that Nx needs
- * to hash a task, and the names of every target of its projects.
+ * The generated workspace, with the lockfile entries that Nx needs to hash a
+ * task, and the names of every target of its projects. It owns the folder of
+ * the workspace.
  */
-async function generatedWorkspace(root: string) {
+async function generatedWorkspace() {
   const files = await generatedFiles();
   const nxJsonText = files['nx.json'];
   assert.ok(nxJsonText !== undefined, 'init writes nx.json');
   const nxJson: NxJsonConfiguration = JSON.parse(nxJsonText);
-  const probe = await workspace({
-    root,
-    files: {
-      ...files,
-      'nx.json': JSON.stringify({
-        ...nxJson,
-        plugins: loadablePlugins(nxJson.plugins ?? []),
-      }),
-      // @zukhruf/nx/test resolves each vite config to learn whether Vitest
-      // owns the tests: the ui config has no `test`, the web config has one.
-      'packages/ui/vite.config.ts': 'export default {};\n',
-      'apps/web/vite.config.ts': 'export default { test: {} };\n',
-    },
-    plugins: [],
-    links: [
-      'nx',
-      '@nx/js',
-      '@nx/eslint',
-      '@nx/eslint-plugin',
-      'eslint',
-      '@zukhruf/eslint',
-      '@zukhruf/testing',
-      'vite',
-      '@typescript/native',
-      '@types/node',
-    ],
-    packages: {},
-  });
+  await using resources = new AsyncDisposableStack();
+  const probe = resources.use(
+    await workspace({
+      files: {
+        ...files,
+        'nx.json': JSON.stringify({
+          ...nxJson,
+          plugins: loadablePlugins(nxJson.plugins ?? []),
+        }),
+        // @zukhruf/nx/test resolves each vite config to learn whether Vitest
+        // owns the tests: the ui config has no `test`, the web config has one.
+        'packages/ui/vite.config.ts': 'export default {};\n',
+        'apps/web/vite.config.ts': 'export default { test: {} };\n',
+      },
+      plugins: [],
+      links: [
+        'nx',
+        '@nx/js',
+        '@nx/eslint',
+        '@nx/eslint-plugin',
+        'eslint',
+        '@zukhruf/eslint',
+        '@zukhruf/testing',
+        'vite',
+        '@typescript/native',
+        '@types/node',
+      ],
+      packages: {},
+    }),
+  );
   const shown = await probe.nx('graph', '--file=stdout');
   assert.equal(shown.code, 0, shown.output);
   const { graph }: ProjectGraph = JSON.parse(shown.stdout);
@@ -210,12 +212,18 @@ async function generatedWorkspace(root: string) {
       Object.keys(node.data.targets),
     ),
   );
-  return { probe, graph, targets };
+  const owned = resources.move();
+  return {
+    probe,
+    graph,
+    targets,
+    [Symbol.asyncDispose]: () => owned.disposeAsync(),
+  };
 }
 
 test('each task that reads generated code runs its generator first', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const { probe, graph, targets } = await generatedWorkspace(folder.path);
+  await using generated = await generatedWorkspace();
+  const { probe, graph, targets } = generated;
 
   const run = await probe.nx(
     'run-many',
@@ -286,8 +294,8 @@ test('each task that reads generated code runs its generator first', async () =>
 });
 
 test('the sdk-it client runs after the db generator and hashes its output', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const { probe } = await generatedWorkspace(folder.path);
+  await using generated = await generatedWorkspace();
+  const { probe } = generated;
 
   const run = await probe.nx(
     'run',
@@ -326,13 +334,13 @@ void test.each(
   ['apps/backend/src/server.ts', 'packages/db/schema.prisma'],
   (file) =>
     test(`a change of ${file} affects the client and the web`, async () => {
-      await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-      const { probe } = await generatedWorkspace(folder.path);
+      await using generated = await generatedWorkspace();
+      const { probe } = generated;
       // Nx reads the affected files against git, so the folder is a repository
       // with one commit, out of reach of the user's git config and hooks.
       const git = (...args: string[]) =>
         execFileSync('git', args, {
-          cwd: folder.path,
+          cwd: probe.path,
           env: {
             PATH: process.env['PATH'],
             GIT_CONFIG_GLOBAL: '/dev/null',
@@ -375,8 +383,8 @@ const configFiles = [
 
 void test.each(configFiles, ({ project, file }) =>
   test(`the typecheck of ${project} hashes its config file ${file} and fails on a type error in it`, async () => {
-    await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-    const { probe } = await generatedWorkspace(folder.path);
+    await using generated = await generatedWorkspace();
+    const { probe } = generated;
     await probe.write(
       file,
       `${await probe.read(file)}export const probe: number = 'text';\n`,
@@ -423,8 +431,7 @@ void test.each(configFiles, ({ project, file }) =>
 
 void test.each(configFiles, ({ file }) =>
   test(`typed lint finds the config file ${file} in a tsconfig of its project, with no default project`, async () => {
-    await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-    await generatedWorkspace(folder.path);
+    await using generated = await generatedWorkspace();
     const run = spawnSync(
       process.execPath,
       [
@@ -434,7 +441,7 @@ void test.each(configFiles, ({ file }) =>
         basename(file),
       ],
       {
-        cwd: join(folder.path, dirname(file)),
+        cwd: join(generated.probe.path, dirname(file)),
         encoding: 'utf8',
         env: { PATH: process.env['PATH'] },
         timeout: 60_000,

@@ -4,8 +4,6 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { TemporaryFiles } from '@zukhruf/fs';
-
 import { workspace as temporaryWorkspace } from '../testing/workspace.ts';
 
 const pluginEntry = fileURLToPath(import.meta.resolve('@zukhruf/nx/prisma'));
@@ -35,15 +33,15 @@ const installed = {
 
 // Nx linked from zukhruf, `prisma` and `@prisma/client` in the lockfile, the
 // fake `prisma`, and the plugin entry in `nx.json`.
-async function workspace(root: string, files: Record<string, string>) {
+async function workspace(files: Record<string, string>) {
   const probe = await temporaryWorkspace<Target>({
-    root,
-    files: { ...files, 'node_modules/.bin/prisma': fakePrisma(root) },
+    files,
     plugins: [pluginEntry],
     links: ['nx'],
     packages: installed,
   });
-  await chmod(join(root, 'node_modules/.bin/prisma'), 0o755);
+  await probe.write('node_modules/.bin/prisma', fakePrisma(probe.path));
+  await chmod(join(probe.path, 'node_modules/.bin/prisma'), 0o755);
   return probe;
 }
 
@@ -55,8 +53,7 @@ const schema = (output?: string) =>
 const model = 'model User {\n  id Int @id\n}\n';
 
 test('a project with prisma.config.ts gets generate, migrate, migrate:check, migrate:create, deploy, reset and pull', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/db/project.json': projectJson('db'),
     'packages/db/prisma.config.ts': prismaConfig,
     'packages/db/schema.prisma': schema('src/prisma'),
@@ -110,8 +107,7 @@ test('a project with prisma.config.ts gets generate, migrate, migrate:check, mig
 });
 
 test('a project with a schema but no prisma.config.ts gets no Prisma targets', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/db/project.json': projectJson('db'),
     'packages/db/prisma.config.ts': prismaConfig,
     'packages/db/schema.prisma': schema('src/prisma'),
@@ -126,8 +122,7 @@ test('a project with a schema but no prisma.config.ts gets no Prisma targets', a
 });
 
 test('each output is relative to the file of its generator block, and a block with no output turns the cache off', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/nested/project.json': projectJson('nested'),
     'packages/nested/prisma.config.ts': prismaConfig,
     'packages/nested/prisma/schema.prisma': `${schema('../generated/client')}\ngenerator erd {\n  provider = "prisma-erd-generator"\n  output   = "./erd.svg"\n}\n`,
@@ -150,8 +145,7 @@ test('each output is relative to the file of its generator block, and a block wi
 });
 
 test('generate replays from the cache, restores its output, and runs again when a model file changes', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/db/project.json': projectJson('db'),
     'packages/db/prisma.config.ts': prismaConfig,
     'packages/db/schema.prisma': schema('src/prisma'),
@@ -159,7 +153,7 @@ test('generate replays from the cache, restores its output, and runs again when 
   });
 
   const first = await probe.nx('run', 'db:generate');
-  await rm(join(folder.path, 'packages/db/src/prisma'), { recursive: true });
+  await rm(join(probe.path, 'packages/db/src/prisma'), { recursive: true });
   const replayed = await probe.nx('run', 'db:generate');
   const restored = await probe.read('packages/db/src/prisma/client.ts');
   await probe.write(
@@ -180,8 +174,7 @@ test('generate replays from the cache, restores its output, and runs again when 
 });
 
 test('migrate runs generate first, in the project root', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/db/project.json': projectJson('db'),
     'packages/db/prisma.config.ts': prismaConfig,
     'packages/db/schema.prisma': schema('src/prisma'),
@@ -201,8 +194,7 @@ test('migrate runs generate first, in the project root', async () => {
 });
 
 test('migrate:check of a SQLite schema diffs with no shadow database URL, so Prisma replays the migrations in memory', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/db/project.json': projectJson('db'),
     'packages/db/prisma.config.ts': prismaConfig,
     'packages/db/schema.prisma': schema('src/prisma').replace(
@@ -222,8 +214,7 @@ test('migrate:check of a SQLite schema diffs with no shadow database URL, so Pri
 });
 
 test('migrate:create of a SQLite schema writes the migration with no shadow database URL', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/db/project.json': projectJson('db'),
     'packages/db/prisma.config.ts': prismaConfig,
     'packages/db/schema.prisma': schema('src/prisma').replace(
@@ -242,8 +233,7 @@ test('migrate:create of a SQLite schema writes the migration with no shadow data
 });
 
 test('migrate:check of a schema whose provider has no shadow database here stops before Prisma and names the provider', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/db/project.json': projectJson('db'),
     'packages/db/prisma.config.ts': prismaConfig,
     'packages/db/schema.prisma': schema('src/prisma').replace(

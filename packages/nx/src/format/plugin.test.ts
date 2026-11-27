@@ -2,8 +2,6 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { TemporaryFiles } from '@zukhruf/fs';
-
 import { workspace as temporaryWorkspace } from '../testing/workspace.ts';
 
 const pluginEntry = fileURLToPath(import.meta.resolve('@zukhruf/nx/format'));
@@ -13,12 +11,10 @@ const unformatted = 'export const   value=1\n';
 
 // Nx and Prettier linked from zukhruf, and the plugin entry in `nx.json`.
 const workspace = (
-  root: string,
   files: Record<string, string>,
   plugin: string | object = pluginEntry,
 ) =>
   temporaryWorkspace<{ options: { command: string } }>({
-    root,
     files,
     plugins: [plugin],
     links: ['nx', 'prettier'],
@@ -29,8 +25,7 @@ const packageJson = (name: string) =>
   `${JSON.stringify({ name, version: '0.0.0' }, null, 2)}\n`;
 
 test('each workspace project gets format and format:check', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/a/package.json': packageJson('a'),
     'packages/b/project.json': '{ "name": "b" }\n',
     'packages/c/package.json': packageJson('c'),
@@ -53,9 +48,7 @@ test('each workspace project gets format and format:check', async () => {
 });
 
 test('no folder outside the projects of Nx becomes a project', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(
-    folder.path,
+  await using probe = await workspace(
     {
       'packages/a/package.json': packageJson('a'),
       'packages/a/fixtures/inside/package.json': packageJson('inside'),
@@ -78,8 +71,7 @@ test('no folder outside the projects of Nx becomes a project', async () => {
 });
 
 test('a workspace root with an nx key gets no format targets, so each file is checked once', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'package.json': `${JSON.stringify({ name: 'probe', private: true, nx: {}, workspaces: ['packages/*'] })}\n`,
     'packages/a/package.json': packageJson('a'),
     'packages/a/index.ts': unformatted,
@@ -109,8 +101,7 @@ test('a workspace root with an nx key gets no format targets, so each file is ch
 });
 
 test('format:check fails on an unformatted file and leaves it as it was', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/a/package.json': packageJson('a'),
     'packages/a/index.ts': unformatted,
   });
@@ -123,8 +114,7 @@ test('format:check fails on an unformatted file and leaves it as it was', async 
 });
 
 test('format:check runs again when the Prettier config changes', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/a/package.json': packageJson('a'),
     'packages/a/index.ts': 'export const value = "a";\n',
     'prettier.config.mjs': 'export default { singleQuote: false };\n',
@@ -143,8 +133,7 @@ test('format:check runs again when the Prettier config changes', async () => {
 });
 
 test('format:check reads the Prettier plugins that the config names', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/a/package.json': packageJson('a'),
     '.prettierrc': `${JSON.stringify({ plugins: ['@trivago/prettier-plugin-sort-imports'] })}\n`,
   });
@@ -170,8 +159,7 @@ test('format:check reads the Prettier plugins that the config names', async () =
 });
 
 test('a project.json target replaces the inferred target', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/a/project.json': `${JSON.stringify({
       name: 'a',
       targets: { 'format:check': { command: 'tofu fmt -check -recursive' } },
@@ -186,8 +174,7 @@ test('a project.json target replaces the inferred target', async () => {
 });
 
 test('format writes the formatted file', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/a/package.json': packageJson('a'),
     'packages/a/index.ts': unformatted,
   });

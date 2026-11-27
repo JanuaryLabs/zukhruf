@@ -3,7 +3,6 @@ import { mkdir, readFile, realpath, symlink } from 'node:fs/promises';
 import { dirname, extname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { TemporaryFiles } from '@zukhruf/fs';
 import { test } from '@zukhruf/parameterized-test';
 
 import {
@@ -23,12 +22,10 @@ interface TestTarget {
 
 // Nx and Vite linked from zukhruf, and the plugin entry in `nx.json`.
 const workspace = (
-  root: string,
   files: Record<string, string>,
   plugin: string | object = pluginEntry,
 ) =>
   temporaryWorkspace<TestTarget>({
-    root,
     files,
     plugins: [plugin],
     links: ['nx', 'vite'],
@@ -52,8 +49,7 @@ const testCases = (report: string) =>
   [...report.matchAll(/<testcase name="([^"]+)"/g)].map(([, name]) => name);
 
 test('a project that owns test files gets the test target with one glob for each top-level folder', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/a/package.json': packageJson('a'),
     'packages/a/src/deep/x.test.ts': passing('x'),
     'packages/a/src/y.test.mts': passing('y'),
@@ -73,7 +69,7 @@ test('a project that owns test files gets the test target with one glob for each
   assert.partialDeepStrictEqual(a?.['test'], {
     executor: 'nx:run-commands',
     options: {
-      command: `${runner(folder.path, 'packages/a')} --test-timeout=300000 ${reporters} --selection="eval/**/*.test.ts" --selection="src/**/*.test.{mts,ts}" {args}`,
+      command: `${runner(probe.path, 'packages/a')} --test-timeout=300000 ${reporters} --selection="eval/**/*.test.ts" --selection="src/**/*.test.{mts,ts}" {args}`,
       cwd: 'packages/a',
     },
     outputs: ['{projectRoot}/test-results.xml'],
@@ -84,13 +80,12 @@ test('a project that owns test files gets the test target with one glob for each
   assert.equal(b?.['test'], undefined);
   assert.equal(
     inner?.['test']?.options.command,
-    `${runner(folder.path, 'packages/a/fixtures/inner')} --test-timeout=300000 ${reporters} --selection="src/**/*.test.ts" {args}`,
+    `${runner(probe.path, 'packages/a/fixtures/inner')} --test-timeout=300000 ${reporters} --selection="src/**/*.test.ts" {args}`,
   );
 });
 
 test('test files directly in the project root get a glob with no **', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/a/project.json': '{ "name": "a" }\n',
     'packages/a/root.test.ts': passing('root'),
     'packages/a/src/x.test.ts': passing('x'),
@@ -100,13 +95,12 @@ test('test files directly in the project root get a glob with no **', async () =
 
   assert.equal(
     targets['test']?.options.command,
-    `${runner(folder.path, 'packages/a')} --test-timeout=300000 ${reporters} --selection="*.test.ts" --selection="src/**/*.test.ts" {args}`,
+    `${runner(probe.path, 'packages/a')} --test-timeout=300000 ${reporters} --selection="*.test.ts" --selection="src/**/*.test.ts" {args}`,
   );
 });
 
 test('a Vitest project gets no test target, and a Vite project without test does', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/vitest/package.json': packageJson('vitest'),
     'packages/vitest/vitest.config.ts': 'export default {};\n',
     'packages/vitest/src/x.test.ts': passing('x'),
@@ -127,14 +121,13 @@ test('a Vitest project gets no test target, and a Vite project without test does
     [
       undefined,
       undefined,
-      `${runner(folder.path, 'packages/vite-app')} --test-timeout=300000 ${reporters} --selection="src/**/*.test.ts" {args}`,
+      `${runner(probe.path, 'packages/vite-app')} --test-timeout=300000 ${reporters} --selection="src/**/*.test.ts" {args}`,
     ],
   );
 });
 
 test('the workspace root and a folder outside the workspaces get no test target', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'project.json': '{ "name": "probe" }\n',
     'tools/x.test.ts': passing('x'),
     'tools/outside/package.json': packageJson('outside'),
@@ -150,9 +143,7 @@ test('the workspace root and a folder outside the workspaces get no test target'
 });
 
 test('the timeout and flags options change the command, and a Docker flag in flags comes once', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(
-    folder.path,
+  await using probe = await workspace(
     {
       'packages/a/package.json': packageJson('a'),
       'packages/a/src/x.test.ts': passing('x'),
@@ -175,16 +166,15 @@ test('the timeout and flags options change the command, and a Docker flag in fla
   assert.deepEqual(
     shown.map((targets) => targets['test']?.options.command),
     [
-      `${runner(folder.path, 'packages/a')} --test-timeout=10000 --test-force-exit --experimental-test-module-mocks ${reporters} --selection="src/**/*.test.ts" {args}`,
-      `${runner(folder.path, 'packages/d')} --test-timeout=10000 --test-force-exit --experimental-test-module-mocks --test-global-setup=src/testing/docker-global-setup.ts ${reporters} --selection="src/**/*.test.ts" {args}`,
+      `${runner(probe.path, 'packages/a')} --test-timeout=10000 --test-force-exit --experimental-test-module-mocks ${reporters} --selection="src/**/*.test.ts" {args}`,
+      `${runner(probe.path, 'packages/d')} --test-timeout=10000 --test-force-exit --experimental-test-module-mocks --test-global-setup=src/testing/docker-global-setup.ts ${reporters} --selection="src/**/*.test.ts" {args}`,
     ],
   );
 });
 
 test('a test:docker project gets its own global setup, else the one of @zukhruf/testing, with force-exit and no cache', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
   const testing = join(zukhrufModules, '@zukhruf/testing');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/own/package.json': packageJson('own', ['test:docker']),
     'packages/own/src/testing/docker-global-setup.ts':
       'export const globalSetup = () => {};\n',
@@ -193,10 +183,10 @@ test('a test:docker project gets its own global setup, else the one of @zukhruf/
       '{ "name": "shared", "tags": ["test:docker"] }\n',
     'packages/shared/src/x.test.ts': passing('x'),
   });
-  await mkdir(join(folder.path, 'node_modules/@zukhruf'));
-  await symlink(testing, join(folder.path, 'node_modules/@zukhruf/testing'));
+  await mkdir(join(probe.path, 'node_modules/@zukhruf'));
+  await symlink(testing, join(probe.path, 'node_modules/@zukhruf/testing'));
   const packageSetup = relative(
-    join(folder.path, 'packages/shared'),
+    join(probe.path, 'packages/shared'),
     await realpath(join(testing, 'dist/scripts/docker-global-setup.js')),
   );
 
@@ -209,11 +199,11 @@ test('a test:docker project gets its own global setup, else the one of @zukhruf/
     ]),
     [
       [
-        `${runner(folder.path, 'packages/own')} --test-timeout=300000 --test-global-setup=src/testing/docker-global-setup.ts --test-force-exit ${reporters} --selection="src/**/*.test.ts" {args}`,
+        `${runner(probe.path, 'packages/own')} --test-timeout=300000 --test-global-setup=src/testing/docker-global-setup.ts --test-force-exit ${reporters} --selection="src/**/*.test.ts" {args}`,
         false,
       ],
       [
-        `${runner(folder.path, 'packages/shared')} --test-timeout=300000 --test-global-setup=${packageSetup} --test-force-exit ${reporters} --selection="src/**/*.test.ts" {args}`,
+        `${runner(probe.path, 'packages/shared')} --test-timeout=300000 --test-global-setup=${packageSetup} --test-force-exit ${reporters} --selection="src/**/*.test.ts" {args}`,
         false,
       ],
     ],
@@ -222,14 +212,13 @@ test('a test:docker project gets its own global setup, else the one of @zukhruf/
 
 test('a test:docker project gets the global setup of @zukhruf/testing before that package is built', async () => {
   // Arrange: a fresh checkout, where @zukhruf/testing has its exports but no dist yet.
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
   const { exports } = JSON.parse(
     await readFile(
       join(zukhrufModules, '@zukhruf/testing/package.json'),
       'utf8',
     ),
   );
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/shared/project.json':
       '{ "name": "shared", "tags": ["test:docker"] }\n',
     'packages/shared/src/x.test.ts': passing('x'),
@@ -246,13 +235,12 @@ test('a test:docker project gets the global setup of @zukhruf/testing before tha
   // Assert: the path the run will find once the build of @zukhruf/testing ran.
   assert.equal(
     targets['test']?.options.command,
-    `${runner(folder.path, 'packages/shared')} --test-timeout=300000 --test-global-setup=../../node_modules/@zukhruf/testing/dist/scripts/docker-global-setup.js --test-force-exit ${reporters} --selection="src/**/*.test.ts" {args}`,
+    `${runner(probe.path, 'packages/shared')} --test-timeout=300000 --test-global-setup=../../node_modules/@zukhruf/testing/dist/scripts/docker-global-setup.js --test-force-exit ${reporters} --selection="src/**/*.test.ts" {args}`,
   );
 });
 
 test('a test:docker project fails the graph when @zukhruf/testing does not resolve', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/a/package.json': packageJson('a', ['test:docker']),
     'packages/a/src/x.test.ts': passing('x'),
   });
@@ -264,8 +252,7 @@ test('a test:docker project fails the graph when @zukhruf/testing does not resol
 });
 
 test('a run narrows with --args, selects by name with a CLI flag, and writes the junit report', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/a/package.json': packageJson('a'),
     'packages/a/src/ok.test.ts': passing('ok'),
     'packages/a/src/login.test.ts': passing('login'),
@@ -290,8 +277,7 @@ test('a run narrows with --args, selects by name with a CLI flag, and writes the
 });
 
 test('a test file or a glob after -- narrows the run', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/a/package.json': packageJson('a'),
     'packages/a/src/ok.test.ts': passing('ok'),
     'packages/a/src/module.test.mjs': passing('module'),
@@ -318,8 +304,7 @@ test('a test file or a glob after -- narrows the run', async () => {
 });
 
 test('a flag before a file after -- selects by name in that file only', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/a/package.json': packageJson('a'),
     'packages/a/src/ok.test.ts': passing('ok'),
     'packages/a/src/login.test.ts': passing('login'),
@@ -377,8 +362,7 @@ void test.each(
   ] as const,
   ([where, words, names]) =>
     test(`a flag after -- applies to the files after -- wherever it stands: ${where}`, async () => {
-      await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-      const probe = await workspace(folder.path, {
+      await using probe = await workspace({
         'packages/a/package.json': packageJson('a'),
         'packages/a/src/ok.test.ts': passing('ok'),
         'packages/a/src/auth.test.ts':
@@ -398,8 +382,7 @@ void test.each(
 );
 
 test('a flag alone keeps the selection: in --args, after -- with its value as a separate word, or with a value that ends like a test file', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/a/package.json': packageJson('a'),
     'packages/a/src/ok.test.ts': passing('ok'),
     'packages/a/src/login.test.ts': passing('login'),
@@ -443,8 +426,7 @@ test('a flag alone keeps the selection: in --args, after -- with its value as a 
 });
 
 test('the args of a project with a flag and a glob narrow its run', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/a/package.json': `${JSON.stringify(
       {
         name: 'a',
@@ -472,8 +454,7 @@ test('the args of a project with a flag and a glob narrow its run', async () => 
 });
 
 test('a failing test fails the run', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/a/package.json': packageJson('a'),
     'packages/a/src/ok.test.ts': passing('ok'),
     'packages/a/src/bad.test.ts':
@@ -488,8 +469,7 @@ test('a failing test fails the run', async () => {
 });
 
 test('a test:docker run loads its own global setup from the project root', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/d/package.json': packageJson('d', ['test:docker']),
     'packages/d/src/testing/docker-global-setup.ts':
       "import { writeFileSync } from 'node:fs';\nexport const globalSetup = () => writeFileSync('setup-ran', 'yes');\n",

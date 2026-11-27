@@ -5,8 +5,6 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { TemporaryFiles } from '@zukhruf/fs';
-
 import { workspace as temporaryWorkspace } from '../testing/workspace.ts';
 
 const pluginEntry = fileURLToPath(import.meta.resolve('@zukhruf/nx/opentofu'));
@@ -33,22 +31,20 @@ if [ "$1" = plan ]; then echo plan > tfplan; fi
 // Nx (and Prettier for the format plugin) linked from zukhruf, the fake
 // `tofu`, and the plugin entries in `nx.json`.
 async function workspace(
-  root: string,
   files: Record<string, string>,
   plugins: (string | object)[] = [pluginEntry],
 ) {
   const probe = await temporaryWorkspace<Target>({
-    root,
     files: {
       ...files,
-      'node_modules/.bin/tofu': fakeTofu(root),
       '.gitignore': 'node_modules\n.nx\n.terraform\ntfplan\n.env\ntofu.log\n',
     },
     plugins,
     links: ['nx', 'prettier'],
     packages: {},
   });
-  await chmod(join(root, 'node_modules/.bin/tofu'), 0o755);
+  await probe.write('node_modules/.bin/tofu', fakeTofu(probe.path));
+  await chmod(join(probe.path, 'node_modules/.bin/tofu'), 0o755);
   return {
     ...probe,
     log: async () => (await probe.read('tofu.log')).trim().split('\n'),
@@ -61,8 +57,7 @@ const guard =
   ': "${TF_ENCRYPTION_PASSPHRASE:?TF_ENCRYPTION_PASSPHRASE missing: set it in the environment or in the .env file of the project}" && TF_VAR_tf_encryption_passphrase="$TF_ENCRYPTION_PASSPHRASE"';
 
 test('a project with an environment gets the OpenTofu targets, and no apply', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/infra/project.json': projectJson('infra'),
     'packages/infra/src/environments/production/main.tf': config,
   });
@@ -125,8 +120,7 @@ test('a project with an environment gets the OpenTofu targets, and no apply', as
 });
 
 test('only a *.tf file directly in src/environments/<name> of its own project root makes an environment', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/modules-only/project.json': projectJson('modules-only'),
     'packages/modules-only/src/modules/network/main.tf': config,
     'packages/deep/project.json': projectJson('deep'),
@@ -143,8 +137,7 @@ test('only a *.tf file directly in src/environments/<name> of its own project ro
 });
 
 test('each environment is a configuration, production is the default, and typecheck validates each one', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/infra/project.json': projectJson('infra'),
     'packages/infra/src/environments/staging/main.tf': config,
     'packages/infra/src/environments/production/main.tf': config,
@@ -179,8 +172,7 @@ test('each environment is a configuration, production is the default, and typech
 });
 
 test('preview -c staging runs init and plan in staging with the passphrase of the project .env', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/infra/project.json': projectJson('infra'),
     'packages/infra/.env': 'TF_ENCRYPTION_PASSPHRASE=from-dotenv\n',
     'packages/infra/src/environments/staging/main.tf': config,
@@ -197,8 +189,7 @@ test('preview -c staging runs init and plan in staging with the passphrase of th
 });
 
 test('a target that reads the state stops before tofu when the passphrase is missing', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/infra/project.json': projectJson('infra'),
     'packages/infra/src/environments/production/main.tf': config,
     'tofu.log': '',
@@ -212,8 +203,7 @@ test('a target that reads the state stops before tofu when the passphrase is mis
 });
 
 test('arguments after -- go to tofu output', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/infra/project.json': projectJson('infra'),
     'packages/infra/.env': 'TF_ENCRYPTION_PASSPHRASE=secret\n',
     'packages/infra/src/environments/production/main.tf': config,
@@ -228,8 +218,7 @@ test('arguments after -- go to tofu output', async () => {
 });
 
 test('typecheck needs no secret, keeps its data folder apart, and replays from the cache', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/infra/project.json': projectJson('infra'),
     'packages/infra/src/environments/production/main.tf': config,
   });
@@ -252,17 +241,16 @@ test('typecheck needs no secret, keeps its data folder apart, and replays from t
 });
 
 test('show stops with no plan, shows a fresh plan, and stops when a file of the project changed after preview', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(folder.path, {
+  await using probe = await workspace({
     'packages/infra/project.json': projectJson('infra'),
     'packages/infra/.env': 'TF_ENCRYPTION_PASSPHRASE=secret\n',
     'packages/infra/compose.dokploy.yml': 'services: {}\n',
     'packages/infra/src/environments/production/main.tf': config,
     'packages/infra/src/environments/staging/main.tf': config,
   });
-  execFileSync('git', ['init', '--quiet'], { cwd: folder.path });
+  execFileSync('git', ['init', '--quiet'], { cwd: probe.path });
   const production = join(
-    folder.path,
+    probe.path,
     'packages/infra/src/environments/production',
   );
   const at = (seconds: number) => new Date(Date.UTC(2026, 0, 1, 0, 0, seconds));
@@ -278,14 +266,14 @@ test('show stops with no plan, shows a fresh plan, and stops when a file of the 
     'packages/infra/src/environments/production/main.tf',
     'packages/infra/src/environments/staging/main.tf',
   ]) {
-    await utimes(join(folder.path, file), at(0), at(0));
+    await utimes(join(probe.path, file), at(0), at(0));
   }
   await utimes(join(production, 'tfplan'), at(10), at(10));
   // Ignored by Git, so newer files here do not make the plan stale.
   await mkdir(join(production, '.terraform'));
   await writeFile(join(production, '.terraform/modules.json'), '{}\n');
   await writeFile(
-    join(folder.path, 'packages/infra/src/environments/staging/tfplan'),
+    join(probe.path, 'packages/infra/src/environments/staging/tfplan'),
     'plan\n',
   );
   const fresh = await probe.nx('run', 'infra:show');
@@ -295,7 +283,7 @@ test('show stops with no plan, shows a fresh plan, and stops when a file of the 
   ]);
 
   await utimes(
-    join(folder.path, 'packages/infra/compose.dokploy.yml'),
+    join(probe.path, 'packages/infra/compose.dokploy.yml'),
     at(20),
     at(20),
   );
@@ -308,9 +296,7 @@ test('show stops with no plan, shows a fresh plan, and stops when a file of the 
 });
 
 test('after @zukhruf/nx/format, an OpenTofu project gets the tofu format targets and another project keeps Prettier', async () => {
-  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
-  const probe = await workspace(
-    folder.path,
+  await using probe = await workspace(
     {
       'packages/infra/project.json': projectJson('infra'),
       'packages/infra/src/environments/production/main.tf': config,

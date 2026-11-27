@@ -5,6 +5,8 @@ import { mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { TemporaryFiles } from '@zukhruf/fs';
+
 export const zukhrufModules = fileURLToPath(
   new URL('../../../../node_modules', import.meta.url),
 );
@@ -36,50 +38,76 @@ interface Manifest {
 }
 
 /**
- * An npm workspace in a temp folder with `packages/*` as its workspace globs
- * and `plugins` in `nx.json`. Each package of `links` is linked from zukhruf
- * with its bins and its lockfile entry, as npm installs it; `packages` adds
- * more lockfile entries. Nx sees none of the user's config and no
- * environment of the Nx task that runs the test.
+ * An npm workspace in a temp folder that the returned workspace owns: hold it
+ * with `await using`. It has `packages/*` as its workspace globs, `plugins` in
+ * `nx.json`, and `files` written over those. Each package of `links` is
+ * linked from zukhruf with its bins and its lockfile entry, as npm installs
+ * it; `packages` adds more lockfile entries. Nx sees none of the user's
+ * config and no environment of the Nx task that runs the test.
  */
 export async function workspace<Target>({
-  root,
   files,
   plugins,
   links,
   packages,
 }: {
-  root: string;
   files: Record<string, string>;
   plugins: (string | object)[];
   links: string[];
   packages: Record<string, object>;
 }) {
+  const manifests = new Map<string, Manifest>();
+  for (const name of links) {
+    manifests.set(
+      name,
+      JSON.parse(
+        await readFile(join(zukhrufModules, name, 'package.json'), 'utf8'),
+      ),
+    );
+  }
+  const linked = Object.fromEntries(
+    [...manifests].map(([name, manifest]) => [
+      `node_modules/${name}`,
+      { version: manifest.version, license: manifest.license },
+    ]),
+  );
+  const lockfile = (lockfilePackages: Record<string, object>) =>
+    `${JSON.stringify(
+      {
+        name: 'probe',
+        lockfileVersion: 3,
+        requires: true,
+        packages: {
+          '': { name: 'probe', workspaces: ['packages/*'] },
+          ...linked,
+          ...lockfilePackages,
+        },
+      },
+      null,
+      2,
+    )}\n`;
+  await using resources = new AsyncDisposableStack();
+  const { path: root } = resources.use(
+    await new TemporaryFiles().directory('zukhruf-nx-', {
+      files: {
+        'package.json':
+          '{ "name": "probe", "private": true, "workspaces": ["packages/*"] }\n',
+        'nx.json': `${JSON.stringify({ useDaemonProcess: false, plugins })}\n`,
+        ...files,
+        'package-lock.json': lockfile(packages),
+      },
+    }),
+  );
   const write = async (path: string, content: string) => {
     await mkdir(dirname(join(root, path)), { recursive: true });
     await writeFile(join(root, path), content);
   };
-  await write(
-    'package.json',
-    '{ "name": "probe", "private": true, "workspaces": ["packages/*"] }\n',
-  );
-  await write(
-    'nx.json',
-    `${JSON.stringify({ useDaemonProcess: false, plugins })}\n`,
-  );
-  for (const [path, content] of Object.entries(files)) {
-    await write(path, content);
-  }
   await mkdir(join(root, 'home'));
   await mkdir(join(root, 'node_modules/.bin'), { recursive: true });
-  const linked: Record<string, object> = {};
-  for (const name of links) {
+  for (const [name, manifest] of manifests) {
     const target = join(root, 'node_modules', name);
     await mkdir(dirname(target), { recursive: true });
     await symlink(join(zukhrufModules, name), target);
-    const manifest: Manifest = JSON.parse(
-      await readFile(join(zukhrufModules, name, 'package.json'), 'utf8'),
-    );
     const bins =
       typeof manifest.bin === 'string'
         ? { [basename(manifest.name)]: manifest.bin }
@@ -90,30 +118,7 @@ export async function workspace<Target>({
         join(root, 'node_modules/.bin', bin),
       );
     }
-    linked[`node_modules/${name}`] = {
-      version: manifest.version,
-      license: manifest.license,
-    };
   }
-  const lockfile = (lockfilePackages: Record<string, object>) =>
-    write(
-      'package-lock.json',
-      `${JSON.stringify(
-        {
-          name: 'probe',
-          lockfileVersion: 3,
-          requires: true,
-          packages: {
-            '': { name: 'probe', workspaces: ['packages/*'] },
-            ...linked,
-            ...lockfilePackages,
-          },
-        },
-        null,
-        2,
-      )}\n`,
-    );
-  await lockfile(packages);
   const environment = {
     PATH: [
       ...new Set([
@@ -153,11 +158,15 @@ export async function workspace<Target>({
     );
     return configuration.targets;
   };
+  const owned = resources.move();
   return {
+    path: root,
     nx,
     targets,
     write,
-    lockfile,
+    lockfile: (lockfilePackages: Record<string, object>) =>
+      write('package-lock.json', lockfile(lockfilePackages)),
     read: (path: string) => readFile(join(root, path), 'utf8'),
+    [Symbol.asyncDispose]: () => owned.disposeAsync(),
   };
 }
