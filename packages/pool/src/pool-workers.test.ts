@@ -1604,68 +1604,6 @@ void describe(
       }
     });
 
-    test('a hill-climbing owner under steady work stops doubling the pause between two steps at sixteen windows', async () => {
-      const clock = createClock(Date.now());
-      await using folder = await new TemporaryFiles().directory('pool-');
-      const store = join(folder.path, 'store.sqlite');
-      await using pool = new Pool({ kind: echo(), store, clock });
-      // Two units: a third worker adds no jobs, and one worker fewer does
-      // worse, so no step changes the size.
-      const engine = new PQueue({ concurrency: 2 });
-      const tried: number[] = [];
-      const load = closedLoad(pool, 16);
-      const job = () =>
-        engine.add(() => delay(50, { clock, signal: undefined }));
-      await using owner = lendingOn(clock, store, {
-        // Four CPUs, and memory for many more workers.
-        size: new HillClimbing({
-          memoryPerWorker: 1,
-          computer: {
-            availableParallelism: () => 4,
-            availableMemory: () => 2 ** 40,
-          },
-        }),
-        startup: new Parallel(),
-        eviction: new NoEviction(),
-        create: () => {
-          const worker = new Working(load.work(job));
-          worker.release();
-          tried.push(clock.now);
-          return worker;
-        },
-      });
-      await owner.ready();
-      await load.start();
-      try {
-        // The first two workers, then a worker for each step with one more.
-        // The pause after the n-th step that changes nothing is 2^(n-1)
-        // windows of two seconds, at most 16, times 0.5 to 1.5. A step with
-        // one more and a step with fewer alternate, so two pauses and two
-        // steps of three windows lie between two workers tried.
-        await drive(clock, [owner], () => tried.length >= 2 + 9, 1_200_000);
-
-        // From the fifth pause on, each pause is capped: 16 to 48 seconds. The
-        // third gap and each one after it hold two capped pauses and six
-        // windows of a little more than two seconds: more than 44 seconds and
-        // less than 110. A cap of 8 windows gives 28 to 62 seconds, and a cap
-        // of 32 gives 76 to 206.
-        const gaps = tried
-          .slice(2)
-          .map((at, index, starts) =>
-            index === 0 ? undefined : at - starts[index - 1]!,
-          )
-          .filter((gap) => gap !== undefined);
-        const capped = gaps.slice(2);
-        assert.ok(
-          capped.every((gap) => gap > 44_000 && gap < 110_000),
-          `the gaps between two tried workers were ${gaps.map(Math.round).join(', ')} ms`,
-        );
-      } finally {
-        load.stop();
-        await drive(clock, [owner], load.drained, 120_000);
-      }
-    });
-
     void test.each(
       [
         { Learning: HillClimbing, units: 3, own: 0 },

@@ -71,6 +71,58 @@ test('hill climbing is not fooled by work that gets slower while it measures', (
   assert.equal(sizing.current, 3);
 });
 
+test('hill climbing under steady work stops doubling the pause between two steps at sixteen windows', () => {
+  // Arrange
+  const sizing = new HillClimbing({
+    memoryPerWorker: 1,
+    computer: { availableParallelism: () => 4, availableMemory: () => 2 ** 40 },
+  });
+  // The pool runs as many workers as the sizing says, and the work has two
+  // units: a job takes 50 ms, a third worker adds no jobs, and one worker
+  // fewer does worse, so no step changes the size. A job that started before
+  // the size changed is not measurable, as in the pool.
+  const tries: number[] = [];
+  let now = 0;
+  let steady = 0;
+  let current = sizing.current;
+  let kept = sizing.kept;
+
+  // Act
+  while (tries.length < 40 && now < 7_200_000) {
+    now += 50 / Math.min(current, 2);
+    const started = now - 50;
+    sizing.record({ started, finished: now, measurable: started >= steady });
+    // A step with one more worker keeps one more: the pool starts it.
+    if (sizing.kept > kept) tries.push(now);
+    kept = sizing.kept;
+    if (sizing.current !== current) {
+      current = sizing.current;
+      steady = now;
+    }
+  }
+
+  // Assert
+  // The pause after the n-th step that changes nothing is 2^(n-1) windows of
+  // two seconds, at most 16, times 0.5 to 1.5. A step with one more and a step
+  // with fewer alternate, so two pauses and two steps of three windows lie
+  // between two tries. From the fifth pause on, each pause is capped: 16 to 48
+  // seconds. The third gap and each one after it hold two capped pauses and six
+  // windows of a little more than two seconds: more than 44 seconds and less
+  // than 110. A cap of 8 windows gives 28 to 62 seconds, and a cap of 32 gives
+  // 76 to 206, so 37 capped gaps all in range leave neither a chance.
+  const gaps = tries.slice(1).map((at, index) => at - tries[index]!);
+  assert.equal(
+    tries.length,
+    40,
+    `steps with one more worker stopped: gaps ${gaps.map(Math.round).join(', ')} ms`,
+  );
+  const capped = gaps.slice(2);
+  assert.ok(
+    capped.every((gap) => gap > 44_000 && gap < 110_000),
+    `the gaps between two tries were ${gaps.map(Math.round).join(', ')} ms`,
+  );
+});
+
 test('a climbing sizing learns nothing from jobs that were not measurable or from windows under two seconds, and never passes its ceiling', () => {
   const idle = new HillClimbing({
     memoryPerWorker: 1,
