@@ -165,13 +165,13 @@ A store is an implementation of `CheckpointStore` ([ADR 0011](./docs/adr/0011-th
 
 ## Who uses it
 
-No consumer uses it yet. Each consumer moves after the release, with a migration item in its repository ([ADR 0001](./docs/adr/0001-the-package-keeps-the-progress-of-a-reader-of-a-stream-and-the-checkpoint-stores-of-elt-and-the-position-of-sqlite-changefeed-move-into-it.md)).
+`@zukhruf/sqlite-changefeed` keeps its position in it since 0.8.211 (#6280). Each other consumer moves after the release, with a migration item in its repository ([ADR 0001](./docs/adr/0001-the-package-keeps-the-progress-of-a-reader-of-a-stream-and-the-checkpoint-stores-of-elt-and-the-position-of-sqlite-changefeed-move-into-it.md)).
 
-| Consumer                     | How                                                                                                                                                                                                                                                 | Record |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| elt                          | `CheckpointStore`, its SQLite, Postgres and SQL Server stores, the binding and the keyed entries of a `STATE` message go away. A copy claims its partition and commits its stage in `write`.                                                        | #6281  |
-| `@zukhruf/sqlite-changefeed` | `Position`, `PositionFile`, `PositionInMemory` and `SequencedBatch` go away. The host gives a consumer group, the WAL progress is the position, the fingerprints of each table are a map state, and the host commits with `feed.commit({ write })`. | #6280  |
-| eca and its proactive host   | The cursor of each automation is the position of a checkpoint.                                                                                                                                                                                      | #6282  |
+| Consumer                     | How                                                                                                                                                                                                                                                                    | Record |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| elt                          | `CheckpointStore`, its SQLite, Postgres and SQL Server stores, the binding and the keyed entries of a `STATE` message go away. A copy claims its partition and commits its stage in `write`.                                                                           | #6281  |
+| `@zukhruf/sqlite-changefeed` | Done in 0.8.211: `Position`, `PositionFile`, `PositionInMemory` and `SequencedBatch` went away. The host gives a consumer group, the WAL progress is the position, the fingerprints of each table are a map state, and the host commits with `feed.commit({ write })`. | #6280  |
+| eca and its proactive host   | The cursor of each automation is the position of a checkpoint.                                                                                                                                                                                                         | #6282  |
 
 ## The same concepts in other systems
 
