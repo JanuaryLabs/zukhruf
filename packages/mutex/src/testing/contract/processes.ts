@@ -17,7 +17,7 @@ import { watch } from '../watch.ts';
 import { label, longKey } from './keys.ts';
 import { childPrelude, holderSource, storeIn } from './peers.ts';
 import type { Host, SharedByProcesses, Subject } from './subject.ts';
-import { windowFor } from './window.ts';
+import { roundsFor, windowFor } from './window.ts';
 
 /** A child or thread that skips, then cancels a wait, while its host holds the key, and reports each result. */
 export const skipperBody = `
@@ -287,16 +287,10 @@ export function processes<H extends Host>(
       const counter = join(journals.path, 'counter');
       const tokenJournal = join(journals.path, 'tokens.log');
       await writeFile(counter, '0');
-      // 25 rounds for each process, or as many as about 2 s of grants at the
-      // store's usual grant time and never fewer than 6, so a store whose
-      // grant is slow (a container for each claim) still hands the key over 24
-      // times. The processes start their rounds together, after each took a
-      // grant: with no exclusion, their first rounds overlap, however few
-      // rounds there are.
-      const increments = Math.min(
-        25,
-        Math.max(6, Math.round(2_000 / store.grantLatency)),
-      );
+      // The processes start their rounds together, after each took a grant:
+      // with no exclusion, their first rounds overlap, however few rounds
+      // there are.
+      const increments = roundsFor(store, 25);
       const source = `
 					import { appendFile, readFile, writeFile } from 'node:fs/promises';
 					import { setImmediate as nextTurn } from 'node:timers/promises';

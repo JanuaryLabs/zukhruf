@@ -8,3 +8,15 @@ export const windowFor = (
   store: Pick<Subject, 'grantLatency'>,
   base: number,
 ): number => base + store.grantLatency;
+
+/**
+ * The rounds of a test that repeats one try: `most`, or as many as about 2 s
+ * of grants at the usual grant time of `store`, and never fewer than 6. A
+ * store whose grant is slow (a container for each claim) still tries 6
+ * times; a fast store keeps `most`.
+ */
+export const roundsFor = (
+  store: Pick<Subject, 'grantLatency'>,
+  most: number,
+): number =>
+  Math.min(most, Math.max(6, Math.round(2_000 / store.grantLatency)));
