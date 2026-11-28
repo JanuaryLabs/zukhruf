@@ -11,13 +11,13 @@ import { startThread, threadSource } from './peers.ts';
 import type { Host, SharedByThreads, Subject } from './subject.ts';
 
 /**
- * The rounds of each thread: 20, or as many as about 2 s of grants at the
- * store's usual grant time and never fewer than 6, so a store whose grant is
- * slow still hands the key over 24 times. A copy of the rounds of the
- * processes contract (docs/copied-code.md).
+ * The rounds of a test that repeats one try: `most`, or as many as about 2 s
+ * of grants at the store's usual grant time and never fewer than 6, so a
+ * store whose grant is slow (a container for each claim) still tries 6 times.
+ * A copy of the rounds of the processes contract (docs/copied-code.md).
  */
-const roundsOf = (store: Pick<Subject, 'grantLatency'>): number =>
-  Math.min(20, Math.max(6, Math.round(2_000 / store.grantLatency)));
+const roundsOf = (store: Pick<Subject, 'grantLatency'>, most: number): number =>
+  Math.min(most, Math.max(6, Math.round(2_000 / store.grantLatency)));
 
 /**
  * Four threads, this one and three workers, each add 1 to a shared counter
@@ -33,7 +33,7 @@ async function incrementFromFourThreads<H extends Host>(
 ) {
   await using host = store.open(location);
   const mutex = new Mutex(host.store);
-  const rounds = roundsOf(store);
+  const rounds = roundsOf(store, 20);
   // [counter, holders inside the critical section, overlaps seen, threads ready, go]
   const shared = new Int32Array(new SharedArrayBuffer(20));
   const increment = async () => {
@@ -133,9 +133,12 @@ export function threads<H extends Host>(
         shared,
       );
       try {
-        // Act: before each attempt on the free key, one look from the worker thread is in flight.
+        // Act: before each attempt on the free key, one look from the worker
+        // thread is in flight. 50 attempts, fewer for a store whose grant is
+        // slow: there each look that took the key would collide at once.
+        const attempts = roundsOf(store, 50);
         const results = [];
-        for (let attempt = 0; attempt < 50; attempt++) {
+        for (let attempt = 0; attempt < attempts; attempt++) {
           Atomics.store(shared, 2, attempt + 1);
           Atomics.notify(shared, 2);
           await Atomics.waitAsync(shared, 3, attempt).value;
@@ -150,7 +153,7 @@ export function threads<H extends Host>(
         // Assert
         assert.equal(
           Atomics.load(shared, 1),
-          50,
+          attempts,
           'The worker thread must make one look during each attempt',
         );
         assert.deepEqual(
