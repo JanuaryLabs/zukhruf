@@ -67,6 +67,7 @@
   },
   "dependencies": {
     "@zukhruf/async": "^0.8.70",
+    "@zukhruf/process": "^0.8.70",
     "ssh2": "1.17.0"
   },
   "devDependencies": {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
 import { test } from 'node:test';
-import { promisify } from 'node:util';
+
+import { Command, ExitError } from '@zukhruf/process';
 
 import { notInstalled } from './index.ts';
 
@@ -24,11 +24,13 @@ async function child(
   preloads: string[],
   code: string,
 ): Promise<Record<string, Outcome>> {
-  const { stdout } = await promisify(execFile)(process.execPath, [
-    ...preloads.flatMap((preload) => ['--import', preload]),
-    '--input-type=module',
-    '--eval',
-    `
+  const run = await new Command(
+    process.execPath,
+    [
+      ...preloads.flatMap((preload) => ['--import', preload]),
+      '--input-type=module',
+      '--eval',
+      `
     const outcome = async (load) => {
       try {
         await load();
@@ -39,8 +41,11 @@ async function child(
     };
     ${code}
     `,
-  ]);
-  return JSON.parse(stdout);
+    ],
+    { env: process.env, clock: globalThis },
+  ).run();
+  if (run.exitCode !== 0) throw new ExitError('the child', run);
+  return JSON.parse(run.stdout);
 }
 
 test('an import of a hidden package fails as an import of a package that is not installed', async () => {
@@ -79,12 +84,14 @@ test('an import of a subpath of a hidden package fails and names the package', a
 
 test('a require of a hidden package fails as a require of a module that is not installed', async () => {
   // The first line only: Node.js adds a require stack, which a hook cannot know.
-  const { stdout } = await promisify(execFile)(process.execPath, [
-    '--import',
-    notInstalled('msw'),
-    '--input-type=commonjs',
-    '--eval',
-    `
+  const run = await new Command(
+    process.execPath,
+    [
+      '--import',
+      notInstalled('msw'),
+      '--input-type=commonjs',
+      '--eval',
+      `
     const outcome = (load) => {
       try {
         load();
@@ -98,8 +105,11 @@ test('a require of a hidden package fails as a require of a module that is not i
       absent: outcome(() => require('${missing}/node')),
     }));
     `,
-  ]);
-  const { hidden, absent } = JSON.parse(stdout);
+    ],
+    { env: process.env, clock: globalThis },
+  ).run();
+  if (run.exitCode !== 0) throw new ExitError('the child', run);
+  const { hidden, absent } = JSON.parse(run.stdout);
 
   assert.equal(absent.code, 'MODULE_NOT_FOUND');
   assert.deepEqual(hidden, {
@@ -170,7 +180,7 @@ test('preloads compose: each hides its package, and a preload before them still 
 });
 
 test('the preload works from NODE_OPTIONS', async () => {
-  const { stdout } = await promisify(execFile)(
+  const run = await new Command(
     process.execPath,
     [
       '--input-type=module',
@@ -192,10 +202,12 @@ test('the preload works from NODE_OPTIONS', async () => {
         ...process.env,
         NODE_OPTIONS: `--import=${notInstalled('msw', 'pg')}`,
       },
+      clock: globalThis,
     },
-  );
+  ).run();
+  if (run.exitCode !== 0) throw new ExitError('the child', run);
 
-  assert.deepEqual(JSON.parse(stdout), [
+  assert.deepEqual(JSON.parse(run.stdout), [
     'ERR_MODULE_NOT_FOUND',
     'ERR_MODULE_NOT_FOUND',
   ]);
@@ -203,14 +215,20 @@ test('the preload works from NODE_OPTIONS', async () => {
 
 test('the built area gives a preload that a consumer can use', async () => {
   // A consumer imports the build: its preload is the .js file next to it.
-  const { stdout: preload } = await promisify(execFile)(process.execPath, [
-    '--input-type=module',
-    '--eval',
-    `
+  const run = await new Command(
+    process.execPath,
+    [
+      '--input-type=module',
+      '--eval',
+      `
     const { notInstalled } = await import('@zukhruf/testing/preload');
     process.stdout.write(notInstalled('msw'));
     `,
-  ]);
+    ],
+    { env: process.env, clock: globalThis },
+  ).run();
+  if (run.exitCode !== 0) throw new ExitError('the child', run);
+  const preload = run.stdout;
 
   const { msw } = await child(
     [preload],

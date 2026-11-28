@@ -1,14 +1,11 @@
 import assert from 'node:assert/strict';
-import { type ChildProcess, execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { type Socket, connect, createServer } from 'node:net';
 import { join } from 'node:path';
-import { createInterface } from 'node:readline';
 import { type TestContext, describe } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
-import { promisify } from 'node:util';
 
 import { createClock } from '@sinonjs/fake-timers';
 
@@ -21,6 +18,13 @@ import {
 } from '@zukhruf/docker';
 import { TemporaryFiles } from '@zukhruf/fs';
 import { test } from '@zukhruf/parameterized-test';
+import {
+  Command,
+  ExitError,
+  type PipedProcess,
+  type Process,
+  ProcessEndedError,
+} from '@zukhruf/process';
 
 import { retryUntilReady } from '../async/retry-until-ready.ts';
 import { waitFor } from '../async/wait-for.ts';
@@ -99,18 +103,18 @@ const group = (
 
 /** A Node process that runs `source`, with `Docker`, `ReaperHold` and `DockerTestbed` in scope, and the lines it prints. */
 interface Program {
-  child: ChildProcess;
-  /** The next line that the program printed. Rejects when it exits first. */
+  child: PipedProcess;
+  /** The next line that the program printed. Rejects when it ends first. */
   line(): Promise<string>;
   /** Writes a line to its standard input. */
   send(text: string): void;
 }
 
-function program(
+async function program(
   source: string,
   env: NodeJS.ProcessEnv = process.env,
-): Program {
-  const child = spawn(
+): Promise<Program> {
+  const child = await new Command(
     process.execPath,
     [
       '--input-type=module',
@@ -122,23 +126,23 @@ function program(
         ${source}
       `,
     ],
-    { stdio: ['pipe', 'pipe', 'inherit'], env },
-  );
-  const lines = createInterface({ input: child.stdout! })[
-    Symbol.asyncIterator
-  ]();
-  const exited = once(child, 'exit').then(([code]) => {
-    throw new Error(`The program exited with ${String(code)}`);
-  });
-  exited.catch(() => {});
+    { name: 'the program', env, clock: globalThis },
+  ).start({ stderr: 'inherit' });
+  const lines = child.lines()[Symbol.asyncIterator]();
   return {
     child,
     line: async () => {
-      const next = await Promise.race([lines.next(), exited]);
-      if (next.done === true) throw new Error('The program closed its output');
+      const next = await lines.next();
+      if (next.done === true)
+        throw new ProcessEndedError(
+          child.name,
+          await child.ended,
+          child.stderrTail(),
+          'it printed a line',
+        );
       return next.value;
     },
-    send: (text) => child.stdin!.write(`${text}\n`),
+    send: (text) => child.stdin.write(`${text}\n`),
   };
 }
 
@@ -147,8 +151,8 @@ async function holder(
   run: string,
   settings: ReaperSettings,
   env: NodeJS.ProcessEnv = process.env,
-): Promise<ChildProcess> {
-  const { child, line } = program(
+): Promise<Process> {
+  const { child, line } = await program(
     `
     const docker = await Docker.connect({ clock: globalThis, environment: process.env });
     await ReaperHold.take(docker, docker.host, ${JSON.stringify(run)}, ${JSON.stringify(settings)}, globalThis);
@@ -165,7 +169,7 @@ async function holder(
  * A process that holds the reaper of `run` with `settings`, then creates and
  * starts a container of the run, prints its id, and lives until it is killed.
  */
-function creator(run: string, settings: ReaperSettings): Program {
+function creator(run: string, settings: ReaperSettings): Promise<Program> {
   return program(`
     const docker = await Docker.connect({ clock: globalThis, environment: process.env });
     await ReaperHold.take(docker, docker.host, ${JSON.stringify(run)}, ${JSON.stringify(settings)}, globalThis);
@@ -191,7 +195,7 @@ function launcher(
   run: string,
   records: string,
   environment: NodeJS.ProcessEnv = {},
-): Program {
+): Promise<Program> {
   return program(
     `
       import { createInterface } from 'node:readline';
@@ -215,11 +219,9 @@ function launcher(
   );
 }
 
-async function killed(child: ChildProcess): Promise<void> {
-  if (child.exitCode !== null || child.signalCode !== null) return;
-  const exited = once(child, 'exit');
-  child.kill('SIGKILL');
-  await exited;
+async function killed(child: Process): Promise<void> {
+  child.signal('SIGKILL');
+  await child.ended;
 }
 
 /** A started container of the run `run`, with `labels` and an anonymous volume. */
@@ -519,7 +521,11 @@ async function staleReaper(run: string): Promise<string> {
  * `fill` with `testbed` and `directory` in scope, prints the directory's path,
  * and lives until it is killed.
  */
-function directoryMaker(run: string, records: string, fill = ''): Program {
+function directoryMaker(
+  run: string,
+  records: string,
+  fill = '',
+): Promise<Program> {
   return program(
     `
       const testbed = new DockerTestbed({ environment: process.env });
@@ -795,7 +801,7 @@ function taker(
     fixture: 'Postgres',
     module: '../databases/postgres.ts',
   },
-): Program {
+): Promise<Program> {
   return program(
     `
       const { ${fixture} } = await import(${JSON.stringify(new URL(module, import.meta.url).href)});
@@ -840,7 +846,7 @@ group('the reaper of a run', { concurrency: 4 }, () => {
   test('one reaper of a run keeps the run’s objects while one of its holders lives, and removes them, with their anonymous volumes, after the last one ended', async (t) => {
     const run = randomUUID();
     await present('alpine:latest');
-    const holders: ChildProcess[] = [];
+    const holders: Process[] = [];
     await using cleanup = new AsyncDisposableStack();
     cleanup.defer(async () => {
       for (const child of holders) await killed(child);
@@ -896,7 +902,7 @@ group('the reaper of a run', { concurrency: 4 }, () => {
     await present('alpine:latest');
     // Much longer than the start of a holder, so the second holder comes within it.
     const settings = { ...quick, grace: 15_000 };
-    const holders: ChildProcess[] = [];
+    const holders: Process[] = [];
     await using cleanup = new AsyncDisposableStack();
     cleanup.defer(async () => {
       for (const child of holders) await killed(child);
@@ -1137,7 +1143,7 @@ exec sleep 3600`,
     );
     const run = randomUUID();
     await present('alpine:latest');
-    const launched = launcher(run, await recordsOf(directory.path));
+    const launched = await launcher(run, await recordsOf(directory.path));
     const ids: string[] = [];
     await using cleanup = new AsyncDisposableStack();
     cleanup.defer(async () => {
@@ -1177,7 +1183,7 @@ exec sleep 3600`,
     );
     const run = randomUUID();
     await present('alpine:latest');
-    const launched = launcher(run, await recordsOf(directory.path));
+    const launched = await launcher(run, await recordsOf(directory.path));
     const ids: string[] = [];
     await using cleanup = new AsyncDisposableStack();
     cleanup.defer(async () => {
@@ -1209,7 +1215,7 @@ exec sleep 3600`,
     await present('alpine:latest');
     // The re-check passes keep the reaper closing for about 4.5 s.
     const settings = { ...quick, grace: 300, interval: 1_500, passes: 3 };
-    const holders: ChildProcess[] = [];
+    const holders: Process[] = [];
     await using cleanup = new AsyncDisposableStack();
     cleanup.defer(async () => {
       for (const child of holders) await killed(child);
@@ -1453,7 +1459,7 @@ exec sleep 3600`,
       });
       await within(listing.reached, t.signal, 'the list of the pass');
 
-      const late = creator(run, quick);
+      const late = await creator(run, quick);
       cleanup.defer(() => killed(late.child));
       const created = late.line();
       created.catch(() => {});
@@ -1509,7 +1515,7 @@ exec sleep 3600`,
       });
       await within(listing.reached, t.signal, 'the volume list of the pass');
 
-      const late = creator(run, quick);
+      const late = await creator(run, quick);
       cleanup.defer(() => killed(late.child));
       const created = late.line();
       created.catch(() => {});
@@ -1872,7 +1878,7 @@ exec sleep 3600`,
       stack.defer(() => watch.abort());
       const started = execEvent(reaper, since, 'exec_start', watch.signal);
       started.catch(() => {});
-      const owner = program(`
+      const owner = await program(`
         const docker = await Docker.connect({ clock: globalThis, environment: process.env });
         await ReaperHold.take(docker, docker.host, ${JSON.stringify(run)}, ${JSON.stringify(quick)}, globalThis);
       `);
@@ -1912,7 +1918,7 @@ exec sleep 3600`,
       'zukhruf-testing-defaults-',
     );
     const run = randomUUID();
-    const launched = launcher(run, directory.path);
+    const launched = await launcher(run, directory.path);
     await using cleanup = new AsyncDisposableStack();
     cleanup.defer(async () => {
       await killed(launched.child);
@@ -1934,7 +1940,7 @@ exec sleep 3600`,
     );
     const run = randomUUID();
     await present('alpine:latest');
-    const maker = directoryMaker(run, records.path);
+    const maker = await directoryMaker(run, records.path);
     await using cleanup = new AsyncDisposableStack();
     cleanup.defer(async () => {
       await killed(maker.child);
@@ -1955,7 +1961,7 @@ exec sleep 3600`,
     );
     const run = randomUUID();
     await present('alpine:latest');
-    const maker = directoryMaker(
+    const maker = await directoryMaker(
       run,
       records.path,
       `const locked = await testbed.run({
@@ -1986,8 +1992,8 @@ exec sleep 3600`,
     const run = randomUUID();
     await present('alpine:latest');
     const makers = [
-      directoryMaker(run, records.path),
-      directoryMaker(run, records.path),
+      await directoryMaker(run, records.path),
+      await directoryMaker(run, records.path),
     ];
     await using cleanup = new AsyncDisposableStack();
     cleanup.defer(async () => {
@@ -2050,7 +2056,7 @@ exec sleep 3600`,
       const first = await holder(run, quick);
       cleanup.defer(() => killed(first));
 
-      const worker = taker(runOf(run, records, proxied(proxy)), scope);
+      const worker = await taker(runOf(run, records, proxied(proxy)), scope);
       cleanup.defer(() => killed(worker.child));
       const created = worker.line();
       created.catch(() => {});
@@ -2118,7 +2124,7 @@ exec sleep 3600`,
       const watch = new AbortController();
       const holding = execEvent(reaper, since, 'exec_start', watch.signal);
       holding.catch(() => {});
-      const worker = taker(runOf(run, records), scope);
+      const worker = await taker(runOf(run, records), scope);
       cleanup.defer(() => killed(worker.child));
       await within(holding, t.signal, 'the hold of the worker');
       watch.abort();
@@ -2163,7 +2169,7 @@ exec sleep 3600`,
     others.push(own.containerId);
     const first = await holder(run, quick);
     cleanup.defer(() => killed(first));
-    const worker = taker(runOf(run, records), scope);
+    const worker = await taker(runOf(run, records), scope);
     cleanup.defer(() => killed(worker.child));
     const { database } = JSON.parse(
       await within(worker.line(), t.signal, 'the database of the worker'),
@@ -2204,7 +2210,7 @@ exec sleep 3600`,
     cleanup.defer(() => removeRun(run, others));
     const first = await holder(run, quick);
     cleanup.defer(() => killed(first));
-    const worker = taker(runOf(run, records), scope);
+    const worker = await taker(runOf(run, records), scope);
     cleanup.defer(() => killed(worker.child));
     const { database, server } = JSON.parse(
       await within(worker.line(), t.signal, 'the database of the worker'),
@@ -2271,7 +2277,7 @@ exec sleep 3600`,
           });
           const first = await holder(run, quick);
           cleanup.defer(() => killed(first));
-          const worker = taker(
+          const worker = await taker(
             runOf(run, records, proxied(proxy)),
             scope,
             'handle[Symbol.asyncDispose]()',
@@ -2350,7 +2356,7 @@ exec sleep 3600`,
           throw new Error('The process that holds is gone.');
         },
       );
-      const worker = program(
+      const worker = await program(
         `
         const docker = await Docker.connect({ clock: globalThis, environment: process.env });
         await ReaperHold.take(docker, docker.host, ${JSON.stringify(run)}, ${JSON.stringify(creatorTimeout)}, globalThis);
@@ -2399,7 +2405,7 @@ exec sleep 3600`,
           throw new Error('The process that starts its reaper is gone.');
         },
       );
-      const worker = program(
+      const worker = await program(
         `
         const docker = await Docker.connect({ clock: globalThis, environment: process.env });
         await ReaperHold.take(docker, docker.host, ${JSON.stringify(run)}, ${JSON.stringify(creatorTimeout)}, globalThis);
@@ -2425,7 +2431,7 @@ exec sleep 3600`,
     { skip: proxyless },
     async () => {
       const run = randomUUID();
-      const holders: ChildProcess[] = [];
+      const holders: Process[] = [];
       await using stack = new AsyncDisposableStack();
       await using cleanup = new AsyncDisposableStack();
       cleanup.defer(async () => {
@@ -2521,7 +2527,7 @@ group('the reaper on a second engine of its own', { concurrency: 2 }, () => {
     });
     const run = randomUUID();
     using removed = await removedReapers(second, run);
-    const launched = launcher(run, await recordsOf(directory.path), {
+    const launched = await launcher(run, await recordsOf(directory.path), {
       DOCKER_HOST: second.host,
     });
     try {
@@ -2592,7 +2598,7 @@ group('the reaper on a second engine of its own', { concurrency: 2 }, () => {
       relay,
     });
     const run = randomUUID();
-    const launched = launcher(run, await recordsOf(directory.path), {
+    const launched = await launcher(run, await recordsOf(directory.path), {
       DOCKER_HOST: second.host,
     });
     try {
@@ -2655,7 +2661,7 @@ group('the reaper on a second engine of its own', { concurrency: 2 }, () => {
     });
     const run = randomUUID();
     using removed = await removedReapers(second, run);
-    const launched = launcher(run, await recordsOf(directory.path), {
+    const launched = await launcher(run, await recordsOf(directory.path), {
       DOCKER_HOST: second.host,
     });
     try {
@@ -2739,7 +2745,7 @@ group('the reaper on a second engine of its own', { concurrency: 2 }, () => {
       const owned = await objectOn(second.client, run);
 
       // A test process that is slow to come back, as one whose event loop is busy.
-      child.kill('SIGSTOP');
+      child.signal('SIGSTOP');
       try {
         await second.restart(t.signal);
         // A fixed window, longer than the grace and the passes of the reaper:
@@ -2747,7 +2753,7 @@ group('the reaper on a second engine of its own', { concurrency: 2 }, () => {
         // objects within it.
         await delay(quick.grace + quick.interval * quick.passes + 2_000);
       } finally {
-        child.kill('SIGCONT');
+        child.signal('SIGCONT');
       }
 
       await waitFor(
@@ -2944,15 +2950,12 @@ async function droppableSshEngine() {
     await new TemporaryFiles().directory('zukhruf-sshd-'),
   );
   const key = join(directory.path, 'id_ed25519');
-  await promisify(execFile)('ssh-keygen', [
-    '-q',
-    '-t',
-    'ed25519',
-    '-N',
-    '',
-    '-f',
-    key,
-  ]);
+  const keygen = await new Command(
+    'ssh-keygen',
+    ['-q', '-t', 'ed25519', '-N', '', '-f', key],
+    { env: process.env, clock: globalThis },
+  ).run();
+  if (keygen.exitCode !== 0) throw new ExitError('ssh-keygen', keygen);
   const service = stack.use(
     await new DockerTestbed({ environment: process.env }).serve(
       {
@@ -3046,7 +3049,7 @@ function sshHolder(
   run: string,
   settings: ReaperSettings,
   { host, flags }: { host: string; flags: string[] },
-): Program {
+): Promise<Program> {
   return program(
     `
       import { createInterface } from 'node:readline';
@@ -3074,7 +3077,7 @@ group('the reaper over SSH', { concurrency: 3 }, () => {
     await using sshd = await droppableSshEngine();
     await using cleanup = new AsyncDisposableStack();
     cleanup.defer(() => removeRun(run));
-    const held = sshHolder(run, quick, sshd);
+    const held = await sshHolder(run, quick, sshd);
     cleanup.defer(() => killed(held.child));
     assert.equal(await held.line(), 'held');
     const id = await object(run);
@@ -3093,7 +3096,7 @@ group('the reaper over SSH', { concurrency: 3 }, () => {
     await using sshd = await droppableSshEngine();
     await using cleanup = new AsyncDisposableStack();
     cleanup.defer(() => removeRun(run));
-    const held = sshHolder(run, quick, sshd);
+    const held = await sshHolder(run, quick, sshd);
     cleanup.defer(() => killed(held.child));
     assert.equal(await held.line(), 'held');
     const id = await object(run);
@@ -3111,7 +3114,7 @@ group('the reaper over SSH', { concurrency: 3 }, () => {
     await using sshd = await droppableSshEngine();
     await using cleanup = new AsyncDisposableStack();
     cleanup.defer(() => removeRun(run));
-    const held = sshHolder(run, quick, sshd);
+    const held = await sshHolder(run, quick, sshd);
     cleanup.defer(() => killed(held.child));
     assert.equal(await held.line(), 'held');
     const id = await object(run);
@@ -3140,7 +3143,7 @@ function sshLeaseHolder(
   run: string,
   name: string,
   { host, flags }: { host: string; flags: string[] },
-): Program {
+): Promise<Program> {
   return program(
     `
       import { EngineLease } from ${JSON.stringify(new URL('./engine-lease.ts', import.meta.url).href)};
@@ -3166,7 +3169,7 @@ group('an engine lease over SSH', { concurrency: 1 }, () => {
     await using sshd = await droppableSshEngine();
     await using cleanup = new AsyncDisposableStack();
     cleanup.defer(() => removeRun(run));
-    const held = sshLeaseHolder(run, name, sshd);
+    const held = await sshLeaseHolder(run, name, sshd);
     cleanup.defer(() => killed(held.child));
     assert.equal(await held.line(), 'held');
 

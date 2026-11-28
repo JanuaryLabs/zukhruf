@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { ExitError } from '@zukhruf/process';
 
 import { OpenSshConfig } from './config.ts';
 import { PATH } from './testing/path.ts';
@@ -28,7 +29,7 @@ async function configFile(
 }
 
 test(
-  'a non-zero exit of ssh -G rejects with its standard error as the message and a cause with its exit code',
+  'a non-zero exit of ssh -G rejects with its standard error as the message and the ExitError of the run as its cause',
   { skip: noSsh },
   async () => {
     // Arrange
@@ -53,8 +54,8 @@ test(
         error.message,
         `${file}: line 2: Bad configuration option: nosuchoption\r\n${file}: terminating, 1 bad configuration options`,
       );
-      assert.ok(Error.isError(error.cause) && 'code' in error.cause);
-      assert.equal(error.cause.code, 255);
+      assert.ok(error.cause instanceof ExitError);
+      assert.equal(error.cause.end.exitCode, 255);
       return true;
     });
   },
@@ -184,8 +185,8 @@ test(
     await assert.rejects(resolving, (error) => {
       assert.ok(Error.isError(error));
       assert.equal(error.message, 'jumphost loop via h');
-      assert.ok(Error.isError(error.cause) && 'code' in error.cause);
-      assert.equal(error.cause.code, 255);
+      assert.ok(error.cause instanceof ExitError);
+      assert.equal(error.cause.end.exitCode, 255);
       return true;
     });
   },
@@ -220,8 +221,8 @@ test(
         error.message,
         /^Cannot forward agent socket path "\/no\/such\/agent\.sock": No such file or directory$/m,
       );
-      assert.ok(Error.isError(error.cause) && 'code' in error.cause);
-      assert.equal(error.cause.code, 255);
+      assert.ok(error.cause instanceof ExitError);
+      assert.equal(error.cause.end.exitCode, 255);
       return true;
     });
   },

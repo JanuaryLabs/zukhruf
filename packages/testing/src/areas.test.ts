@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 
 import { test } from '@zukhruf/parameterized-test';
+import { Command, ExitError } from '@zukhruf/process';
 
 import { notInstalled } from './preload/index.ts';
 
@@ -11,14 +10,24 @@ import { notInstalled } from './preload/index.ts';
  * is an optional peer. The child sees each hidden driver as not installed,
  * the way a consumer without it sees the package.
  */
-const importArea = (area: string, hidden: [string, ...string[]]) =>
-  promisify(execFile)(process.execPath, [
-    '--import',
-    notInstalled(...hidden),
-    '--input-type=module',
-    '--eval',
-    `await import('@zukhruf/testing/${area}');`,
-  ]);
+async function importArea(
+  area: string,
+  hidden: [string, ...string[]],
+): Promise<void> {
+  const run = await new Command(
+    process.execPath,
+    [
+      '--import',
+      notInstalled(...hidden),
+      '--input-type=module',
+      '--eval',
+      `await import('@zukhruf/testing/${area}');`,
+    ],
+    { env: process.env, clock: globalThis },
+  ).run();
+  if (run.exitCode !== 0)
+    throw new ExitError(`the import of @zukhruf/testing/${area}`, run);
+}
 
 const drivers: [string, ...string[]] = [
   'mssql',

@@ -9,16 +9,19 @@
   "exclude": ["src/**/*.test.ts", "src/testing/**"],
   "references": [
     {
-      "path": "../async/tsconfig.lib.json"
-    },
-    {
-      "path": "../fs/tsconfig.lib.json"
-    },
-    {
       "path": "../ssh/tsconfig.lib.json"
     },
     {
+      "path": "../async/tsconfig.lib.json"
+    },
+    {
+      "path": "../process/tsconfig.lib.json"
+    },
+    {
       "path": "../parameterized-test/tsconfig.lib.json"
+    },
+    {
+      "path": "../fs/tsconfig.lib.json"
     }
   ]
 }

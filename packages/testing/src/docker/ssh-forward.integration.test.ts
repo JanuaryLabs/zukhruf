@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { existsSync } from 'node:fs';
@@ -7,13 +6,12 @@ import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { type Socket, connect, createServer } from 'node:net';
 import { userInfo } from 'node:os';
 import { dirname, join } from 'node:path';
-import { createInterface } from 'node:readline';
 import type { Readable } from 'node:stream';
 import { test } from 'node:test';
-import { promisify } from 'node:util';
 
 import { TemporaryFiles } from '@zukhruf/fs';
-import { ExitError } from '@zukhruf/ssh';
+import { Command, ExitError } from '@zukhruf/process';
+import { ExitError as SshExitError } from '@zukhruf/ssh';
 import type { Environment } from '@zukhruf/ssh/config';
 
 import { waitFor } from '../async/wait-for.ts';
@@ -29,7 +27,15 @@ import { TEST_RUN_ID } from './run-records.ts';
 import type { ServiceContainer } from './service-container.ts';
 import { DockerTestbed } from './testbed.ts';
 
-const run = promisify(execFile);
+/** The path of `command` on this machine, as `command -v` of sh gives it. */
+async function which(command: string): Promise<string> {
+  const found = await new Command('sh', ['-c', `command -v ${command}`], {
+    env: process.env,
+    clock: globalThis,
+  }).run();
+  if (found.exitCode !== 0) throw new ExitError(`command -v ${command}`, found);
+  return found.stdout.trim();
+}
 
 const noSshd = process.platform === 'win32' ? 'Windows has no sshd' : false;
 const noEngine =
@@ -39,18 +45,12 @@ const noEngine =
     : `the echo container's port is on this machine only for a local unix:// engine, not ${engine}`);
 
 /** The real ssh of this machine, which `ssh -G` runs. */
-const realSsh = noSshd
-  ? ''
-  : (await run('sh', ['-c', 'command -v ssh'])).stdout.trim();
+const realSsh = noSshd ? '' : await which('ssh');
 
 /** The directory of the docker CLI of this machine, for the PATH of the sessions of an engine host. */
 const dockerCli = noEngine
   ? ''
-  : dirname(
-      await realpath(
-        (await run('sh', ['-c', 'command -v docker'])).stdout.trim(),
-      ),
-    );
+  : dirname(await realpath(await which('docker')));
 
 /** The engine host of the tests: the `Host` of the ssh_config that `reaching` writes. */
 const ENGINE_HOST = 'ssh://engine';
@@ -239,7 +239,7 @@ test(
     // Assert
     await assert.rejects(shell, (error: Error) => {
       assert.match(error.message, /: no such fixture$/);
-      assert.ok(error.cause instanceof ExitError);
+      assert.ok(error.cause instanceof SshExitError);
       assert.deepEqual(error.cause.exit, { kind: 'status', exitStatus: 3 });
       return true;
     });
@@ -254,7 +254,7 @@ test(
     await using sshd = await startSshd();
     await using service = await echoService(t.signal);
     const environment = await reaching(sshd);
-    const child = spawn(
+    await using child = await new Command(
       process.execPath,
       nodeWithHost(`
         const host = new DockerHost(${JSON.stringify(ENGINE_HOST)}, { environment: ${JSON.stringify(environment)} });
@@ -263,25 +263,17 @@ test(
         socket.write('ping');
         socket.once('data', () => console.log('carrying'));
       `),
-      { stdio: ['ignore', 'pipe', 'inherit'] },
-    );
-    const exited = once(child, 'exit');
-    try {
-      const [line]: unknown[] = await once(
-        createInterface({ input: child.stdout }),
-        'line',
-      );
-      assert.equal(line, 'carrying');
+      { name: 'forward holder', env: process.env, clock: globalThis },
+    ).start({ stdin: 'ignore', stderr: 'inherit', signal: t.signal });
+    const { value: line } = await child.lines()[Symbol.asyncIterator]().next();
+    assert.equal(line, 'carrying');
 
-      // Act
-      child.kill('SIGKILL');
-      await exited;
+    // Act
+    child.signal('SIGKILL');
+    await child.ended;
 
-      // Assert: each sshd of the process's connections has exited.
-      await sshd.connectionsEnded({ signal: t.signal });
-    } finally {
-      child.kill('SIGKILL');
-    }
+    // Assert: each sshd of the process's connections has exited.
+    await sshd.connectionsEnded({ signal: t.signal });
   },
 );
 
@@ -381,7 +373,7 @@ test(
 test(
   'a run on an ssh:// engine serves its SSH connection to its test processes: the engine at the run’s docker.sock, shells and forwards through its control master, and its teardown removes the run’s sockets',
   { skip: noEngine },
-  async () => {
+  async (t) => {
     // Arrange: an engine host whose sessions reach the local engine, and a
     // test file that uses the engine, a directory of the engine host and a
     // forwarded port.
@@ -422,7 +414,7 @@ test(
       });
       `,
     );
-    const runner = spawn(process.execPath, runnerArgs(file), {
+    const runner = new Command(process.execPath, runnerArgs(file), {
       env: {
         ...runEnvironment(join(directory.path, 'state')),
         // A selected context wins over DOCKER_HOST.
@@ -430,18 +422,14 @@ test(
         DOCKER_HOST: ENGINE_HOST,
         PATH: `${(await reaching(sshd)).PATH}:${process.env.PATH}`,
       },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      clock: globalThis,
     });
 
     // Act
-    const [stdout, stderr, [code]] = await Promise.all([
-      text(runner.stdout),
-      text(runner.stderr),
-      once(runner, 'close'),
-    ]);
+    const ran = await runner.run({ signal: t.signal });
 
     // Assert
-    assert.equal(code, 0, stdout + stderr);
+    assert.equal(ran.exitCode, 0, ran.stdout + ran.stderr);
     const { run, dockerHost, note } = JSON.parse(
       await readFile(result, 'utf8'),
     );
@@ -497,23 +485,24 @@ test(
 test(
   'a shell keeps its process alive until the script ends, and the idle connection then lets the process exit',
   { skip: noSshd },
-  async () => {
+  async (t) => {
     // Arrange
     await using sshd = await startSshd();
     const environment = await reaching(sshd);
 
     // Act: nothing but the shell keeps the process alive.
-    const { stdout } = await run(
+    const shell = await new Command(
       process.execPath,
       nodeWithHost(`
         const host = new DockerHost(${JSON.stringify(ENGINE_HOST)}, { environment: ${JSON.stringify(environment)} });
         void host.shell('sleep 1; echo done').then(({ stdout }) => process.stdout.write(stdout));
       `),
-      { timeout: 30_000, killSignal: 'SIGKILL' },
-    );
+      { name: 'shell', env: process.env, clock: globalThis },
+    ).run({ signal: t.signal });
+    if (shell.exitCode !== 0) throw new ExitError('shell', shell);
 
     // Assert: the output came, and the process ended by itself.
-    assert.equal(stdout, 'done\n');
+    assert.equal(shell.stdout, 'done\n');
   },
 );
 

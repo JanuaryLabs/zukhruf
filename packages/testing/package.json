@@ -151,6 +151,7 @@
     "@zukhruf/async": "^0.8.70",
     "@zukhruf/docker": "^0.8.70",
     "@zukhruf/fs": "^0.8.70",
+    "@zukhruf/process": "^0.8.70",
     "@zukhruf/ssh": "^0.8.70",
     "p-memoize": "^9.0.0",
     "p-retry": "^9.0.0"

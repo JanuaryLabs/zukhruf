@@ -1,6 +1,4 @@
 import assert from 'node:assert/strict';
-import { execFile, spawn } from 'node:child_process';
-import { once } from 'node:events';
 import { writeFile } from 'node:fs/promises';
 import { Server } from 'node:http';
 import { join } from 'node:path';
@@ -8,6 +6,7 @@ import { test } from 'node:test';
 import { promisify, stripVTControlCharacters } from 'node:util';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { Command, ExitError } from '@zukhruf/process';
 
 import { HttpServer } from './http-server.ts';
 
@@ -101,9 +100,9 @@ test('an async handler answers', async () => {
   assert.equal(await (await fetch(server.origin)).text(), 'async');
 });
 
-test('a rejected async handler fails its process with its own error', async () => {
+test('a rejected async handler fails its process with its own error', async (t) => {
   // A server that answered or reset instead would hide a broken fake.
-  const child = promisify(execFile)(
+  const run = await new Command(
     process.execPath,
     [
       '--input-type=module',
@@ -116,18 +115,11 @@ test('a rejected async handler fails its process with its own error', async () =
           await fetch(server.origin);
         `,
     ],
-    { timeout: 10_000 },
-  );
+    { env: process.env, clock: globalThis },
+  ).run({ signal: t.signal });
 
-  await assert.rejects(
-    child,
-    (error: unknown) =>
-      Error.isError(error) &&
-      'code' in error &&
-      error.code === 1 &&
-      'stderr' in error &&
-      String(error.stderr).includes('Error: the fake broke'),
-  );
+  assert.equal(run.exitCode, 1, run.output);
+  assert.ok(run.stderr.includes('Error: the fake broke'), run.stderr);
 });
 
 test('HTTP servers listen on the IPv4 loopback interface only', async () => {
@@ -142,11 +134,13 @@ test('HTTP servers listen on the IPv4 loopback interface only', async () => {
   });
 });
 
-const nextTestKeepsItsFakeTimer = (requests: string) =>
-  promisify(execFile)(process.execPath, [
-    '--input-type=module',
-    '--eval',
-    `
+async function nextTestKeepsItsFakeTimer(requests: string): Promise<void> {
+  const run = await new Command(
+    process.execPath,
+    [
+      '--input-type=module',
+      '--eval',
+      `
     import assert from 'node:assert/strict';
     import { test } from 'node:test';
     import { setImmediate } from 'node:timers/promises';
@@ -182,7 +176,11 @@ const nextTestKeepsItsFakeTimer = (requests: string) =>
       assert.equal(fired, true);
     });
     `,
-  ]);
+    ],
+    { env: process.env, clock: globalThis },
+  ).run();
+  if (run.exitCode !== 0) throw new ExitError('the child', run);
+}
 
 test('disposal waits until fetch has closed each connection that the server closed, so the next test keeps the timers that it fakes', async () => {
   await nextTestKeepsItsFakeTimer(`
@@ -212,10 +210,12 @@ test('disposal settles while a client in another process holds its connection op
   await using server = await new HttpServer().start((_request, response) => {
     response.end('ok');
   });
-  const client = spawn(process.execPath, [
-    '--input-type=module',
-    '--eval',
-    `
+  await using client = await new Command(
+    process.execPath,
+    [
+      '--input-type=module',
+      '--eval',
+      `
     setTimeout(() => {
       console.error('the client did not end in 20 s');
       process.exit(124);
@@ -223,30 +223,29 @@ test('disposal settles while a client in another process holds its connection op
     await (await fetch(${JSON.stringify(server.origin)})).text();
     console.log('connected');
     `,
+    ],
+    { name: 'client', env: process.env, clock: globalThis },
+  ).start({ ready: { line: 'connected' } });
+  const connections = await promisify(
+    server.server.getConnections.bind(server.server),
+  )();
+  assert.equal(connections, 1);
+
+  const first = await Promise.race([
+    server[Symbol.asyncDispose]().then(() => 'the disposal settled'),
+    client.ended.then(() => 'the client exited'),
   ]);
-  try {
-    await once(client.stdout, 'data');
-    const connections = await promisify(
-      server.server.getConnections.bind(server.server),
-    )();
-    assert.equal(connections, 1);
 
-    const first = await Promise.race([
-      server[Symbol.asyncDispose]().then(() => 'the disposal settled'),
-      once(client, 'exit').then(() => 'the client exited'),
-    ]);
-
-    assert.equal(first, 'the disposal settled');
-  } finally {
-    client.kill();
-  }
+  assert.equal(first, 'the disposal settled');
 });
 
 test('disposal after a fetch settles in a process that nothing else holds open', async () => {
-  const { stdout } = await promisify(execFile)(process.execPath, [
-    '--input-type=module',
-    '--eval',
-    `
+  const run = await new Command(
+    process.execPath,
+    [
+      '--input-type=module',
+      '--eval',
+      `
     import { HttpServer } from ${JSON.stringify(import.meta.resolve('./http-server.ts'))};
 
     setTimeout(() => {
@@ -261,9 +260,12 @@ test('disposal after a fetch settles in a process that nothing else holds open',
     await server[Symbol.asyncDispose]();
     console.log('settled');
     `,
-  ]);
+    ],
+    { env: process.env, clock: globalThis },
+  ).run();
+  if (run.exitCode !== 0) throw new ExitError('the child', run);
 
-  assert.equal(stdout, 'settled\n');
+  assert.equal(run.stdout, 'settled\n');
 });
 
 test('in a file that awaits each test, a test whose last await is the disposal after a fetch passes', async () => {
@@ -294,11 +296,12 @@ test('in a file that awaits each test, a test whose last await is the disposal a
   // node --test that inherits it skips its files as a recursive run.
   const { NODE_TEST_CONTEXT: _context, ...env } = process.env;
 
-  const { stdout } = await promisify(execFile)(
+  const run = await new Command(
     process.execPath,
     ['--test', '--test-reporter=spec', file],
-    { env },
-  );
+    { env, clock: globalThis },
+  ).run();
+  if (run.exitCode !== 0) throw new ExitError('node --test', run);
 
-  assert.match(stripVTControlCharacters(stdout), /^ℹ pass 2$/m);
+  assert.match(stripVTControlCharacters(run.stdout), /^ℹ pass 2$/m);
 });

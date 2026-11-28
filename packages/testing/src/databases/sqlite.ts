@@ -1,10 +1,8 @@
-import { execFile } from 'node:child_process';
-import { once } from 'node:events';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { promisify } from 'node:util';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { Command, ProcessEndedError } from '@zukhruf/process';
 
 export interface SqliteDatabase extends AsyncDisposable {
   path: string;
@@ -15,52 +13,47 @@ export interface SqliteDatabase extends AsyncDisposable {
 
 /** Each acquisition owns an independent, temporary SQLite database. */
 export class Sqlite {
-  /** Holds a write lock in another process, which releases even while the caller blocks. */
+  /**
+   * Holds a write lock in another process, which releases even while the
+   * caller blocks. The holder ends with this process (ADR 0004 of
+   * @zukhruf/process).
+   */
   async writeLock(path: string, durationMs: number): Promise<AsyncDisposable> {
-    const holder = promisify(execFile)(process.execPath, [
-      '--input-type=module',
-      '--eval',
-      `
+    const holder = await new Command(
+      process.execPath,
+      [
+        '--input-type=module',
+        '--eval',
+        `
         import { DatabaseSync } from 'node:sqlite';
         import { setTimeout } from 'node:timers/promises';
 
-        process.stdin.once('end', () => process.exit(0));
-        process.stdin.resume();
         using database = new DatabaseSync(process.argv[1]);
         database.exec('BEGIN IMMEDIATE');
-        process.stdout.write('locked');
+        process.stdout.write('locked\\n');
         await setTimeout(Number(process.argv[2]));
         database.exec('ROLLBACK');
         process.exit(0);
       `,
-      path,
-      String(durationMs),
-    ]);
-    const exited = holder.then(() => {
-      throw new Error('SQLite lock holder exited before acquiring the lock.');
-    });
-    try {
-      await Promise.race([once(holder.child.stdout!, 'data'), exited]);
-    } catch (error) {
-      holder.child.kill();
-      await Promise.allSettled([holder]);
-      throw error;
-    }
+        path,
+        String(durationMs),
+      ],
+      // The holder needs no variable: node is an absolute path, and the
+      // source imports only node:sqlite (ADR 0003 of @zukhruf/process).
+      { name: 'SQLite lock holder', env: {}, clock: globalThis },
+    ).start({ stdin: 'ignore', ready: { line: 'locked' } });
 
     const resources = new AsyncDisposableStack();
     resources.defer(async () => {
-      const killed = holder.child.kill();
-      try {
-        await holder;
-      } catch (error) {
-        if (
-          !killed ||
-          !Error.isError(error) ||
-          !('signal' in error) ||
-          error.signal !== 'SIGTERM'
-        )
-          throw error;
-      }
+      await holder[Symbol.asyncDispose]();
+      const end = await holder.ended;
+      if (end.signal !== 'SIGTERM' && end.exitCode !== 0)
+        throw new ProcessEndedError(
+          holder.name,
+          end,
+          holder.stderrTail(),
+          'the release of its lock',
+        );
     });
     return resources;
   }

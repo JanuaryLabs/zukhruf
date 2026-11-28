@@ -1,14 +1,11 @@
-import { type ChildProcess, execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { readFile, writeFile } from 'node:fs/promises';
 import { type Server, createServer } from 'node:net';
-import { delimiter, join } from 'node:path';
-import { promisify } from 'node:util';
+import { join } from 'node:path';
 
 import { untilAborted } from '@zukhruf/async';
 import { TemporaryFiles, isErrno } from '@zukhruf/fs';
-
-const run = promisify(execFile);
+import { Command, ExitError, type Process, StartError } from '@zukhruf/process';
 
 export interface Sshd extends AsyncDisposable {
   /** The port on 127.0.0.1 where each connection gets its own `sshd -i`. */
@@ -42,9 +39,14 @@ export async function startSshd(
     const hostKey = join(directory.path, 'host_ed25519');
     const userKey = join(directory.path, 'id_ed25519');
     await Promise.all(
-      [hostKey, userKey].map((file) =>
-        run('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', file]),
-      ),
+      [hostKey, userKey].map(async (file) => {
+        const keygen = await new Command(
+          'ssh-keygen',
+          ['-q', '-t', 'ed25519', '-N', '', '-f', file],
+          { env: process.env, clock: globalThis },
+        ).run();
+        if (keygen.exitCode !== 0) throw new ExitError('ssh-keygen', keygen);
+      }),
     );
     const authorizedKeys = join(directory.path, 'authorized_keys');
     await writeFile(authorizedKeys, await readFile(`${userKey}.pub`));
@@ -61,26 +63,27 @@ export async function startSshd(
         '',
       ].join('\n'),
     );
-    const sshd = await findSshd(config);
+    await testConfig(config);
     const hostPublicKey = (await readFile(`${hostKey}.pub`, 'utf8')).trim();
 
-    const children = new Set<ChildProcess>();
-    const exits: Promise<unknown>[] = [];
+    const inetd = new Command('sshd', ['-i', '-f', config], {
+      env: process.env,
+      clock: globalThis,
+    });
+    const starts: Promise<Process>[] = [];
+    const running = new Set<Process>();
     const server = createServer({ pauseOnConnect: true }, (socket) => {
-      // After the login, sshd forks the child that serves the connection
-      // (privsep_postauth in OpenSSH's sshd-session.c); it holds the socket
-      // too, and outlives a signal to its parent. In its own process group,
-      // the whole connection gets each signal.
-      const child = spawn(sshd, ['-i', '-f', config], {
-        stdio: [socket, socket, 'ignore'],
-        detached: true,
-      });
       // The child holds its own copy of the socket; the server's copy would
       // keep the connection open after sshd exits.
-      socket.destroy();
-      children.add(child);
-      exits.push(once(child, 'exit'));
-      child.once('exit', () => children.delete(child));
+      const starting = inetd
+        .start({ stdin: socket, stdout: socket, stderr: 'ignore' })
+        .then((started) => {
+          running.add(started);
+          void started.ended.then(() => running.delete(started));
+          return started;
+        })
+        .finally(() => socket.destroy());
+      starts.push(starting);
     });
     server.listen(0, '127.0.0.1');
     await once(server, 'listening');
@@ -91,22 +94,26 @@ export async function startSshd(
       hostPublicKey,
       directory: directory.path,
       kill(signal) {
-        for (const child of children) signalGroup(child, signal);
+        // After the login, sshd forks the child that serves the connection
+        // (privsep_postauth in OpenSSH's sshd-session.c); it holds the socket
+        // too, so the signal goes to each member of the group.
+        for (const started of running) started.signal(signal, { to: 'group' });
       },
       async connectionsEnded({ signal }) {
-        await untilAborted(Promise.all(exits), signal);
+        await untilAborted(
+          Promise.all(starts.map(async (starting) => (await starting).ended)),
+          signal,
+        );
       },
       async [Symbol.asyncDispose]() {
         const closed = once(server, 'close');
         server.close();
         await Promise.all(
-          [...children].map(async (child) => {
-            const exited = once(child, 'exit');
-            signalGroup(child, 'SIGTERM');
-            // A test may have stopped it; a stopped process ends only after
-            // it continues.
-            signalGroup(child, 'SIGCONT');
-            await exited;
+          starts.map(async (starting) => {
+            const started = await starting;
+            if (!running.has(started)) return;
+            // A stop wakes a group that a test froze (process ADR 0014).
+            await started.stop();
           }),
         );
         await closed;
@@ -119,35 +126,27 @@ export async function startSshd(
   }
 }
 
-// No process of the group is left to signal: ESRCH, or on macOS EPERM while
-// the leader is a zombie that Node has not reaped yet (killpg1 counts no
-// zombie, bsd/kern/kern_sig.c:1714-1718 of xnu-12377.1.9).
-function signalGroup(child: ChildProcess, signal: NodeJS.Signals): void {
-  if (child.pid === undefined) return;
-  try {
-    process.kill(-child.pid, signal);
-  } catch (error) {
-    if (!isErrno(error, 'ESRCH') && !isErrno(error, 'EPERM')) throw error;
-  }
-}
-
 /**
- * The first sshd on the PATH that tests the config with `sshd -t`, as Go's
- * x/crypto/ssh tests find theirs with `exec.LookPath("sshd")`.
+ * Tests the config with the first sshd on the PATH, which each connection
+ * then starts, as Go's x/crypto/ssh tests find theirs with
+ * `exec.LookPath("sshd")`.
  */
-async function findSshd(config: string): Promise<string> {
-  for (const directory of (process.env['PATH'] ?? '').split(delimiter)) {
-    const sshd = join(directory, 'sshd');
-    try {
-      await run(sshd, ['-t', '-f', config]);
-      return sshd;
-    } catch (error) {
-      if (!isErrno(error, 'ENOENT')) throw error;
-    }
-  }
-  throw new Error(
-    "The OpenSSH server sshd is missing from the PATH; install OpenSSH's sshd (openssh-server) to run these tests.",
-  );
+async function testConfig(config: string): Promise<void> {
+  const tested = await new Command('sshd', ['-t', '-f', config], {
+    env: process.env,
+    clock: globalThis,
+  })
+    .run()
+    .catch((error: unknown) => {
+      if (error instanceof StartError && isErrno(error.cause, 'ENOENT')) {
+        throw new Error(
+          "The OpenSSH server sshd is missing from the PATH; install OpenSSH's sshd (openssh-server) to run these tests.",
+          { cause: error },
+        );
+      }
+      throw error;
+    });
+  if (tested.exitCode !== 0) throw new ExitError('sshd', tested);
 }
 
 function portOf(server: Server): number {

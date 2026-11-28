@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { execFile, spawn as spawnProcess } from 'node:child_process';
 import { hash, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { existsSync } from 'node:fs';
@@ -19,7 +18,6 @@ import { dirname, join } from 'node:path';
 import { type TestContext, describe } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { promisify } from 'node:util';
 
 import { untilAborted } from '@zukhruf/async';
 import {
@@ -29,6 +27,7 @@ import {
 } from '@zukhruf/docker';
 import { type TemporaryDirectory, TemporaryFiles, isErrno } from '@zukhruf/fs';
 import { test } from '@zukhruf/parameterized-test';
+import { Command, type CommandOptions, ExitError } from '@zukhruf/process';
 
 import { waitFor } from '../async/wait-for.ts';
 import { EngineLease } from '../docker/engine-lease.ts';
@@ -133,13 +132,32 @@ const proxiedEnvironment = (
   DOCKER_HOST: proxy.host,
 });
 
+/**
+ * Runs Node.js with `args` and `options` until it ends or the test's limit,
+ * and throws for an end other than exit code 0.
+ */
+async function passed(
+  t: TestContext,
+  args: string[],
+  options: Pick<CommandOptions, 'env' | 'cwd'>,
+): Promise<void> {
+  const run = await new Command(process.execPath, args, {
+    ...options,
+    name: 'node',
+    clock: globalThis,
+  }).run({ signal: t.signal });
+  if (run.exitCode !== 0) throw new ExitError('node', run);
+}
+
 /** A run that runs no test of `file`, so it only recovers and ends. */
-const emptyRun = (file: string, env: Record<string, string | undefined>) =>
-  promisify(execFile)(
-    process.execPath,
-    runnerArgs('--test-name-pattern=no-matching-tests', file),
-    { env, timeout: 90_000 },
-  );
+const emptyRun = (
+  t: TestContext,
+  file: string,
+  env: Record<string, string | undefined>,
+) =>
+  passed(t, runnerArgs('--test-name-pattern=no-matching-tests', file), {
+    env,
+  });
 
 /** Pulls `image` when the engine does not have it, for a create that does not pull. */
 async function present(image: string): Promise<void> {
@@ -255,30 +273,32 @@ async function runsDirectory(prefix: string): Promise<TemporaryDirectory> {
 
 /** The pid of a process that has ended. */
 async function endedPid(): Promise<number> {
-  const { child, exited } = started(['--eval', ''], process.env);
-  await exited;
-  assert.ok(child.pid !== undefined);
+  const { child } = await started(['--eval', ''], process.env);
+  await child.ended;
   return child.pid;
 }
 
-/** A child process with its output collected and its exit awaited. */
-function started(args: string[], env: Record<string, string | undefined>) {
-  const child = spawnProcess(process.execPath, args, {
+/**
+ * A started Node.js process whose stdout is read to its end as it comes.
+ * `output()` gives the lines of stdout so far, and then the stderr tail.
+ */
+async function started(
+  args: string[],
+  env: Record<string, string | undefined>,
+) {
+  const child = await new Command(process.execPath, args, {
     env,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  let output = '';
-  child.stdout.on('data', (data) => {
-    output += data;
-  });
-  child.stderr.on('data', (data) => {
-    output += data;
-  });
-  const exited = new Promise<number | null>((resolve, reject) => {
-    child.once('exit', resolve);
-    child.once('error', reject);
-  });
-  return { child, exited, output: () => output };
+    clock: globalThis,
+  }).start({ stdin: 'ignore' });
+  const stdout: string[] = [];
+  void (async () => {
+    // eslint-disable-next-line zukhruf/no-collect-loop -- output() reads the lines while this loop adds them; the rule counts a stored IIFE as read while filling, not a void one
+    for await (const line of child.lines()) stdout.push(line);
+  })();
+  return {
+    child,
+    output: () => `${stdout.join('\n')}\n${child.stderrTail()}`,
+  };
 }
 
 /**
@@ -298,7 +318,7 @@ async function killedRun(
     file,
     workerSource(statePath, 'await setTimeout(120_000);', 150_000),
   );
-  const dead = started(
+  const dead = await started(
     runnerArgs('--test-force-exit', file),
     proxiedEnvironment(stateHome, proxy),
   );
@@ -306,31 +326,25 @@ async function killedRun(
   try {
     const state = await readState<State>(t, statePath);
     worker = state.pid;
-    dead.child.kill('SIGKILL');
+    dead.child.signal('SIGKILL');
     process.kill(worker, 'SIGKILL');
-    await dead.exited;
+    await dead.child.ended;
     const pid = worker;
     await waitFor(() => assert.equal(alive(pid), false), { signal: t.signal });
     assert.equal(await exists(state.general), true);
     const recover = () =>
-      promisify(execFile)(
-        process.execPath,
-        runnerArgs('--test-name-pattern=no-matching-tests', file),
-        {
-          // Another project: the runs are per user, not per directory.
-          cwd: directory,
-          env: proxiedEnvironment(stateHome, proxy),
-          timeout: 90_000,
-        },
-      );
+      passed(t, runnerArgs('--test-name-pattern=no-matching-tests', file), {
+        env: proxiedEnvironment(stateHome, proxy),
+        // Another project: the runs are per user, not per directory.
+        cwd: directory,
+      });
     return {
       state,
       recover,
       root: join(stateHome, 'zukhruf-testing', 'docker-runs'),
     };
   } finally {
-    if (dead.child.exitCode === null && dead.child.signalCode === null)
-      dead.child.kill('SIGKILL');
+    dead.child.signal('SIGKILL');
     if (worker !== undefined && alive(worker)) process.kill(worker, 'SIGKILL');
   }
 }
@@ -346,11 +360,7 @@ async function assertRecovered(
     assert.equal(
       result.status,
       'fulfilled',
-      result.status === 'rejected'
-        ? Error.isError(result.reason) && 'stdout' in result.reason
-          ? `${result.reason.message}\n${String(result.reason.stdout)}`
-          : String(result.reason)
-        : '',
+      result.status === 'rejected' ? String(result.reason) : '',
     );
   await reaped(t, async () => {
     for (const id of [state.id, state.general])
@@ -362,7 +372,7 @@ async function assertRecovered(
 
 /** A process that holds the reaper of `run`, as a test process of it does, until it is killed. */
 async function reaperHolder(t: TestContext, run: string) {
-  const holding = started(
+  const holding = await started(
     [
       '--input-type=module',
       '--eval',
@@ -454,22 +464,23 @@ async function holder(
   const statePath = join(directory, `holder-${randomUUID()}.json`);
   const file = join(directory, `holder-${randomUUID()}.ts`);
   await writeFile(file, holdingSource(JSON.parse(library), statePath, probe));
-  const child = spawnProcess(process.execPath, [file], {
+  const child = await new Command(process.execPath, [file], {
+    name: 'holder',
     env,
-    stdio: ['pipe', 'inherit', 'inherit'],
-  });
-  const exited = new Promise<void>((resolve) =>
-    child.once('exit', () => resolve()),
-  );
+    clock: globalThis,
+  }).start({ stdout: 'inherit', stderr: 'inherit' });
+  const { stdin } = child;
+  // A start with stdout 'inherit' types its piped stdin as nullable.
+  assert.ok(stdin !== null);
   const end = async () => {
-    child.stdin.end();
-    await exited;
+    stdin.end();
+    await child.ended;
   };
   try {
     const { id } = await readState<{ id: string }>(t, statePath);
-    return { id, child, exited, end };
+    return { id, child, end };
   } catch (error) {
-    child.kill('SIGKILL');
+    child.signal('SIGKILL');
     throw error;
   }
 }
@@ -570,19 +581,8 @@ async function reusedAndExited(
   const statePath = join(directory, `reused-${randomUUID()}.json`);
   const file = join(directory, `reused-${randomUUID()}.ts`);
   await writeFile(file, reuseSource(library, statePath, probe));
-  const stop = new AbortController();
-  try {
-    const reuse = promisify(execFile)(process.execPath, [file], {
-      env,
-      signal: stop.signal,
-      killSignal: 'SIGKILL',
-    });
-    reuse.catch(() => {});
-    // The process must reuse the server and exit.
-    await untilAborted(reuse, t.signal);
-  } finally {
-    stop.abort();
-  }
+  // The process must reuse the server and exit.
+  await passed(t, [file], { env });
   return (await readState<{ id: string }>(t, statePath)).id;
 }
 
@@ -887,7 +887,7 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
           const env = proxy
             ? proxiedEnvironment(join(directory.path, 'state'), proxy)
             : runEnvironment(join(directory.path, 'state'));
-          const run = started(
+          const run = await started(
             runnerArgs('--test-timeout=90000', '--test-force-exit', file),
             env,
           );
@@ -895,24 +895,25 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
           await using leftovers = new AsyncDisposableStack();
           await using cleanup = new AsyncDisposableStack();
           cleanup.defer(async () => {
-            if (run.child.exitCode === null && run.child.signalCode === null)
-              run.child.kill('SIGKILL');
-            await run.exited.catch(() => null);
+            run.child.signal('SIGKILL');
+            await run.child.ended;
           });
 
           const state = await readState<State>(t, statePath);
           leftovers.defer(() => removeLeftovers(state));
           assert.ok(state.anonymousVolumes.length > 0);
           assert.ok(state.generalVolumes.length > 0);
-          if (mode === 'SIGINT' || mode === 'SIGTERM') run.child.kill(mode);
+          if (mode === 'SIGINT' || mode === 'SIGTERM') run.child.signal(mode);
           if (proxy) {
             await proxy.close();
             await writeFile(stopped, '');
           }
-          const code = await run.exited;
+          const { exitCode: code } = await run.child.ended;
           if (proxy) {
             // The test passed, and the teardown needs no engine.
             assert.equal(code, 0, run.output());
+            // The tail holds all of the stderr, so the message is not cut off.
+            assert.ok(run.child.stderrTail().length < 16 * 1024);
             assert.doesNotMatch(run.output(), /retained ownership record/);
           } else assert.notEqual(code, 0, run.output());
           const ended = state;
@@ -951,7 +952,7 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
             await waitFor(() => assert.equal(alive(pid), false), {
               signal: t.signal,
             });
-            await emptyRun(file, env);
+            await emptyRun(t, file, env);
           }
           // The teardown deletes the run's records with no engine call, also
           // when the proxy is gone. After a signal, the next run deletes them.
@@ -1007,12 +1008,12 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
       );
       const env = proxiedEnvironment(join(directory.path, 'state'), proxy);
       let run: string | undefined;
-      const killed = started(runnerArgs(file), env);
+      const killed = await started(runnerArgs(file), env);
       let worker: number | undefined;
       try {
-        const ended = killed.exited.then((code) => {
+        const ended = killed.child.ended.then((end) => {
           throw new Error(
-            `the run ended with ${code} before its late create reached the engine:\n${killed.output()}`,
+            `the run ended with ${end.exitCode ?? end.signal} before its late create reached the engine:\n${killed.output()}`,
           );
         });
         ended.catch(() => {});
@@ -1025,7 +1026,11 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
         // The kill comes while the engine still has the late create.
         await Promise.race([gate.reached, ended]);
         process.kill(worker, 'SIGKILL');
-        assert.notEqual(await killed.exited, 0, killed.output());
+        assert.notEqual(
+          (await killed.child.ended).exitCode,
+          0,
+          killed.output(),
+        );
         const label = `dev.zukhruf.testing.run=${state.run}`;
         // The engine created the run's reaper before the early container, so
         // the events from that second of the engine's own clock on hold each
@@ -1082,8 +1087,7 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
         ]);
         assert.deepEqual(await labelled(label), []);
       } finally {
-        if (killed.child.exitCode === null && killed.child.signalCode === null)
-          killed.child.kill('SIGKILL');
+        killed.child.signal('SIGKILL');
         if (worker !== undefined && alive(worker))
           process.kill(worker, 'SIGKILL');
         // Never leave the create held.
@@ -1100,7 +1104,7 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
   test(
     'a run whose tests never touch Docker leaves no record and makes no daemon call',
     { skip: proxyless },
-    async () => {
+    async (t) => {
       await using directory = await new TemporaryFiles().directory(
         'zukhruf-testing-untouched-',
       );
@@ -1112,9 +1116,8 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
       );
       const state = join(directory.path, 'state');
 
-      await promisify(execFile)(process.execPath, runnerArgs(file), {
+      await passed(t, runnerArgs(file), {
         env: proxiedEnvironment(state, proxy),
-        timeout: 60_000,
       });
 
       assert.deepEqual(
@@ -1177,16 +1180,15 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
     },
   );
 
-  test('recovery leaves a dead run alone while a live runner holds its claim', async () => {
+  test('recovery leaves a dead run alone while a live runner holds its claim', async (t) => {
     await using directory = await new TemporaryFiles().directory(
       'zukhruf-testing-claimed-',
     );
-    const runner = started(
+    const runner = await started(
       ['--eval', 'setTimeout(() => {}, 600_000)'],
       process.env,
     );
     try {
-      assert.ok(runner.child.pid !== undefined);
       // Only a recovery claims a run, by a rename: this claim is of a live
       // runner inside the recovery of a run whose runner died.
       const claim = join(
@@ -1226,17 +1228,17 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
         }),
       );
 
-      await emptyRun(file, runEnvironment(join(directory.path, 'state')));
+      await emptyRun(t, file, runEnvironment(join(directory.path, 'state')));
 
       await access(join(claim, 'run.json'));
       assert.equal(existsSync(abandoned), false);
     } finally {
-      runner.child.kill('SIGKILL');
-      await runner.exited.catch(() => null);
+      runner.child.signal('SIGKILL');
+      await runner.child.ended;
     }
   });
 
-  test('the recovery of a dead run removes the folder of its sockets in /tmp, and then its records', async () => {
+  test('the recovery of a dead run removes the folder of its sockets in /tmp, and then its records', async (t) => {
     await using directory = await new TemporaryFiles().directory(
       'zukhruf-testing-dead-sockets-',
     );
@@ -1265,7 +1267,7 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
         "import { test } from 'node:test';\ntest('no Docker', () => {});\n",
       );
 
-      await emptyRun(file, runEnvironment(join(directory.path, 'state')));
+      await emptyRun(t, file, runEnvironment(join(directory.path, 'state')));
 
       assert.equal(existsSync(sockets), false);
       assert.equal(existsSync(record), false);
@@ -1274,7 +1276,7 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
     }
   });
 
-  test('recovery leaves a dead run on another engine alone', async () => {
+  test('recovery leaves a dead run on another engine alone', async (t) => {
     await using directory = await new TemporaryFiles().directory(
       'zukhruf-testing-other-engine-',
     );
@@ -1303,7 +1305,7 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
       "import { test } from 'node:test';\ntest('no Docker', () => {});\n",
     );
 
-    await emptyRun(file, runEnvironment(join(directory.path, 'state')));
+    await emptyRun(t, file, runEnvironment(join(directory.path, 'state')));
 
     await access(join(record, 'run.json'));
   });
@@ -1369,8 +1371,8 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
     objects.defer(() => removeContainer(waiting.id));
     const holding = await reaperHolder(t, live);
     objects.defer(async () => {
-      holding.child.kill('SIGKILL');
-      await holding.exited.catch(() => null);
+      holding.child.signal('SIGKILL');
+      await holding.child.ended;
     });
     const liveReaper = await docker.containers.find(reaperName(live));
     assert.ok(liveReaper);
@@ -1379,9 +1381,8 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
     const file = join(directory.path, 'worker.test.ts');
     await writeFile(file, smallWorkerSource(statePath, ''));
 
-    await promisify(execFile)(process.execPath, runnerArgs(file), {
+    await passed(t, runnerArgs(file), {
       env: runEnvironment(join(directory.path, 'state')),
-      timeout: 150_000,
     });
 
     await waitFor(
@@ -1435,9 +1436,8 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
       for (const id of await labelled(verification)) await removeContainer(id);
     });
 
-    await promisify(execFile)(process.execPath, runnerArgs(file), {
+    await passed(t, runnerArgs(file), {
       env: runEnvironment(join(directory.path, 'state')),
-      timeout: 150_000,
     });
     const state = await readState<LabelState>(t, statePath);
     cleanup.defer(async () => {
@@ -1481,10 +1481,7 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
     const stateHome = join(directory.path, 'state');
     await using cleanup = new AsyncDisposableStack();
 
-    await promisify(execFile)(process.execPath, runnerArgs(file), {
-      env: runEnvironment(stateHome),
-      timeout: 150_000,
-    });
+    await passed(t, runnerArgs(file), { env: runEnvironment(stateHome) });
     const state = await readState<Omit<LabelState, 'shared'>>(t, statePath);
     cleanup.defer(async () => {
       await removeContainer(state.container);
@@ -1530,9 +1527,8 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
     `,
     );
     try {
-      await promisify(execFile)(process.execPath, runnerArgs(file), {
+      await passed(t, runnerArgs(file), {
         env: runEnvironment(join(directory.path, 'state')),
-        timeout: 150_000,
       });
 
       const state = await readState<{ id: string }>(t, statePath);
@@ -1553,14 +1549,14 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
       "import { test } from 'node:test';\ntest('no Docker', () => {});\n",
     );
     const state = join(directory.path, 'state');
-    const run = started(runnerArgs(file), {
+    const run = await started(runnerArgs(file), {
       ...runEnvironment(state),
       // A selected context wins over DOCKER_HOST.
       DOCKER_CONTEXT: undefined,
       DOCKER_HOST: 'tcp://127.0.0.1:1',
     });
 
-    const code = await run.exited;
+    const { exitCode: code } = await run.child.ended;
 
     assert.notEqual(code, 0, run.output());
     assert.match(
@@ -1614,11 +1610,9 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
       if (state) await removeContainer(state.container);
     });
 
-    await promisify(execFile)(
-      process.execPath,
-      ['--test', `--test-global-setup=${setupFile}`, file],
-      { env: runEnvironment(stateHome), timeout: 150_000 },
-    );
+    await passed(t, ['--test', `--test-global-setup=${setupFile}`, file], {
+      env: runEnvironment(stateHome),
+    });
     state = await readState<{ container: string }>(t, statePath);
 
     const { container } = state;
@@ -1684,10 +1678,7 @@ describe('a run and its recovery', { concurrency: 4 }, () => {
     const file = join(directory.path, 'worker.test.ts');
     await writeFile(file, smallWorkerSource(statePath, ''));
 
-    await promisify(execFile)(process.execPath, runnerArgs(file), {
-      env,
-      timeout: 150_000,
-    });
+    await passed(t, runnerArgs(file), { env });
     ids.push((await readState<SmallState>(t, statePath)).id);
 
     assert.equal(await running(server), true);
@@ -1727,8 +1718,8 @@ test(
     ids.push(older.id);
     await using cleanup = new AsyncDisposableStack();
     cleanup.defer(async () => {
-      other.child.kill('SIGKILL');
-      await other.exited;
+      other.child.signal('SIGKILL');
+      await other.child.ended;
       for (const id of ids) await removeContainer(id);
     });
 
@@ -1780,18 +1771,16 @@ test(
     for await (const _ of process.stdin);
   `,
     );
-    const child = spawnProcess(process.execPath, [file], {
+    const child = await new Command(process.execPath, [file], {
+      name: 'holder',
       env: runEnvironment(join(directory.path, 'state')),
-      stdio: ['pipe', 'inherit', 'inherit'],
-    });
-    const exited = new Promise<void>((resolve) =>
-      child.once('exit', () => resolve()),
-    );
+      clock: globalThis,
+    }).start({ stdout: 'inherit', stderr: 'inherit' });
     let servers: string[] = [];
     await using cleanup = new AsyncDisposableStack();
     cleanup.defer(async () => {
-      child.kill('SIGKILL');
-      await exited;
+      child.signal('SIGKILL');
+      await child.ended;
       for (const server of servers) await removeContainer(server);
     });
 
@@ -1821,12 +1810,12 @@ test(
     );
     await using cleanup = new AsyncDisposableStack();
     cleanup.defer(async () => {
-      other.child.kill('SIGKILL');
+      other.child.signal('SIGKILL');
       await removeContainer(other.id);
     });
 
-    other.child.kill('SIGKILL');
-    await other.exited;
+    other.child.signal('SIGKILL');
+    await other.child.ended;
     const fingerprint = await fingerprintOf(other.id);
     await unleased(t, fingerprint);
 
@@ -1851,15 +1840,15 @@ test(
     );
     await using cleanup = new AsyncDisposableStack();
     cleanup.defer(async () => {
-      other.child.kill('SIGKILL');
+      other.child.signal('SIGKILL');
       await removeContainer(other.id);
     });
 
     const fingerprint = await fingerprintOf(other.id);
     assert.equal((await processLeases(fingerprint)).length, 1);
 
-    other.child.kill('SIGKILL');
-    await other.exited;
+    other.child.signal('SIGKILL');
+    await other.child.ended;
 
     await unleased(t, fingerprint);
   },
@@ -1878,7 +1867,7 @@ test(
     const fingerprint = await fingerprintOf(server);
     await using cleanup = new AsyncDisposableStack();
     cleanup.defer(async () => {
-      keeper.child.kill('SIGKILL');
+      keeper.child.signal('SIGKILL');
       await removeContainer(server);
     });
 
@@ -1919,7 +1908,7 @@ test(
     listing.release();
     const other = await holding;
     cleanup.defer(() => {
-      other.child.kill('SIGKILL');
+      other.child.signal('SIGKILL');
     });
 
     await finished;
@@ -1945,7 +1934,7 @@ test(
     const server = other.id;
     await using cleanup = new AsyncDisposableStack();
     cleanup.defer(async () => {
-      other.child.kill('SIGKILL');
+      other.child.signal('SIGKILL');
       await removeContainer(server);
     });
 
@@ -1985,7 +1974,7 @@ test('a process waits for the sweep lease of its server, and then gets a running
   await using cleanup = new AsyncDisposableStack();
   cleanup.defer(async () => {
     await lease?.[Symbol.asyncDispose]();
-    other.child.kill('SIGKILL');
+    other.child.signal('SIGKILL');
     for (const id of ids) await removeContainer(id);
   });
 
@@ -1993,9 +1982,9 @@ test('a process waits for the sweep lease of its server, and then gets a running
   // A reaper that found no process lease of the server, and removes it.
   lease = await sweepLeaseOf(fingerprint);
   await removeContainer(server);
-  const waiting = started([file], env);
+  const waiting = await started([file], env);
   cleanup.defer(() => {
-    waiting.child.kill('SIGKILL');
+    waiting.child.signal('SIGKILL');
   });
   await waitFor(
     async () => assert.equal((await processLeases(fingerprint)).length, 1),
@@ -2031,7 +2020,7 @@ test(
     const fingerprint = await fingerprintOf(server);
     await using cleanup = new AsyncDisposableStack();
     cleanup.defer(async () => {
-      other.child.kill('SIGKILL');
+      other.child.signal('SIGKILL');
       await removeContainer(server);
     });
 
@@ -2058,8 +2047,8 @@ test(
     const fingerprint = await fingerprintOf(server);
     await using cleanup = new AsyncDisposableStack();
     cleanup.defer(async () => {
-      other.child.kill('SIGKILL');
-      await other.exited;
+      other.child.signal('SIGKILL');
+      await other.child.ended;
       await (
         await docker.containers.find(sweepLease(fingerprint))
       )?.remove({ force: true });
@@ -2114,8 +2103,8 @@ test(
     const fingerprint = await fingerprintOf(server);
     await using cleanup = new AsyncDisposableStack();
     cleanup.defer(async () => {
-      other.child.kill('SIGKILL');
-      await other.exited;
+      other.child.signal('SIGKILL');
+      await other.child.ended;
       await (
         await docker.containers.find(sweepLease(fingerprint))
       )?.remove({ force: true });
@@ -2152,7 +2141,7 @@ test(
     const fingerprint = await fingerprintOf(server);
     await using cleanup = new AsyncDisposableStack();
     cleanup.defer(async () => {
-      other.child.kill('SIGKILL');
+      other.child.signal('SIGKILL');
       await removeContainer(server);
     });
 
@@ -2185,7 +2174,7 @@ test(
     const fingerprint = await fingerprintOf(server);
     await using cleanup = new AsyncDisposableStack();
     cleanup.defer(async () => {
-      other.child.kill('SIGKILL');
+      other.child.signal('SIGKILL');
       await removeContainer(sweepLease(fingerprint));
       await removeContainer(server);
     });

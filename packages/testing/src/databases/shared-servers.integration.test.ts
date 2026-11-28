@@ -1,16 +1,15 @@
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { aborted, inspect, promisify } from 'node:util';
+import { aborted, inspect } from 'node:util';
 
 import type { EngineApi } from '@zukhruf/docker';
 import { test } from '@zukhruf/parameterized-test';
+import { Command, ExitError } from '@zukhruf/process';
 
 import { DockerTestbed, type ServiceContainer } from '../docker/index.ts';
 import { Postgres } from './postgres.ts';
 import { SqlServer } from './sqlserver.ts';
 
-const execute = promisify(execFile);
 const docker = new DockerTestbed({ environment: process.env });
 /** Removes the servers a test created under its own verification label. */
 async function removeScope(scope: string): Promise<void> {
@@ -233,9 +232,7 @@ void test.each(
         const labels = { 'dev.zukhruf.testing.verification': scope };
         try {
           const run = async (fail: boolean): Promise<DatabaseHandle> => {
-            const env = { ...process.env };
-            delete env.NODE_TEST_CONTEXT;
-            const { stdout } = await execute(
+            const worked = await new Command(
               process.execPath,
               [
                 '--input-type=module',
@@ -251,9 +248,14 @@ void test.each(
                   fail,
                 }),
               ],
-              { env, signal: t.signal },
-            );
-            return JSON.parse(stdout);
+              {
+                name: 'worker',
+                env: { ...process.env, NODE_TEST_CONTEXT: undefined },
+                clock: globalThis,
+              },
+            ).run({ signal: t.signal });
+            if (worked.exitCode !== 0) throw new ExitError('worker', worked);
+            return JSON.parse(worked.stdout);
           };
 
           const concurrent = await Promise.allSettled([

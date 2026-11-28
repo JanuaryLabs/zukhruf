@@ -1,7 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { once } from 'node:events';
 import { existsSync } from 'node:fs';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -10,6 +8,7 @@ import { type TestContext, describe } from 'node:test';
 import { ContainerNotRunningError } from '@zukhruf/docker';
 import { TemporaryFiles } from '@zukhruf/fs';
 import { test } from '@zukhruf/parameterized-test';
+import { Command, type Completed } from '@zukhruf/process';
 
 import { waitFor } from '../async/wait-for.ts';
 import type { Database } from '../databases/database.ts';
@@ -151,17 +150,15 @@ const workerSource = (
 `;
 
 /** The environment of a runner that keeps its runs under `state`. */
-/** Runs `file` with the Docker global setup, and gives its exit code and output. */
-async function runFile(file: string, env: Record<string, string | undefined>) {
-  const child = spawn(process.execPath, runnerArgs('--test-force-exit', file), {
+/** Runs `file` with the Docker global setup, and gives its end and output. */
+function runFile(
+  file: string,
+  env: Record<string, string | undefined>,
+): Promise<Completed> {
+  return new Command(process.execPath, runnerArgs('--test-force-exit', file), {
     env,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  let output = '';
-  child.stdout.on('data', (data) => (output += data));
-  child.stderr.on('data', (data) => (output += data));
-  const [code]: (number | null)[] = await once(child, 'exit');
-  return { code, output };
+    clock: globalThis,
+  }).run();
 }
 
 async function readState(
@@ -215,7 +212,7 @@ describe('the databases of a run', { concurrency: 4 }, () => {
             runEnvironment(join(directory.path, 'state')),
           );
 
-          assert.notEqual(run.code, 0, run.output);
+          assert.notEqual(run.exitCode, 0, run.output);
           assert.doesNotMatch(run.output, /retained ownership record/);
           const { database } = await readState(t, statePath);
           // The reaper drops it about 2 s after the run's last test process.
@@ -268,7 +265,7 @@ describe('the databases of a run', { concurrency: 4 }, () => {
           runEnvironment(join(directory.path, 'state')),
         );
 
-        assert.notEqual(run.code, 0, run.output);
+        assert.notEqual(run.exitCode, 0, run.output);
         const { database } = await readState(t, statePath);
         // The reaper drops it about 2 s after the run's last test process.
         await waitFor(
@@ -359,7 +356,7 @@ describe('the databases of a run', { concurrency: 4 }, () => {
           runEnvironment(join(directory.path, 'state')),
         );
 
-        assert.equal(run.code, 0, run.output);
+        assert.equal(run.exitCode, 0, run.output);
         const { database } = await readState(t, statePath);
         // The reaper drops it about 2 s after the run's last test process.
         await waitFor(

@@ -1,10 +1,6 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { Command, type Environment, ExitError } from '@zukhruf/process';
 
-/** The variables of the caller's environment. ssh -G runs with them as its whole environment. */
-export type Environment = Readonly<Record<string, string | undefined>>;
-
-const run = promisify(execFile);
+export type { Environment } from '@zukhruf/process';
 
 /** The settings that ssh -G prints: one `key value` line each, many lines for a setting with many values. */
 export class Settings {
@@ -16,8 +12,8 @@ export class Settings {
 
   /**
    * Runs `ssh -G <args> -- <destination>` with `environment`. A non-zero exit
-   * rejects with ssh's standard error, and a cause whose `code` is the exit
-   * code; a warning on standard error with exit 0 is ignored. The signal
+   * rejects with ssh's standard error, and the `ExitError` of the run as its
+   * cause; a warning on standard error with exit 0 is ignored. The signal
    * stops ssh.
    */
   static async resolve(
@@ -26,22 +22,18 @@ export class Settings {
     environment: Environment,
     signal: AbortSignal | undefined,
   ): Promise<Settings> {
-    let stdout: string;
-    try {
-      ({ stdout } = await run('ssh', ['-G', ...args, '--', destination], {
-        env: environment,
-        encoding: 'utf8',
-        ...(signal === undefined ? {} : { signal }),
-      }));
-    } catch (error) {
-      if (signal?.aborted) throw signal.reason;
-      if (isExit(error)) {
-        throw new Error(error.stderr.trim(), { cause: error });
-      }
-      throw error;
+    const ssh = new Command('ssh', ['-G', ...args, '--', destination], {
+      env: environment,
+      clock: globalThis,
+    });
+    const run = await ssh.run(signal === undefined ? {} : { signal });
+    if (run.exitCode !== 0) {
+      throw new Error(run.stderr.trim(), {
+        cause: new ExitError('ssh -G', run),
+      });
     }
     const values = new Map<string, string[]>();
-    for (const line of stdout.split('\n')) {
+    for (const line of run.stdout.split('\n')) {
       const space = line.indexOf(' ');
       if (space === -1) continue;
       const key = line.slice(0, space);
@@ -68,16 +60,4 @@ export class Settings {
     }
     return value;
   }
-}
-
-function isExit(
-  error: unknown,
-): error is Error & { readonly code: number; readonly stderr: string } {
-  return (
-    Error.isError(error) &&
-    'code' in error &&
-    typeof error.code === 'number' &&
-    'stderr' in error &&
-    typeof error.stderr === 'string'
-  );
 }

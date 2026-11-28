@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
 import { once } from 'node:events';
 import * as nodeHttp from 'node:http';
 import { connect, createServer } from 'node:net';
@@ -7,11 +6,11 @@ import { basename, join } from 'node:path';
 import { text } from 'node:stream/consumers';
 import { test } from 'node:test';
 import * as tls from 'node:tls';
-import { promisify } from 'node:util';
 
 import { HttpResponse, http, passthrough } from 'msw';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { Command, ExitError } from '@zukhruf/process';
 
 import { Postgres } from '../databases/postgres.ts';
 import { HttpServer } from '../http/http-server.ts';
@@ -237,10 +236,12 @@ test('while two interceptions are open, a request that only the first one handle
 test('disposal waits until fetch has closed each connection that the server closed, so the next test keeps the timers that it fakes', async () => {
   const msw = import.meta.resolve('./msw.ts');
 
-  await promisify(execFile)(process.execPath, [
-    '--input-type=module',
-    '--eval',
-    `
+  const run = await new Command(
+    process.execPath,
+    [
+      '--input-type=module',
+      '--eval',
+      `
     import assert from 'node:assert/strict';
     import { test } from 'node:test';
     import { setImmediate } from 'node:timers/promises';
@@ -274,7 +275,10 @@ test('disposal waits until fetch has closed each connection that the server clos
       assert.equal(fired, true);
     });
     `,
-  ]);
+    ],
+    { env: process.env, clock: globalThis },
+  ).run();
+  if (run.exitCode !== 0) throw new ExitError('the child', run);
 });
 
 test('disposal settles after a TCP connection that passed through the interceptor and that the client closed', async () => {
@@ -340,11 +344,13 @@ test('disposal settles after a TLS connection that passed through the intercepto
     await once(client, 'close');
   }
 });
-const inChild = (body: string) =>
-  promisify(execFile)(process.execPath, [
-    '--input-type=module',
-    '--eval',
-    `
+async function inChild(body: string): Promise<void> {
+  const run = await new Command(
+    process.execPath,
+    [
+      '--input-type=module',
+      '--eval',
+      `
     import assert from 'node:assert/strict';
     import { once } from 'node:events';
     import { connect, createServer } from 'node:net';
@@ -361,7 +367,11 @@ import { TemporaryFiles } from '@zukhruf/fs';
 
     ${body}
     `,
-  ]);
+    ],
+    { env: process.env, clock: globalThis },
+  ).run();
+  if (run.exitCode !== 0) throw new ExitError('the child', run);
+}
 
 test('a request of npm undici to a URL that has a handler gets the mock, requests records it, and the server at that URL gets no connection', async () => {
   await inChild(`

@@ -1,16 +1,14 @@
 import assert from 'node:assert/strict';
-import { execFile, spawn as spawnProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { once } from 'node:events';
 import { readdir } from 'node:fs/promises';
-import { createInterface } from 'node:readline';
 import { test } from 'node:test';
-import { aborted, promisify } from 'node:util';
+import { aborted } from 'node:util';
 
 import pg from 'pg';
 
 import { ConnectionFailedError, Docker } from '@zukhruf/docker';
 import { TemporaryFiles } from '@zukhruf/fs';
+import { Command, ExitError } from '@zukhruf/process';
 
 import { retryUntilReady } from '../async/index.ts';
 import { engine, proxyless } from '../testing/current-engine.ts';
@@ -372,12 +370,15 @@ test('two processes that reuse one configuration get one server, which disposal 
       await server[Symbol.asyncDispose]();
       process.stdout.write(server.container.id);
     `;
-  const reuse = () =>
-    promisify(execFile)(process.execPath, [
-      '--input-type=module',
-      '--eval',
-      reuser,
-    ]);
+  const reuse = async () => {
+    const run = await new Command(
+      process.execPath,
+      ['--input-type=module', '--eval', reuser],
+      { name: 'reuser', env: process.env, clock: globalThis },
+    ).run();
+    if (run.exitCode !== 0) throw new ExitError('reuser', run);
+    return run;
+  };
   try {
     // Act
     const [first, second] = await Promise.all([reuse(), reuse()]);
@@ -420,8 +421,8 @@ test('two processes that need one absent image at once build it once, and the ot
   const scope = randomUUID();
   const tag = `${repository}:${scope}`;
   const own = (builder: number) => `${repository}:${scope}-${builder}`;
-  const builder = (index: number) => {
-    const child = spawnProcess(
+  const builder = (index: number) =>
+    new Command(
       process.execPath,
       [
         '--input-type=module',
@@ -445,25 +446,24 @@ test('two processes that need one absent image at once build it once, and the ot
         console.log((await docker.images.inspect(${JSON.stringify(tag)}))?.Id);
         `,
       ],
-      { stdio: ['pipe', 'pipe', 'inherit'] },
-    );
-    return {
-      child,
-      exited: once(child, 'exit'),
-      lines: createInterface(child.stdout)[Symbol.asyncIterator](),
-    };
-  };
-  const builders = [builder(0), builder(1)];
+      { name: `builder ${index}`, env: process.env, clock: globalThis },
+    ).start({ stderr: 'inherit' });
   try {
+    await using first = await builder(0);
+    await using second = await builder(1);
+    const builders = [first, second].map((child) => ({
+      child,
+      lines: child.lines()[Symbol.asyncIterator](),
+    }));
     for (const { lines } of builders)
       assert.equal((await lines.next()).value, 'ready');
 
     // Act
     for (const { child } of builders) child.stdin.end('go\n');
     const seen = await Promise.all(
-      builders.map(async ({ lines, exited }) => {
+      builders.map(async ({ child, lines }) => {
         const { value } = await lines.next();
-        assert.deepEqual(await exited, [0, null]);
+        assert.deepEqual(await child.ended, { exitCode: 0 });
         return value;
       }),
     );
@@ -479,10 +479,6 @@ test('two processes that need one absent image at once build it once, and the ot
     assert.equal(image, built[0]?.Id);
     assert.deepEqual(seen, [image, image]);
   } finally {
-    for (const { child, exited } of builders) {
-      child.kill('SIGKILL');
-      await exited;
-    }
     for (const reference of [tag, own(0), own(1)])
       await client.images.remove(reference, { force: true });
   }
@@ -497,7 +493,7 @@ test(
   },
   async () => {
     // Arrange: a process that creates a container and runs an exec in it.
-    const child = spawnProcess(
+    await using child = await new Command(
       process.execPath,
       [
         '--input-type=module',
@@ -511,36 +507,31 @@ test(
         setInterval(() => {}, 1_000);
         `,
       ],
-      { stdio: ['ignore', 'pipe', 'inherit'] },
-    );
-    const exited = once(child, 'exit');
+      { name: 'test process', env: process.env, clock: globalThis },
+    ).start({ stdin: 'ignore', stderr: 'inherit' });
     const testbed = new DockerTestbed({ environment: process.env });
     const client = await testbed.client();
-    try {
-      const [line] = await once(createInterface(child.stdout), 'line');
+    const { value: line } = await child.lines()[Symbol.asyncIterator]().next();
 
-      // Act
-      const children = await promisify(execFile)('ps', [
-        '-Ao',
-        'pid=,ppid=,comm=',
-      ]);
+    // Act
+    const children = await new Command('ps', ['-Ao', 'pid=,ppid=,comm='], {
+      env: process.env,
+      clock: globalThis,
+    }).run();
+    if (children.exitCode !== 0) throw new ExitError('ps', children);
 
-      // Assert
-      const ssh = children.stdout.split('\n').filter((row) => {
-        const [, ppid, command] = row.trim().split(/\s+/);
-        return Number(ppid) === child.pid && command?.endsWith('ssh');
-      });
-      assert.deepEqual(ssh, []);
-      await (
-        await client.containers.find(String(line))
-      )?.remove({
-        force: true,
-        v: true,
-      });
-    } finally {
-      child.kill('SIGKILL');
-      await exited;
-    }
+    // Assert
+    const ssh = children.stdout.split('\n').filter((row) => {
+      const [, ppid, command] = row.trim().split(/\s+/);
+      return Number(ppid) === child.pid && command?.endsWith('ssh');
+    });
+    assert.deepEqual(ssh, []);
+    await (
+      await client.containers.find(String(line))
+    )?.remove({
+      force: true,
+      v: true,
+    });
   },
 );
 

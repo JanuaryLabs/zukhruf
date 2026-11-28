@@ -1,12 +1,11 @@
 import assert from 'node:assert/strict';
-import { execFileSync, spawn } from 'node:child_process';
-import { once } from 'node:events';
 import { access } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { Command, ExitError } from '@zukhruf/process';
 
 import { waitFor } from '../async/wait-for.ts';
 import { Sqlite } from './sqlite.ts';
@@ -161,7 +160,7 @@ test('a SQLite write lock ends with its holder when the process that took it die
   const path = join(folder.path, 'locked.db');
   new DatabaseSync(path).close();
   const sqlite = new URL('./sqlite.ts', import.meta.url).href;
-  const parent = spawn(
+  await using parent = await new Command(
     process.execPath,
     [
       '--input-type=module',
@@ -169,25 +168,28 @@ test('a SQLite write lock ends with its holder when the process that took it die
       `
         import { Sqlite } from ${JSON.stringify(sqlite)};
         await new Sqlite().writeLock(process.argv[1], 600_000);
-        process.stdout.write('locked');
+        process.stdout.write('locked\\n');
         setInterval(() => {}, 1_000_000);
       `,
       path,
     ],
-    { stdio: ['ignore', 'pipe', 'inherit'] },
-  );
+    { name: 'lock taker', env: process.env, clock: globalThis },
+  ).start({ stdin: 'ignore', stderr: 'inherit', signal: t.signal });
   let holder: number | undefined;
   try {
-    const [chunk] = await once(parent.stdout, 'data');
-    assert.equal(String(chunk), 'locked');
-    holder = Number(
-      execFileSync('pgrep', ['-P', String(parent.pid)], { encoding: 'utf8' }),
-    );
+    const first = await parent.lines()[Symbol.asyncIterator]().next();
+    assert.equal(first.value, 'locked');
+    const children = await new Command('pgrep', ['-P', String(parent.pid)], {
+      env: process.env,
+      clock: globalThis,
+    }).run();
+    if (children.exitCode !== 0) throw new ExitError('pgrep', children);
+    holder = Number(children.stdout);
     assert.ok(isAlive(holder));
 
     // Act
-    parent.kill('SIGKILL');
-    await once(parent, 'exit');
+    parent.signal('SIGKILL');
+    await parent.ended;
 
     // Assert: the holder exits, so the database takes a write again.
     const exited = holder;
@@ -198,7 +200,6 @@ test('a SQLite write lock ends with its holder when the process that took it die
     database.exec('BEGIN IMMEDIATE');
     database.exec('ROLLBACK');
   } finally {
-    parent.kill('SIGKILL');
     if (holder !== undefined && isAlive(holder))
       process.kill(holder, 'SIGKILL');
   }
