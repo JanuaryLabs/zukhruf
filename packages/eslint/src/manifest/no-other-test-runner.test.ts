@@ -20,7 +20,7 @@ async function lintManifest(manifest: Record<string, unknown>) {
       ...manifest,
     }),
   });
-  return lint(workspace.root, ['libs/greet/package.json']);
+  return await lint(workspace.root, ['libs/greet/package.json']);
 }
 
 test('each runner, the types of its globals, and jest-expo in devDependencies are reported', async () => {

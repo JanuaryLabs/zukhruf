@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
+import { availableParallelism } from 'node:os';
 
-import { test } from '@zukhruf/parameterized-test';
+import { describe, test } from '@zukhruf/parameterized-test';
 
 import { fixtureWorkspace } from '../testing/fixture-workspace.ts';
 import { NX_JSON, buildProjectGraph } from '../testing/project-graph.ts';
@@ -255,719 +256,742 @@ const esbuild = (options?: Record<string, unknown>) => ({
   ...(options ? { options } : {}),
 });
 
-test('a bundled app must declare the npm packages its workspace imports pull in, from the root and from its folder', async () => {
-  // Arrange
-  await using workspace = await fixtureWorkspace(
-    workspaceFiles({ apps: { web: { build: VITE_BUILD } } }),
-  );
-  buildProjectGraph(workspace.root);
-
-  // Act
-  const fromRoot = lint(workspace.root, ['apps/web/package.json']);
-  const fromProject = lint(workspace.path('apps/web'), ['package.json']);
-
-  // Assert: left-pad comes through greet; greet itself is inlined, so not demanded.
-  for (const findings of [fromRoot, fromProject]) {
-    assert.equal(findings.length, 1);
-    assert.equal(findings[0]?.ruleId, 'manifest/dependency-checks');
-    assert.match(findings[0]?.message ?? '', /left-pad/);
-    assert.doesNotMatch(findings[0]?.message ?? '', /@fx\/greet/);
-  }
-});
-
-// greet's root imports left-pad and its ./pad subpath right-pad, as
-// @meddit/evidence-retrieval's ./dailymed alone imports yauzl.
-const greetWithSubpath = {
-  greetManifest: {
-    exports: { '.': './src/index.ts', './pad': './src/pad.ts' },
-  },
-  greetSource: {
-    'index.ts': `import leftPad from 'left-pad';\nexport const greet = () => leftPad('hi', 5);\n`,
-    'pad.ts': `import rightPad from 'right-pad';\nexport const pad = () => rightPad('hi', 5);\n`,
-  },
-};
-
-/** The messages of the findings on `apps/<app>/package.json`, as one text. */
-const demandedBy =
-  (workspace: { path(relativePath: string): string }, findings: Finding[]) =>
-  (app: string) =>
-    findings
-      .filter(({ file }) => file === workspace.path(`apps/${app}/package.json`))
-      .map(({ message }) => message)
-      .join('\n');
-
-test('a bundled app declares the npm packages of the subpaths of a workspace package it imports, not of the others', async () => {
-  // Arrange: root imports greet's root only; subpath imports ./pad only.
-  await using workspace = await fixtureWorkspace(
-    workspaceFiles({
-      apps: {
-        root: { build: VITE_BUILD },
-        subpath: { build: VITE_BUILD, imports: ['@fx/greet/pad'] },
-      },
-      ...greetWithSubpath,
-    }),
-  );
-  buildProjectGraph(workspace.root);
-
-  // Act
-  const findings = lint(workspace.root, [
-    'apps/root/package.json',
-    'apps/subpath/package.json',
-  ]);
-
-  // Assert
-  const demandedOf = demandedBy(workspace, findings);
-  assert.match(demandedOf('root'), /left-pad/);
-  assert.doesNotMatch(demandedOf('root'), /right-pad/);
-  assert.match(demandedOf('subpath'), /right-pad/);
-  assert.doesNotMatch(demandedOf('subpath'), /left-pad/);
-});
-
-test('a bundled app declares the npm packages of a subpath that it loads with a literal import()', async () => {
-  // Arrange
-  await using workspace = await fixtureWorkspace(
-    workspaceFiles({
-      apps: {
-        lazy: {
-          build: VITE_BUILD,
-          imports: [],
-          lazyImports: ['@fx/greet/pad'],
-        },
-      },
-      ...greetWithSubpath,
-    }),
-  );
-  buildProjectGraph(workspace.root);
-
-  // Act
-  const findings = lint(workspace.root, ['apps/lazy/package.json']);
-
-  // Assert
-  const demanded = demandedBy(workspace, findings)('lazy');
-  assert.match(demanded, /right-pad/);
-  assert.doesNotMatch(demanded, /left-pad/);
-});
-
-test('a bundled app declares the npm packages of a subpath that the root of a workspace package re-exports', async () => {
-  // Arrange: greet's root re-exports ./pad; lonely.ts is imported by nothing.
-  await using workspace = await fixtureWorkspace(
-    workspaceFiles({
-      apps: { web: { build: VITE_BUILD } },
-      greetManifest: greetWithSubpath.greetManifest,
-      greetSource: {
-        'index.ts': `export * from './pad.ts';\n`,
-        'pad.ts': greetWithSubpath.greetSource['pad.ts'],
-        'lonely.ts': greetWithSubpath.greetSource['index.ts'],
-      },
-    }),
-  );
-  buildProjectGraph(workspace.root);
-
-  // Act
-  const findings = lint(workspace.root, ['apps/web/package.json']);
-
-  // Assert
-  const demanded = demandedBy(workspace, findings)('web');
-  assert.match(demanded, /right-pad/);
-  assert.doesNotMatch(demanded, /left-pad/);
-});
-
-test('a bundled app declares the npm packages of a file that a workspace package loads through its #imports', async () => {
-  // Arrange: greet's root imports #pad, which its imports map to pad.ts.
-  await using workspace = await fixtureWorkspace(
-    workspaceFiles({
-      apps: { web: { build: VITE_BUILD } },
-      greetManifest: {
-        exports: { '.': './src/index.ts' },
-        imports: { '#pad': './src/pad.ts' },
-      },
-      greetSource: {
-        'index.ts': `export { pad } from '#pad';\n`,
-        'pad.ts': greetWithSubpath.greetSource['pad.ts'],
-        'lonely.ts': greetWithSubpath.greetSource['index.ts'],
-      },
-    }),
-  );
-  buildProjectGraph(workspace.root);
-
-  // Act
-  const findings = lint(workspace.root, ['apps/web/package.json']);
-
-  // Assert
-  const demanded = demandedBy(workspace, findings)('web');
-  assert.match(demanded, /right-pad/);
-  assert.doesNotMatch(demanded, /left-pad/);
-});
-
-test('a bundled app declares the npm packages of every file of a workspace package that imports a specifier no package names, such as a tsconfig paths alias', async () => {
-  // Arrange: greet's root imports ~greet/pad, which only a bundler alias
-  // could resolve; nothing else imports pad.ts.
-  await using workspace = await fixtureWorkspace(
-    workspaceFiles({
-      apps: { web: { build: VITE_BUILD } },
-      greetManifest: greetWithSubpath.greetManifest,
-      greetSource: {
-        'index.ts': `import leftPad from 'left-pad';\nimport { pad } from '~greet/pad';\nexport const greet = () => leftPad(pad(), 9);\n`,
-        'pad.ts': greetWithSubpath.greetSource['pad.ts'],
-      },
-    }),
-  );
-  buildProjectGraph(workspace.root);
-
-  // Act
-  const findings = lint(workspace.root, ['apps/web/package.json']);
-
-  // Assert
-  const demanded = demandedBy(workspace, findings)('web');
-  assert.match(demanded, /left-pad/);
-  assert.match(demanded, /right-pad/);
-});
-
-test('on an Nx whose @nx/devkit/internal lacks the file map functions, as Nx 22, a bundled app declares the npm packages of every file of a workspace package it inlines', async () => {
-  // Arrange: module hooks give @zukhruf/eslint an @nx/devkit/internal that
-  // loads without them, as Nx 22.7.8's does; Nx's own modules get the real one.
-  await using workspace = await fixtureWorkspace({
-    ...workspaceFiles({
-      apps: { root: { build: VITE_BUILD } },
-      ...greetWithSubpath,
-    }),
-    'nx22-internal.cjs': `module.exports = { readPackageJson() {} };\n`,
-    'nx22.mjs': [
-      `import { registerHooks } from 'node:module';`,
-      `const stub = new URL('./nx22-internal.cjs', import.meta.url).href;`,
-      `registerHooks({`,
-      `  resolve(specifier, context, nextResolve) {`,
-      `    if (specifier === '@nx/devkit/internal' && !context.parentURL?.includes('/node_modules/'))`,
-      `      return { url: stub, format: 'commonjs', shortCircuit: true };`,
-      `    return nextResolve(specifier, context);`,
-      `  },`,
-      `});`,
-    ].join('\n'),
-  });
-  buildProjectGraph(workspace.root);
-
-  // Act
-  const findings = lint(
-    workspace.root,
-    ['apps/root/package.json'],
-    ['--import', workspace.path('nx22.mjs')],
-  );
-
-  // Assert: right-pad comes from ./pad, which root never imports.
-  const demanded = demandedBy(workspace, findings)('root');
-  assert.match(demanded, /left-pad/);
-  assert.match(demanded, /right-pad/);
-});
-
-test('a bundled app does not declare the npm packages of a project it only builds after', async () => {
-  // Arrange: web imports greet and builds after shout, whose code imports
-  // left-pad, as greet's does, and right-pad.
-  await using workspace = await fixtureWorkspace(
-    workspaceFiles({
-      apps: { web: { build: VITE_BUILD, implicitDependencies: ['shout'] } },
-      shoutSource: {
-        'index.ts': `import leftPad from 'left-pad';\nimport rightPad from 'right-pad';\nexport const shout = () => leftPad(rightPad('hi', 5), 9);\n`,
-      },
-    }),
-  );
-  buildProjectGraph(workspace.root);
-
-  // Act
-  const findings = lint(workspace.root, ['apps/web/package.json']);
-
-  // Assert
-  assert.equal(findings.length, 1);
-  assert.match(findings[0]?.message ?? '', /left-pad/);
-  assert.doesNotMatch(findings[0]?.message ?? '', /right-pad/);
-});
-
-test('a bundled app does not declare the npm packages of a project that a project it imports only builds after', async () => {
-  // Arrange: web imports greet, as a web imports a generated client, and
-  // greet builds after shout, as the client builds after its backend.
-  await using workspace = await fixtureWorkspace(
-    workspaceFiles({
-      apps: { web: { build: VITE_BUILD } },
-      greetImplicitDependencies: ['shout'],
-      shoutSource: {
-        'index.ts': `import rightPad from 'right-pad';\nexport const shout = (text: string) => rightPad(text, 9);\n`,
-      },
-    }),
-  );
-  buildProjectGraph(workspace.root);
-
-  // Act
-  const findings = lint(workspace.root, ['apps/web/package.json']);
-
-  // Assert
-  assert.equal(findings.length, 1);
-  assert.match(findings[0]?.message ?? '', /left-pad/);
-  assert.doesNotMatch(findings[0]?.message ?? '', /right-pad/);
-});
-
-test('a bundled app declares what a project it builds after pulls in when it also imports that project, through another project or with import()', async () => {
-  // Arrange: both apps build after shout, whose code imports right-pad. chain
-  // imports greet, which imports shout; lazy loads shout with import().
-  await using workspace = await fixtureWorkspace(
-    workspaceFiles({
-      apps: {
-        chain: { build: VITE_BUILD, implicitDependencies: ['shout'] },
-        lazy: {
-          build: VITE_BUILD,
-          imports: [],
-          lazyImports: ['@fx/shout'],
-          implicitDependencies: ['shout'],
-        },
-      },
-      greetSource: {
-        'index.ts': `import leftPad from 'left-pad';\nimport { shout } from '@fx/shout';\nexport const greet = () => shout(leftPad('hi', 5));\n`,
-      },
-      shoutSource: {
-        'index.ts': `import rightPad from 'right-pad';\nexport const shout = (text: string) => rightPad(text, 9);\n`,
-      },
-    }),
-  );
-  buildProjectGraph(workspace.root);
-
-  // Act
-  const findings = lint(workspace.root, [
-    'apps/chain/package.json',
-    'apps/lazy/package.json',
-  ]);
-
-  // Assert
-  const demandedOf = (app: string) =>
-    findings
-      .filter(({ file }) => file === workspace.path(`apps/${app}/package.json`))
-      .map(({ message }) => message)
-      .join('\n');
-  assert.match(demandedOf('chain'), /right-pad/);
-  assert.match(demandedOf('lazy'), /right-pad/);
-});
-
-test('an app that does not bundle declares its workspace imports, not their npm packages', async () => {
-  // Arrange: esbuild with bundle: false transpiles file by file.
-  await using workspace = await fixtureWorkspace(
-    workspaceFiles({ apps: { web: { build: esbuild({ bundle: false }) } } }),
-  );
-  buildProjectGraph(workspace.root);
-
-  // Act
-  const findings = lint(workspace.root, ['apps/web/package.json']);
-
-  // Assert
-  assert.equal(findings.length, 1);
-  assert.match(findings[0]?.message ?? '', /@fx\/greet/);
-  assert.doesNotMatch(findings[0]?.message ?? '', /left-pad/);
-});
-
-test('an app declares the workspace packages its build leaves to node_modules, and the npm packages of those it inlines', async () => {
-  // Arrange: every app imports greet, which imports left-pad.
-  const installsGreet = {
-    shell: { build: { executor: 'nx:noop' } },
-    tsc: { build: { executor: '@nx/js:tsc' } },
-    'inferred-tsc': {
-      build: {
-        executor: 'nx:run-commands',
-        metadata: { technologies: ['typescript'] },
-        options: { command: 'tsc --build tsconfig.lib.json' },
-      },
-    },
-    external: { build: esbuild({ external: ['@fx/greet'] }) },
-    'esbuild-options': {
-      build: esbuild({ esbuildOptions: { external: ['@fx/greet'] } }),
-    },
-    'prefix-wildcard': { build: esbuild({ external: ['@fx/*'] }) },
-    'suffix-wildcard': { build: esbuild({ external: ['*/greet'] }) },
-    'packages-external': {
-      build: esbuild({ esbuildOptions: { packages: 'external' } }),
-    },
-  };
-  const inlinesGreet = {
-    vite: { build: VITE_BUILD },
-    scripted: { buildScript: 'vite build' },
-    'esbuild-default': { build: esbuild() },
-    'packages-bundle': {
-      build: esbuild({ esbuildOptions: { packages: 'bundle' } }),
-    },
-    excluded: {
-      build: esbuild({
-        external: ['@fx/greet'],
-        excludeFromExternal: ['@fx/greet'],
-      }),
-    },
-    'other-suffix': { build: esbuild({ external: ['@fx/*-ui'] }) },
-    'implicit-external': {
-      build: esbuild({ external: ['@fx/shout'] }),
-      implicitDependencies: ['shout'],
-    },
-    'overlapping-wildcard': { build: esbuild({ external: ['@fx/gr*reet'] }) },
-    'not-imported': { build: esbuild({ external: ['@fx/shout', 'left-pad'] }) },
-  };
-  await using workspace = await fixtureWorkspace(
-    workspaceFiles({ apps: { ...installsGreet, ...inlinesGreet } }),
-  );
-  buildProjectGraph(workspace.root);
-
-  // Act
-  const findings = lint(
-    workspace.root,
-    Object.keys({ ...installsGreet, ...inlinesGreet }).map(
-      (app) => `apps/${app}/package.json`,
-    ),
-  );
-
-  // Assert
-  const demandedOf = (app: string) =>
-    findings
-      .filter(({ file }) => file === workspace.path(`apps/${app}/package.json`))
-      .map(({ message }) => message)
-      .join('\n');
-  for (const app of Object.keys(installsGreet)) {
-    assert.match(demandedOf(app), /@fx\/greet/, app);
-    assert.doesNotMatch(demandedOf(app), /left-pad/, app);
-  }
-  for (const app of Object.keys(inlinesGreet)) {
-    assert.match(demandedOf(app), /left-pad/, app);
-    assert.doesNotMatch(demandedOf(app), /@fx\/greet/, app);
-  }
-});
-
-test('an esbuild app takes its external list from the target defaults in nx.json', async () => {
-  // Arrange
-  await using workspace = await fixtureWorkspace(
-    workspaceFiles({
-      apps: { api: { build: esbuild() } },
-      targetDefaults: {
-        '@nx/esbuild:esbuild': { options: { external: ['@fx/greet'] } },
-      },
-    }),
-  );
-  buildProjectGraph(workspace.root);
-
-  // Act
-  const findings = lint(workspace.root, ['apps/api/package.json']);
-
-  // Assert
-  assert.equal(findings.length, 1);
-  assert.match(findings[0]?.message ?? '', /@fx\/greet/);
-  assert.doesNotMatch(findings[0]?.message ?? '', /left-pad/);
-});
-
-test("an esbuild app takes esbuild's packages: 'external' from the target defaults in nx.json", async () => {
-  // Arrange
-  await using workspace = await fixtureWorkspace(
-    workspaceFiles({
-      apps: { api: { build: esbuild() } },
-      targetDefaults: {
-        '@nx/esbuild:esbuild': {
-          options: { esbuildOptions: { packages: 'external' } },
-        },
-      },
-    }),
-  );
-  buildProjectGraph(workspace.root);
-
-  // Act
-  const findings = lint(workspace.root, ['apps/api/package.json']);
-
-  // Assert
-  assert.equal(findings.length, 1);
-  assert.match(findings[0]?.message ?? '', /@fx\/greet/);
-  assert.doesNotMatch(findings[0]?.message ?? '', /left-pad/);
-});
-
-test('an app that leaves one workspace package to node_modules never declares one it inlines', async () => {
-  // Arrange
-  await using workspace = await fixtureWorkspace(
-    workspaceFiles({
-      apps: {
-        api: {
-          build: esbuild({ external: ['@fx/greet'] }),
-          imports: ['@fx/greet', '@fx/shout'],
-        },
-      },
-    }),
-  );
-  buildProjectGraph(workspace.root);
-
-  // Act
-  const findings = lint(workspace.root, ['apps/api/package.json']);
-
-  // Assert
-  assert.equal(findings.length, 1);
-  assert.match(findings[0]?.message ?? '', /@fx\/greet/);
-  assert.doesNotMatch(findings[0]?.message ?? '', /@fx\/shout/);
-});
-
-test('a manifest is not checked before Nx caches a project graph, as on a fresh clone', async () => {
-  // Arrange: no buildProjectGraph.
-  await using workspace = await fixtureWorkspace(
-    workspaceFiles({ apps: { web: { build: VITE_BUILD } } }),
-  );
-
-  // Act
-  const findings = lint(workspace.root, ['apps/web/package.json']);
-
-  // Assert
-  assert.deepEqual(findings, []);
-});
-
-test('an island manifest is reported once, by island/dependency-checks', async () => {
-  // Arrange: greet becomes an island and no longer declares left-pad.
-  await using workspace = await fixtureWorkspace(
-    workspaceFiles({
-      apps: { web: { build: VITE_BUILD } },
-      greetTags: ['layer:island'],
-      greetDependencies: {},
-    }),
-  );
-  buildProjectGraph(workspace.root);
-
-  // Act
-  const findings = lint(workspace.root, ['libs/greet/package.json']);
-
-  // Assert
-  assert.deepEqual(
-    findings.map(({ ruleId }) => ruleId),
-    ['island/dependency-checks'],
-  );
-  assert.match(findings[0]?.message ?? '', /left-pad/);
-});
-
-test('a range that holds the version an npm: alias installs is not reported, though Nx reads the alias as the installed version', async () => {
-  // Arrange: the root installs left-pad 1.3.0 as pad, and the island greet asks for pad ^1.0.0.
-  await using workspace = await fixtureWorkspace(
-    workspaceFiles({
-      apps: { web: { build: VITE_BUILD } },
-      greetTags: ['layer:island'],
-      aliases: { pad: { name: 'left-pad', version: '1.3.0' } },
-      greetDependencies: { pad: '^1.0.0' },
-      greetSource: {
-        'index.ts': `import pad from 'pad';\nexport const greet = () => pad('hi', 5);\n`,
-      },
-    }),
-  );
-  buildProjectGraph(workspace.root);
-
-  // Act
-  const findings = lint(workspace.root, ['libs/greet/package.json']);
-
-  // Assert
-  assert.deepEqual(findings, []);
-});
-
-test('a range that misses the version an npm: alias installs is reported with that version, and the fix writes it, not the alias', async () => {
-  // Arrange: the root installs left-pad 1.3.0 as pad, and greet asks for pad ^2.0.0.
-  await using workspace = await fixtureWorkspace(
-    workspaceFiles({
-      apps: { web: { build: VITE_BUILD } },
-      greetTags: ['layer:island'],
-      aliases: { pad: { name: 'left-pad', version: '1.3.0' } },
-      greetDependencies: { pad: '^2.0.0' },
-      greetSource: {
-        'index.ts': `import pad from 'pad';\nexport const greet = () => pad('hi', 5);\n`,
-      },
-    }),
-  );
-  buildProjectGraph(workspace.root);
-
-  // Act
-  const findings = lint(workspace.root, ['libs/greet/package.json']);
-  const manifest = fixed(workspace.root, 'libs/greet/package.json');
-
-  // Assert
-  assert.deepEqual(
-    findings.map(({ ruleId }) => ruleId),
-    ['island/dependency-checks'],
-  );
-  assert.match(findings[0]?.message ?? '', /pad/);
-  assert.match(findings[0]?.message ?? '', /1\.3\.0/);
-  assert.doesNotMatch(findings[0]?.message ?? '', /npm:/);
-  assert.equal(JSON.parse(manifest).dependencies.pad, '1.3.0');
-});
-
-void test.each(
-  [
-    'index.test.ts',
-    'index.test.mjs',
-    'index.test.js',
-    'index.test.cjs',
-    'index.spec.jsx',
-  ],
-  (testFile) =>
-    test(`the imports of a test file named ${testFile} are not dependencies of the package`, async () => {
-      // Arrange: greet ships nothing that imports left-pad; only its test does.
-      await using workspace = await fixtureWorkspace(
-        workspaceFiles({
-          apps: { web: { build: VITE_BUILD } },
-          greetTags: ['layer:island'],
-          greetDependencies: {},
-          greetSource: {
-            'index.ts': `export const greet = () => 'hi';\n`,
-            [testFile]: `import leftPad from 'left-pad';\nconsole.log(leftPad('hi', 5));\n`,
-          },
-        }),
-      );
-      buildProjectGraph(workspace.root);
-
-      // Act
-      const findings = lint(workspace.root, ['libs/greet/package.json']);
-
-      // Assert
-      assert.deepEqual(findings, []);
-    }),
-);
-
-test('the imports of a JavaScript test file are not dependencies of a package that is not an island', async () => {
-  // Arrange
-  await using workspace = await fixtureWorkspace(
-    workspaceFiles({
-      apps: { web: { build: VITE_BUILD } },
-      greetDependencies: {},
-      greetSource: {
-        'index.ts': `export const greet = () => 'hi';\n`,
-        'index.test.mjs': `import leftPad from 'left-pad';\nconsole.log(leftPad('hi', 5));\n`,
-      },
-    }),
-  );
-  buildProjectGraph(workspace.root);
-
-  // Act
-  const findings = lint(workspace.root, ['libs/greet/package.json']);
-
-  // Assert
-  assert.deepEqual(findings, []);
-});
-
-// greet ships index.ts; its src/testing folder imports left-pad, which greet
-// lists only in devDependencies.
-const greetWithTestSupport = {
-  greetDependencies: {},
-  greetSource: {
-    'index.ts': `export const greet = () => 'hi';\n`,
-    'testing/index.ts': `import leftPad from 'left-pad';\nexport const padded = leftPad('hi', 5);\n`,
-  },
-};
-
-void test.each(
-  [
-    ['that the manifest does not export', {}],
-    ['outside the folder of every files entry', { files: ['dist'] }],
-  ] as const,
-  ([unpublished, manifest]) =>
-    test(`the imports of a testing folder ${unpublished} are not dependencies of the package`, async () => {
-      // Arrange
-      await using workspace = await fixtureWorkspace(
-        workspaceFiles({
-          apps: { web: { build: VITE_BUILD } },
-          ...greetWithTestSupport,
-          greetManifest: {
-            ...manifest,
-            devDependencies: { 'left-pad': '1.3.0' },
-          },
-        }),
-      );
-      buildProjectGraph(workspace.root);
-
-      // Act
-      const findings = lint(workspace.root, ['libs/greet/package.json']);
-
-      // Assert
-      assert.deepEqual(findings, []);
-    }),
-);
-
-void test.each(
-  [
-    [
-      'an exports target in it',
-      {
-        exports: {
-          '.': './src/index.ts',
-          './testing': './src/testing/index.ts',
-        },
-      },
-    ],
-    ['an exports pattern', { exports: { './*': './src/*.ts' } }],
-    ['a files entry', { files: ['src/index.ts', 'src/testing'] }],
-    ['a files entry that names a folder holding it', { files: ['src'] }],
-  ] as const,
-  ([publishes, published]) =>
-    test(`a package whose manifest publishes its testing folder through ${publishes} declares what that folder imports`, async () => {
-      // Arrange
-      await using workspace = await fixtureWorkspace(
-        workspaceFiles({
-          apps: { web: { build: VITE_BUILD } },
-          ...greetWithTestSupport,
-          greetManifest: {
-            ...published,
-            devDependencies: { 'left-pad': '1.3.0' },
-          },
-        }),
-      );
-      buildProjectGraph(workspace.root);
-
-      // Act
-      const findings = lint(workspace.root, ['libs/greet/package.json']);
-
-      // Assert
+// Each test lints a workspace of its own, in ESLint processes of its own,
+// so the tests run at the same time, as many as this machine's processors.
+describe('dependency checks', { concurrency: availableParallelism() }, () => {
+  test('a bundled app must declare the npm packages its workspace imports pull in, from the root and from its folder', async () => {
+    // Arrange
+    await using workspace = await fixtureWorkspace(
+      workspaceFiles({ apps: { web: { build: VITE_BUILD } } }),
+    );
+    await buildProjectGraph(workspace.root);
+
+    // Act
+    const fromRoot = await lint(workspace.root, ['apps/web/package.json']);
+    const fromProject = await lint(workspace.path('apps/web'), [
+      'package.json',
+    ]);
+
+    // Assert: left-pad comes through greet; greet itself is inlined, so not demanded.
+    for (const findings of [fromRoot, fromProject]) {
       assert.equal(findings.length, 1);
       assert.equal(findings[0]?.ruleId, 'manifest/dependency-checks');
       assert.match(findings[0]?.message ?? '', /left-pad/);
-    }),
-);
+      assert.doesNotMatch(findings[0]?.message ?? '', /@fx\/greet/);
+    }
+  });
 
-test('a bundled app does not declare what the unexported testing folder of a package it inlines imports', async () => {
-  // Arrange
-  await using workspace = await fixtureWorkspace(
-    workspaceFiles({
-      apps: { web: { build: VITE_BUILD } },
-      ...greetWithTestSupport,
-    }),
-  );
-  buildProjectGraph(workspace.root);
+  // greet's root imports left-pad and its ./pad subpath right-pad, as
+  // @meddit/evidence-retrieval's ./dailymed alone imports yauzl.
+  const greetWithSubpath = {
+    greetManifest: {
+      exports: { '.': './src/index.ts', './pad': './src/pad.ts' },
+    },
+    greetSource: {
+      'index.ts': `import leftPad from 'left-pad';\nexport const greet = () => leftPad('hi', 5);\n`,
+      'pad.ts': `import rightPad from 'right-pad';\nexport const pad = () => rightPad('hi', 5);\n`,
+    },
+  };
 
-  // Act
-  const findings = lint(workspace.root, ['apps/web/package.json']);
+  /** The messages of the findings on `apps/<app>/package.json`, as one text. */
+  const demandedBy =
+    (workspace: { path(relativePath: string): string }, findings: Finding[]) =>
+    (app: string) =>
+      findings
+        .filter(
+          ({ file }) => file === workspace.path(`apps/${app}/package.json`),
+        )
+        .map(({ message }) => message)
+        .join('\n');
 
-  // Assert
-  assert.deepEqual(findings, []);
-});
+  test('a bundled app declares the npm packages of the subpaths of a workspace package it imports, not of the others', async () => {
+    // Arrange: root imports greet's root only; subpath imports ./pad only.
+    await using workspace = await fixtureWorkspace(
+      workspaceFiles({
+        apps: {
+          root: { build: VITE_BUILD },
+          subpath: { build: VITE_BUILD, imports: ['@fx/greet/pad'] },
+        },
+        ...greetWithSubpath,
+      }),
+    );
+    await buildProjectGraph(workspace.root);
 
-test('a bundled app declares what the published testing folder of a project inside another project it inlines imports, when it imports that folder', async () => {
-  // Arrange: web imports @fx/inner/testing, a project inside greet.
-  await using workspace = await fixtureWorkspace(
-    workspaceFiles({
-      apps: {
-        web: { build: VITE_BUILD, imports: ['@fx/greet', '@fx/inner/testing'] },
+    // Act
+    const findings = await lint(workspace.root, [
+      'apps/root/package.json',
+      'apps/subpath/package.json',
+    ]);
+
+    // Assert
+    const demandedOf = demandedBy(workspace, findings);
+    assert.match(demandedOf('root'), /left-pad/);
+    assert.doesNotMatch(demandedOf('root'), /right-pad/);
+    assert.match(demandedOf('subpath'), /right-pad/);
+    assert.doesNotMatch(demandedOf('subpath'), /left-pad/);
+  });
+
+  test('a bundled app declares the npm packages of a subpath that it loads with a literal import()', async () => {
+    // Arrange
+    await using workspace = await fixtureWorkspace(
+      workspaceFiles({
+        apps: {
+          lazy: {
+            build: VITE_BUILD,
+            imports: [],
+            lazyImports: ['@fx/greet/pad'],
+          },
+        },
+        ...greetWithSubpath,
+      }),
+    );
+    await buildProjectGraph(workspace.root);
+
+    // Act
+    const findings = await lint(workspace.root, ['apps/lazy/package.json']);
+
+    // Assert
+    const demanded = demandedBy(workspace, findings)('lazy');
+    assert.match(demanded, /right-pad/);
+    assert.doesNotMatch(demanded, /left-pad/);
+  });
+
+  test('a bundled app declares the npm packages of a subpath that the root of a workspace package re-exports', async () => {
+    // Arrange: greet's root re-exports ./pad; lonely.ts is imported by nothing.
+    await using workspace = await fixtureWorkspace(
+      workspaceFiles({
+        apps: { web: { build: VITE_BUILD } },
+        greetManifest: greetWithSubpath.greetManifest,
+        greetSource: {
+          'index.ts': `export * from './pad.ts';\n`,
+          'pad.ts': greetWithSubpath.greetSource['pad.ts'],
+          'lonely.ts': greetWithSubpath.greetSource['index.ts'],
+        },
+      }),
+    );
+    await buildProjectGraph(workspace.root);
+
+    // Act
+    const findings = await lint(workspace.root, ['apps/web/package.json']);
+
+    // Assert
+    const demanded = demandedBy(workspace, findings)('web');
+    assert.match(demanded, /right-pad/);
+    assert.doesNotMatch(demanded, /left-pad/);
+  });
+
+  test('a bundled app declares the npm packages of a file that a workspace package loads through its #imports', async () => {
+    // Arrange: greet's root imports #pad, which its imports map to pad.ts.
+    await using workspace = await fixtureWorkspace(
+      workspaceFiles({
+        apps: { web: { build: VITE_BUILD } },
+        greetManifest: {
+          exports: { '.': './src/index.ts' },
+          imports: { '#pad': './src/pad.ts' },
+        },
+        greetSource: {
+          'index.ts': `export { pad } from '#pad';\n`,
+          'pad.ts': greetWithSubpath.greetSource['pad.ts'],
+          'lonely.ts': greetWithSubpath.greetSource['index.ts'],
+        },
+      }),
+    );
+    await buildProjectGraph(workspace.root);
+
+    // Act
+    const findings = await lint(workspace.root, ['apps/web/package.json']);
+
+    // Assert
+    const demanded = demandedBy(workspace, findings)('web');
+    assert.match(demanded, /right-pad/);
+    assert.doesNotMatch(demanded, /left-pad/);
+  });
+
+  test('a bundled app declares the npm packages of every file of a workspace package that imports a specifier no package names, such as a tsconfig paths alias', async () => {
+    // Arrange: greet's root imports ~greet/pad, which only a bundler alias
+    // could resolve; nothing else imports pad.ts.
+    await using workspace = await fixtureWorkspace(
+      workspaceFiles({
+        apps: { web: { build: VITE_BUILD } },
+        greetManifest: greetWithSubpath.greetManifest,
+        greetSource: {
+          'index.ts': `import leftPad from 'left-pad';\nimport { pad } from '~greet/pad';\nexport const greet = () => leftPad(pad(), 9);\n`,
+          'pad.ts': greetWithSubpath.greetSource['pad.ts'],
+        },
+      }),
+    );
+    await buildProjectGraph(workspace.root);
+
+    // Act
+    const findings = await lint(workspace.root, ['apps/web/package.json']);
+
+    // Assert
+    const demanded = demandedBy(workspace, findings)('web');
+    assert.match(demanded, /left-pad/);
+    assert.match(demanded, /right-pad/);
+  });
+
+  test('on an Nx whose @nx/devkit/internal lacks the file map functions, as Nx 22, a bundled app declares the npm packages of every file of a workspace package it inlines', async () => {
+    // Arrange: module hooks give @zukhruf/eslint an @nx/devkit/internal that
+    // loads without them, as Nx 22.7.8's does; Nx's own modules get the real one.
+    await using workspace = await fixtureWorkspace({
+      ...workspaceFiles({
+        apps: { root: { build: VITE_BUILD } },
+        ...greetWithSubpath,
+      }),
+      'nx22-internal.cjs': `module.exports = { readPackageJson() {} };\n`,
+      'nx22.mjs': [
+        `import { registerHooks } from 'node:module';`,
+        `const stub = new URL('./nx22-internal.cjs', import.meta.url).href;`,
+        `registerHooks({`,
+        `  resolve(specifier, context, nextResolve) {`,
+        `    if (specifier === '@nx/devkit/internal' && !context.parentURL?.includes('/node_modules/'))`,
+        `      return { url: stub, format: 'commonjs', shortCircuit: true };`,
+        `    return nextResolve(specifier, context);`,
+        `  },`,
+        `});`,
+      ].join('\n'),
+    });
+    await buildProjectGraph(workspace.root);
+
+    // Act
+    const findings = await lint(
+      workspace.root,
+      ['apps/root/package.json'],
+      ['--import', workspace.path('nx22.mjs')],
+    );
+
+    // Assert: right-pad comes from ./pad, which root never imports.
+    const demanded = demandedBy(workspace, findings)('root');
+    assert.match(demanded, /left-pad/);
+    assert.match(demanded, /right-pad/);
+  });
+
+  test('a bundled app does not declare the npm packages of a project it only builds after', async () => {
+    // Arrange: web imports greet and builds after shout, whose code imports
+    // left-pad, as greet's does, and right-pad.
+    await using workspace = await fixtureWorkspace(
+      workspaceFiles({
+        apps: { web: { build: VITE_BUILD, implicitDependencies: ['shout'] } },
+        shoutSource: {
+          'index.ts': `import leftPad from 'left-pad';\nimport rightPad from 'right-pad';\nexport const shout = () => leftPad(rightPad('hi', 5), 9);\n`,
+        },
+      }),
+    );
+    await buildProjectGraph(workspace.root);
+
+    // Act
+    const findings = await lint(workspace.root, ['apps/web/package.json']);
+
+    // Assert
+    assert.equal(findings.length, 1);
+    assert.match(findings[0]?.message ?? '', /left-pad/);
+    assert.doesNotMatch(findings[0]?.message ?? '', /right-pad/);
+  });
+
+  test('a bundled app does not declare the npm packages of a project that a project it imports only builds after', async () => {
+    // Arrange: web imports greet, as a web imports a generated client, and
+    // greet builds after shout, as the client builds after its backend.
+    await using workspace = await fixtureWorkspace(
+      workspaceFiles({
+        apps: { web: { build: VITE_BUILD } },
+        greetImplicitDependencies: ['shout'],
+        shoutSource: {
+          'index.ts': `import rightPad from 'right-pad';\nexport const shout = (text: string) => rightPad(text, 9);\n`,
+        },
+      }),
+    );
+    await buildProjectGraph(workspace.root);
+
+    // Act
+    const findings = await lint(workspace.root, ['apps/web/package.json']);
+
+    // Assert
+    assert.equal(findings.length, 1);
+    assert.match(findings[0]?.message ?? '', /left-pad/);
+    assert.doesNotMatch(findings[0]?.message ?? '', /right-pad/);
+  });
+
+  test('a bundled app declares what a project it builds after pulls in when it also imports that project, through another project or with import()', async () => {
+    // Arrange: both apps build after shout, whose code imports right-pad. chain
+    // imports greet, which imports shout; lazy loads shout with import().
+    await using workspace = await fixtureWorkspace(
+      workspaceFiles({
+        apps: {
+          chain: { build: VITE_BUILD, implicitDependencies: ['shout'] },
+          lazy: {
+            build: VITE_BUILD,
+            imports: [],
+            lazyImports: ['@fx/shout'],
+            implicitDependencies: ['shout'],
+          },
+        },
+        greetSource: {
+          'index.ts': `import leftPad from 'left-pad';\nimport { shout } from '@fx/shout';\nexport const greet = () => shout(leftPad('hi', 5));\n`,
+        },
+        shoutSource: {
+          'index.ts': `import rightPad from 'right-pad';\nexport const shout = (text: string) => rightPad(text, 9);\n`,
+        },
+      }),
+    );
+    await buildProjectGraph(workspace.root);
+
+    // Act
+    const findings = await lint(workspace.root, [
+      'apps/chain/package.json',
+      'apps/lazy/package.json',
+    ]);
+
+    // Assert
+    const demandedOf = (app: string) =>
+      findings
+        .filter(
+          ({ file }) => file === workspace.path(`apps/${app}/package.json`),
+        )
+        .map(({ message }) => message)
+        .join('\n');
+    assert.match(demandedOf('chain'), /right-pad/);
+    assert.match(demandedOf('lazy'), /right-pad/);
+  });
+
+  test('an app that does not bundle declares its workspace imports, not their npm packages', async () => {
+    // Arrange: esbuild with bundle: false transpiles file by file.
+    await using workspace = await fixtureWorkspace(
+      workspaceFiles({ apps: { web: { build: esbuild({ bundle: false }) } } }),
+    );
+    await buildProjectGraph(workspace.root);
+
+    // Act
+    const findings = await lint(workspace.root, ['apps/web/package.json']);
+
+    // Assert
+    assert.equal(findings.length, 1);
+    assert.match(findings[0]?.message ?? '', /@fx\/greet/);
+    assert.doesNotMatch(findings[0]?.message ?? '', /left-pad/);
+  });
+
+  test('an app declares the workspace packages its build leaves to node_modules, and the npm packages of those it inlines', async () => {
+    // Arrange: every app imports greet, which imports left-pad.
+    const installsGreet = {
+      shell: { build: { executor: 'nx:noop' } },
+      tsc: { build: { executor: '@nx/js:tsc' } },
+      'inferred-tsc': {
+        build: {
+          executor: 'nx:run-commands',
+          metadata: { technologies: ['typescript'] },
+          options: { command: 'tsc --build tsconfig.lib.json' },
+        },
       },
-      greetDependencies: {},
-      greetSource: {
-        'index.ts': `export * from './inner/src/index.ts';\n`,
-        'inner/package.json': JSON.stringify({
-          name: '@fx/inner',
-          version: '0.0.0',
+      external: { build: esbuild({ external: ['@fx/greet'] }) },
+      'esbuild-options': {
+        build: esbuild({ esbuildOptions: { external: ['@fx/greet'] } }),
+      },
+      'prefix-wildcard': { build: esbuild({ external: ['@fx/*'] }) },
+      'suffix-wildcard': { build: esbuild({ external: ['*/greet'] }) },
+      'packages-external': {
+        build: esbuild({ esbuildOptions: { packages: 'external' } }),
+      },
+    };
+    const inlinesGreet = {
+      vite: { build: VITE_BUILD },
+      scripted: { buildScript: 'vite build' },
+      'esbuild-default': { build: esbuild() },
+      'packages-bundle': {
+        build: esbuild({ esbuildOptions: { packages: 'bundle' } }),
+      },
+      excluded: {
+        build: esbuild({
+          external: ['@fx/greet'],
+          excludeFromExternal: ['@fx/greet'],
+        }),
+      },
+      'other-suffix': { build: esbuild({ external: ['@fx/*-ui'] }) },
+      'implicit-external': {
+        build: esbuild({ external: ['@fx/shout'] }),
+        implicitDependencies: ['shout'],
+      },
+      'overlapping-wildcard': { build: esbuild({ external: ['@fx/gr*reet'] }) },
+      'not-imported': {
+        build: esbuild({ external: ['@fx/shout', 'left-pad'] }),
+      },
+    };
+    await using workspace = await fixtureWorkspace(
+      workspaceFiles({ apps: { ...installsGreet, ...inlinesGreet } }),
+    );
+    await buildProjectGraph(workspace.root);
+
+    // Act
+    const findings = await lint(
+      workspace.root,
+      Object.keys({ ...installsGreet, ...inlinesGreet }).map(
+        (app) => `apps/${app}/package.json`,
+      ),
+    );
+
+    // Assert
+    const demandedOf = (app: string) =>
+      findings
+        .filter(
+          ({ file }) => file === workspace.path(`apps/${app}/package.json`),
+        )
+        .map(({ message }) => message)
+        .join('\n');
+    for (const app of Object.keys(installsGreet)) {
+      assert.match(demandedOf(app), /@fx\/greet/, app);
+      assert.doesNotMatch(demandedOf(app), /left-pad/, app);
+    }
+    for (const app of Object.keys(inlinesGreet)) {
+      assert.match(demandedOf(app), /left-pad/, app);
+      assert.doesNotMatch(demandedOf(app), /@fx\/greet/, app);
+    }
+  });
+
+  test('an esbuild app takes its external list from the target defaults in nx.json', async () => {
+    // Arrange
+    await using workspace = await fixtureWorkspace(
+      workspaceFiles({
+        apps: { api: { build: esbuild() } },
+        targetDefaults: {
+          '@nx/esbuild:esbuild': { options: { external: ['@fx/greet'] } },
+        },
+      }),
+    );
+    await buildProjectGraph(workspace.root);
+
+    // Act
+    const findings = await lint(workspace.root, ['apps/api/package.json']);
+
+    // Assert
+    assert.equal(findings.length, 1);
+    assert.match(findings[0]?.message ?? '', /@fx\/greet/);
+    assert.doesNotMatch(findings[0]?.message ?? '', /left-pad/);
+  });
+
+  test("an esbuild app takes esbuild's packages: 'external' from the target defaults in nx.json", async () => {
+    // Arrange
+    await using workspace = await fixtureWorkspace(
+      workspaceFiles({
+        apps: { api: { build: esbuild() } },
+        targetDefaults: {
+          '@nx/esbuild:esbuild': {
+            options: { esbuildOptions: { packages: 'external' } },
+          },
+        },
+      }),
+    );
+    await buildProjectGraph(workspace.root);
+
+    // Act
+    const findings = await lint(workspace.root, ['apps/api/package.json']);
+
+    // Assert
+    assert.equal(findings.length, 1);
+    assert.match(findings[0]?.message ?? '', /@fx\/greet/);
+    assert.doesNotMatch(findings[0]?.message ?? '', /left-pad/);
+  });
+
+  test('an app that leaves one workspace package to node_modules never declares one it inlines', async () => {
+    // Arrange
+    await using workspace = await fixtureWorkspace(
+      workspaceFiles({
+        apps: {
+          api: {
+            build: esbuild({ external: ['@fx/greet'] }),
+            imports: ['@fx/greet', '@fx/shout'],
+          },
+        },
+      }),
+    );
+    await buildProjectGraph(workspace.root);
+
+    // Act
+    const findings = await lint(workspace.root, ['apps/api/package.json']);
+
+    // Assert
+    assert.equal(findings.length, 1);
+    assert.match(findings[0]?.message ?? '', /@fx\/greet/);
+    assert.doesNotMatch(findings[0]?.message ?? '', /@fx\/shout/);
+  });
+
+  test('a manifest is not checked before Nx caches a project graph, as on a fresh clone', async () => {
+    // Arrange: no buildProjectGraph.
+    await using workspace = await fixtureWorkspace(
+      workspaceFiles({ apps: { web: { build: VITE_BUILD } } }),
+    );
+
+    // Act
+    const findings = await lint(workspace.root, ['apps/web/package.json']);
+
+    // Assert
+    assert.deepEqual(findings, []);
+  });
+
+  test('an island manifest is reported once, by island/dependency-checks', async () => {
+    // Arrange: greet becomes an island and no longer declares left-pad.
+    await using workspace = await fixtureWorkspace(
+      workspaceFiles({
+        apps: { web: { build: VITE_BUILD } },
+        greetTags: ['layer:island'],
+        greetDependencies: {},
+      }),
+    );
+    await buildProjectGraph(workspace.root);
+
+    // Act
+    const findings = await lint(workspace.root, ['libs/greet/package.json']);
+
+    // Assert
+    assert.deepEqual(
+      findings.map(({ ruleId }) => ruleId),
+      ['island/dependency-checks'],
+    );
+    assert.match(findings[0]?.message ?? '', /left-pad/);
+  });
+
+  test('a range that holds the version an npm: alias installs is not reported, though Nx reads the alias as the installed version', async () => {
+    // Arrange: the root installs left-pad 1.3.0 as pad, and the island greet asks for pad ^1.0.0.
+    await using workspace = await fixtureWorkspace(
+      workspaceFiles({
+        apps: { web: { build: VITE_BUILD } },
+        greetTags: ['layer:island'],
+        aliases: { pad: { name: 'left-pad', version: '1.3.0' } },
+        greetDependencies: { pad: '^1.0.0' },
+        greetSource: {
+          'index.ts': `import pad from 'pad';\nexport const greet = () => pad('hi', 5);\n`,
+        },
+      }),
+    );
+    await buildProjectGraph(workspace.root);
+
+    // Act
+    const findings = await lint(workspace.root, ['libs/greet/package.json']);
+
+    // Assert
+    assert.deepEqual(findings, []);
+  });
+
+  test('a range that misses the version an npm: alias installs is reported with that version, and the fix writes it, not the alias', async () => {
+    // Arrange: the root installs left-pad 1.3.0 as pad, and greet asks for pad ^2.0.0.
+    await using workspace = await fixtureWorkspace(
+      workspaceFiles({
+        apps: { web: { build: VITE_BUILD } },
+        greetTags: ['layer:island'],
+        aliases: { pad: { name: 'left-pad', version: '1.3.0' } },
+        greetDependencies: { pad: '^2.0.0' },
+        greetSource: {
+          'index.ts': `import pad from 'pad';\nexport const greet = () => pad('hi', 5);\n`,
+        },
+      }),
+    );
+    await buildProjectGraph(workspace.root);
+
+    // Act
+    const findings = await lint(workspace.root, ['libs/greet/package.json']);
+    const manifest = await fixed(workspace.root, 'libs/greet/package.json');
+
+    // Assert
+    assert.deepEqual(
+      findings.map(({ ruleId }) => ruleId),
+      ['island/dependency-checks'],
+    );
+    assert.match(findings[0]?.message ?? '', /pad/);
+    assert.match(findings[0]?.message ?? '', /1\.3\.0/);
+    assert.doesNotMatch(findings[0]?.message ?? '', /npm:/);
+    assert.equal(JSON.parse(manifest).dependencies.pad, '1.3.0');
+  });
+
+  void test.each(
+    [
+      'index.test.ts',
+      'index.test.mjs',
+      'index.test.js',
+      'index.test.cjs',
+      'index.spec.jsx',
+    ],
+    (testFile) =>
+      test(`the imports of a test file named ${testFile} are not dependencies of the package`, async () => {
+        // Arrange: greet ships nothing that imports left-pad; only its test does.
+        await using workspace = await fixtureWorkspace(
+          workspaceFiles({
+            apps: { web: { build: VITE_BUILD } },
+            greetTags: ['layer:island'],
+            greetDependencies: {},
+            greetSource: {
+              'index.ts': `export const greet = () => 'hi';\n`,
+              [testFile]: `import leftPad from 'left-pad';\nconsole.log(leftPad('hi', 5));\n`,
+            },
+          }),
+        );
+        await buildProjectGraph(workspace.root);
+
+        // Act
+        const findings = await lint(workspace.root, [
+          'libs/greet/package.json',
+        ]);
+
+        // Assert
+        assert.deepEqual(findings, []);
+      }),
+  );
+
+  test('the imports of a JavaScript test file are not dependencies of a package that is not an island', async () => {
+    // Arrange
+    await using workspace = await fixtureWorkspace(
+      workspaceFiles({
+        apps: { web: { build: VITE_BUILD } },
+        greetDependencies: {},
+        greetSource: {
+          'index.ts': `export const greet = () => 'hi';\n`,
+          'index.test.mjs': `import leftPad from 'left-pad';\nconsole.log(leftPad('hi', 5));\n`,
+        },
+      }),
+    );
+    await buildProjectGraph(workspace.root);
+
+    // Act
+    const findings = await lint(workspace.root, ['libs/greet/package.json']);
+
+    // Assert
+    assert.deepEqual(findings, []);
+  });
+
+  // greet ships index.ts; its src/testing folder imports left-pad, which greet
+  // lists only in devDependencies.
+  const greetWithTestSupport = {
+    greetDependencies: {},
+    greetSource: {
+      'index.ts': `export const greet = () => 'hi';\n`,
+      'testing/index.ts': `import leftPad from 'left-pad';\nexport const padded = leftPad('hi', 5);\n`,
+    },
+  };
+
+  void test.each(
+    [
+      ['that the manifest does not export', {}],
+      ['outside the folder of every files entry', { files: ['dist'] }],
+    ] as const,
+    ([unpublished, manifest]) =>
+      test(`the imports of a testing folder ${unpublished} are not dependencies of the package`, async () => {
+        // Arrange
+        await using workspace = await fixtureWorkspace(
+          workspaceFiles({
+            apps: { web: { build: VITE_BUILD } },
+            ...greetWithTestSupport,
+            greetManifest: {
+              ...manifest,
+              devDependencies: { 'left-pad': '1.3.0' },
+            },
+          }),
+        );
+        await buildProjectGraph(workspace.root);
+
+        // Act
+        const findings = await lint(workspace.root, [
+          'libs/greet/package.json',
+        ]);
+
+        // Assert
+        assert.deepEqual(findings, []);
+      }),
+  );
+
+  void test.each(
+    [
+      [
+        'an exports target in it',
+        {
           exports: {
             '.': './src/index.ts',
             './testing': './src/testing/index.ts',
           },
-        }),
-        'inner/project.json': JSON.stringify({
-          name: 'inner',
-          projectType: 'library',
-        }),
-        'inner/src/index.ts': `export const inner = 'inner';\n`,
-        'inner/src/testing/index.ts': `import leftPad from 'left-pad';\nexport const padded = leftPad('hi', 5);\n`,
-      },
-    }),
+        },
+      ],
+      ['an exports pattern', { exports: { './*': './src/*.ts' } }],
+      ['a files entry', { files: ['src/index.ts', 'src/testing'] }],
+      ['a files entry that names a folder holding it', { files: ['src'] }],
+    ] as const,
+    ([publishes, published]) =>
+      test(`a package whose manifest publishes its testing folder through ${publishes} declares what that folder imports`, async () => {
+        // Arrange
+        await using workspace = await fixtureWorkspace(
+          workspaceFiles({
+            apps: { web: { build: VITE_BUILD } },
+            ...greetWithTestSupport,
+            greetManifest: {
+              ...published,
+              devDependencies: { 'left-pad': '1.3.0' },
+            },
+          }),
+        );
+        await buildProjectGraph(workspace.root);
+
+        // Act
+        const findings = await lint(workspace.root, [
+          'libs/greet/package.json',
+        ]);
+
+        // Assert
+        assert.equal(findings.length, 1);
+        assert.equal(findings[0]?.ruleId, 'manifest/dependency-checks');
+        assert.match(findings[0]?.message ?? '', /left-pad/);
+      }),
   );
-  buildProjectGraph(workspace.root);
 
-  // Act
-  const findings = lint(workspace.root, ['apps/web/package.json']);
+  test('a bundled app does not declare what the unexported testing folder of a package it inlines imports', async () => {
+    // Arrange
+    await using workspace = await fixtureWorkspace(
+      workspaceFiles({
+        apps: { web: { build: VITE_BUILD } },
+        ...greetWithTestSupport,
+      }),
+    );
+    await buildProjectGraph(workspace.root);
 
-  // Assert
-  assert.equal(findings.length, 1);
-  assert.equal(findings[0]?.ruleId, 'manifest/dependency-checks');
-  assert.match(findings[0]?.message ?? '', /left-pad/);
+    // Act
+    const findings = await lint(workspace.root, ['apps/web/package.json']);
+
+    // Assert
+    assert.deepEqual(findings, []);
+  });
+
+  test('a bundled app declares what the published testing folder of a project inside another project it inlines imports, when it imports that folder', async () => {
+    // Arrange: web imports @fx/inner/testing, a project inside greet.
+    await using workspace = await fixtureWorkspace(
+      workspaceFiles({
+        apps: {
+          web: {
+            build: VITE_BUILD,
+            imports: ['@fx/greet', '@fx/inner/testing'],
+          },
+        },
+        greetDependencies: {},
+        greetSource: {
+          'index.ts': `export * from './inner/src/index.ts';\n`,
+          'inner/package.json': JSON.stringify({
+            name: '@fx/inner',
+            version: '0.0.0',
+            exports: {
+              '.': './src/index.ts',
+              './testing': './src/testing/index.ts',
+            },
+          }),
+          'inner/project.json': JSON.stringify({
+            name: 'inner',
+            projectType: 'library',
+          }),
+          'inner/src/index.ts': `export const inner = 'inner';\n`,
+          'inner/src/testing/index.ts': `import leftPad from 'left-pad';\nexport const padded = leftPad('hi', 5);\n`,
+        },
+      }),
+    );
+    await buildProjectGraph(workspace.root);
+
+    // Act
+    const findings = await lint(workspace.root, ['apps/web/package.json']);
+
+    // Assert
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0]?.ruleId, 'manifest/dependency-checks');
+    assert.match(findings[0]?.message ?? '', /left-pad/);
+  });
 });

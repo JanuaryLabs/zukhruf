@@ -57,7 +57,7 @@ test('base lets env.ts add its parsed environment to the ProcessEnv type, as the
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert: ESLint linted env.ts (a parse error or a skipped file has no rule).
   assert.deepEqual(
@@ -85,7 +85,7 @@ test('base still reports a value namespace and an empty interface', async () => 
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   assert.deepEqual(typeFindings(findings), [

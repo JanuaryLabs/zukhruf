@@ -12,10 +12,13 @@
       "path": "../testing/tsconfig.lib.json"
     },
     {
-      "path": "../fs/tsconfig.lib.json"
+      "path": "../process/tsconfig.lib.json"
     },
     {
       "path": "../parameterized-test/tsconfig.lib.json"
+    },
+    {
+      "path": "../fs/tsconfig.lib.json"
     }
   ]
 }

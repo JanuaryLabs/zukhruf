@@ -38,7 +38,7 @@ test('base allows the side-effect imports of the standard: a stylesheet, env.ts 
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   assert.deepEqual(unassigned(findings), []);
@@ -69,7 +69,7 @@ test('a repo that allows one more side-effect import with noUnassignedImport() k
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   assert.deepEqual(unassigned(findings), ['worker.ts']);
@@ -87,7 +87,7 @@ test('base still reports any other side-effect import', async () => {
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   assert.deepEqual(unassigned(findings), ['main.ts']);

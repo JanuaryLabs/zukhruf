@@ -19,11 +19,13 @@ async function findings(
     ),
     ...files,
   });
-  return lint(
-    workspace.root,
-    Object.keys(files).filter((path) =>
-      /(^|\/)tsconfig[^/]*\.json$/.test(path),
-    ),
+  return (
+    await lint(
+      workspace.root,
+      Object.keys(files).filter((path) =>
+        /(^|\/)tsconfig[^/]*\.json$/.test(path),
+      ),
+    )
   )
     .filter(({ ruleId }) => ruleId === RULE)
     .map(({ file, line }) => [relative(workspace.root, file), line]);

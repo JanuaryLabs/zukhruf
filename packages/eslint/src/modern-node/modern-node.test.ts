@@ -46,7 +46,7 @@ test('modern-node/recommended reports each check it turns on', async () => {
   });
 
   // Act
-  const findings = lint(workspace.root, ['.']);
+  const findings = await lint(workspace.root, ['.']);
 
   // Assert
   const reported = findings
@@ -97,7 +97,7 @@ test('modern-node/recommended leaves off the checks that break code or fix nothi
   });
 
   // Act
-  const findings = lint(workspace.root, ['.']);
+  const findings = await lint(workspace.root, ['.']);
 
   // Assert
   assert.deepEqual(findings, []);
@@ -126,7 +126,7 @@ test('unicorn/prefer-dispose reads types: a TypeScript resource with a disposer 
   });
 
   // Act
-  const findings = lint(workspace.root, ['.']);
+  const findings = await lint(workspace.root, ['.']);
 
   // Assert
   assert.deepEqual(
@@ -150,7 +150,7 @@ test('zukhruf/base reports no modern-node check, so a repo gets them only when i
   });
 
   // Act
-  const findings = lint(workspace.root, ['src/app.js']);
+  const findings = await lint(workspace.root, ['src/app.js']);
 
   // Assert
   assert.deepEqual(

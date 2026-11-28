@@ -66,7 +66,7 @@ test('a react-router file may throw redirect(), replace() and data(), in a loade
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   assert.deepEqual(thrownAt(findings), []);
@@ -86,7 +86,7 @@ test('a react-router file still may not throw a string or a plain object', async
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   assert.deepEqual(thrownAt(findings).sort(), [
@@ -112,7 +112,7 @@ test('without the react-router config, a thrown Response is still reported', asy
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   assert.deepEqual(thrownAt(findings), [workspace.path('src/handler.ts')]);

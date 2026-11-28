@@ -25,7 +25,7 @@ async function reportedLines(file: string, lines: string[]): Promise<number[]> {
     ),
     [`src/${file}`]: `${lines.join('\n')}\n`,
   });
-  const own = lint(workspace.root, [`src/${file}`]).filter(
+  const own = (await lint(workspace.root, [`src/${file}`])).filter(
     ({ ruleId }) => ruleId === RULE,
   );
   for (const { message } of own) {

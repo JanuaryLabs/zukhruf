@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { Command, ExitError } from '@zukhruf/process';
 
 const devkit = import.meta.resolve('@nx/devkit');
 
@@ -8,8 +8,8 @@ const devkit = import.meta.resolve('@nx/devkit');
  * skips silently without it. Runs in its own process because Nx fixes its
  * workspace root from the working directory once it loads.
  */
-export function buildProjectGraph(root: string): void {
-  const run = spawnSync(
+export async function buildProjectGraph(root: string): Promise<void> {
+  const run = await new Command(
     process.execPath,
     [
       '--input-type=module',
@@ -17,13 +17,13 @@ export function buildProjectGraph(root: string): void {
       `await (await import(${JSON.stringify(devkit)})).createProjectGraphAsync({ exitOnError: false });`,
     ],
     {
+      env: process.env,
+      clock: globalThis,
       cwd: root,
-      encoding: 'utf8',
+      name: 'nx project graph',
     },
-  );
-  if (run.status !== 0) {
-    throw new Error(`Building the project graph failed:\n${run.stderr}`);
-  }
+  ).run();
+  if (run.exitCode !== 0) throw new ExitError('nx project graph', run);
 }
 
 /**

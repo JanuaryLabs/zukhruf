@@ -42,7 +42,7 @@ test('base reports a process warning with no code in shipped code, tests and tes
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   const reported = findings

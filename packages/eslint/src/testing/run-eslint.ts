@@ -1,6 +1,7 @@
-import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { Command, ExitError } from '@zukhruf/process';
 
 import { isRecord } from '../unknown-values.ts';
 
@@ -17,19 +18,23 @@ export interface Finding {
   readonly line: number;
 }
 
-function eslint(
+/**
+ * Runs the ESLint CLI in its own process without holding the event loop, so
+ * the tests of a file can run at the same time.
+ */
+async function eslint(
   cwd: string,
   args: string[],
   nodeArgs: readonly string[] = [],
-): string {
-  const run = spawnSync(process.execPath, [...nodeArgs, eslintBin, ...args], {
-    cwd,
-    encoding: 'utf8',
-  });
+): Promise<string> {
+  const run = await new Command(
+    process.execPath,
+    [...nodeArgs, eslintBin, ...args],
+    { env: process.env, clock: globalThis, cwd, name: 'eslint' },
+  ).run();
   // 0: clean, 1: findings, 2: ESLint itself failed (bad config, crash).
-  if (run.status !== 0 && run.status !== 1) {
-    throw new Error(`eslint ${args.join(' ')} failed:\n${run.stderr}`);
-  }
+  if (run.exitCode !== 0 && run.exitCode !== 1)
+    throw new ExitError('eslint', run);
   return run.stdout;
 }
 
@@ -38,13 +43,13 @@ function eslint(
  * runs it from a project folder, and returns every finding. `nodeArgs` go to
  * Node before the CLI, such as an `--import` of module hooks.
  */
-export function lint(
+export async function lint(
   cwd: string,
   paths: string[],
   nodeArgs: readonly string[] = [],
-): Finding[] {
+): Promise<Finding[]> {
   const results: unknown = JSON.parse(
-    eslint(cwd, ['--format', 'json', ...paths], nodeArgs),
+    await eslint(cwd, ['--format', 'json', ...paths], nodeArgs),
   );
   if (!Array.isArray(results)) throw new Error('ESLint printed no results.');
   return results.flatMap((result: unknown) => {
@@ -64,9 +69,9 @@ export function lint(
  * `lint` runs: `--fix-dry-run` prints the fixed source and writes nothing.
  * The source as it is when no fix applies.
  */
-export function fixed(cwd: string, file: string): string {
+export async function fixed(cwd: string, file: string): Promise<string> {
   const results: unknown = JSON.parse(
-    eslint(cwd, ['--fix-dry-run', '--format', 'json', file]),
+    await eslint(cwd, ['--fix-dry-run', '--format', 'json', file]),
   );
   if (!Array.isArray(results) || !isRecord(results[0]))
     throw new Error('ESLint printed no result.');
@@ -79,8 +84,8 @@ export function fixed(cwd: string, file: string): string {
 }
 
 /** The config ESLint computes for `file`, run from `cwd`. */
-export function printConfig(cwd: string, file: string): unknown {
-  return JSON.parse(eslint(cwd, ['--print-config', file]));
+export async function printConfig(cwd: string, file: string): Promise<unknown> {
+  return JSON.parse(await eslint(cwd, ['--print-config', file]));
 }
 
 /**

@@ -30,7 +30,7 @@ test('a later config that sets no-restricted-syntax cannot silence the packageâ€
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   assert.ok(ruleIds(findings).includes('zukhruf/no-enum'));
@@ -67,9 +67,9 @@ test('a project config that re-exports the root config still applies path-scoped
   });
 
   // Act
-  const library = lint(workspace.path('packages/lib'), ['src']);
-  const desktop = lint(workspace.path('apps/desktop'), ['src']);
-  const web = lint(workspace.path('apps/web'), ['src']);
+  const library = await lint(workspace.path('packages/lib'), ['src']);
+  const desktop = await lint(workspace.path('apps/desktop'), ['src']);
+  const web = await lint(workspace.path('apps/web'), ['src']);
 
   // Assert: in scope by settings or by roots, and out of scope elsewhere.
   assert.ok(ruleIds(library).includes('island/no-console'));
@@ -91,7 +91,7 @@ test('the typed-lint root is the workspace, found from the folder ESLint runs in
   });
 
   // Act
-  const config = printConfig(workspace.path('apps/api'), 'src/main.ts');
+  const config = await printConfig(workspace.path('apps/api'), 'src/main.ts');
 
   // Assert
   const languageOptions = isRecord(config)
@@ -117,7 +117,7 @@ test('the tests config checks a test helper in src/testing as a test file', asyn
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   assert.ok(ruleIds(findings).includes('zukhruf/no-test-lifecycle-hooks'));
@@ -140,7 +140,7 @@ test('the Docker global setup in src/testing may write process.env, and another 
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   const envWrites = findings.filter(
@@ -167,7 +167,7 @@ test('a config that skips test files also skips a test helper in src/testing', a
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   const noLet = findings.filter(({ ruleId }) => ruleId === 'functional/no-let');
@@ -195,7 +195,7 @@ test('a repo turns on a base pluginâ€™s rule in a scope that base skips', async 
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   assert.deepEqual(ruleIds(findings), ['functional/no-let']);
@@ -233,7 +233,7 @@ test('a repo that extends the better-auth and hono configs gets their HTTP error
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   assert.deepEqual(ruleIds(findings).toSorted(), [

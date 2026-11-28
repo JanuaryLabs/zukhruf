@@ -40,7 +40,7 @@ test('./react lints a .tsx file on ESLint 10 with type information and reports a
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   assert.ok(
@@ -67,7 +67,7 @@ test('./react reports a list item that has no key', async () => {
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   assert.ok(
@@ -95,7 +95,7 @@ test('./react reports a hook called in a condition one time, from @eslint-react'
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   const hookRules = findings
@@ -122,7 +122,7 @@ test('./react reports a React Compiler finding from eslint-plugin-react-hooks', 
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   assert.ok(
@@ -143,7 +143,7 @@ test('./react reports an image that has no alt text', async () => {
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   assert.ok(
@@ -173,7 +173,7 @@ test('./react leaves a package.json to manifest/recommended, also when a script 
   });
 
   // Act
-  const findings = lint(workspace.root, ['apps/fx/package.json']);
+  const findings = await lint(workspace.root, ['apps/fx/package.json']);
 
   // Assert
   assert.deepEqual(findings, []);
@@ -198,7 +198,7 @@ test('./react takes a control of @zukhruf/shadcn that a <label> wraps as the lab
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   assert.deepEqual(
@@ -232,7 +232,7 @@ test("./react finds the text of shadcn's choice card, a <label> around a Field w
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   assert.deepEqual(
@@ -261,7 +261,7 @@ test('./react reports a <label> whose only content is a control of @zukhruf/shad
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   assert.deepEqual(

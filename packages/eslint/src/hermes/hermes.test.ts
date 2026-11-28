@@ -26,7 +26,7 @@ test('hermes/recommended flags what Hermes lacks in app code, and leaves Node-si
   });
 
   // Act
-  const findings = lint(workspace.root, ['.']);
+  const findings = await lint(workspace.root, ['.']);
 
   // Assert
   const ruleIds = findings.map(({ ruleId }) => ruleId).sort();

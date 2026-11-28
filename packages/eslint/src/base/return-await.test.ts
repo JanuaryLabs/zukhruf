@@ -43,7 +43,7 @@ test('base reports a promise returned without await inside an await using scope,
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   const returnAwait = findings

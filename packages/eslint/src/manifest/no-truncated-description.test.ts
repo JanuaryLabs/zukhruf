@@ -22,7 +22,7 @@ async function lintManifestSource(source: string) {
     }`),
     'libs/greet/package.json': source,
   });
-  return lint(workspace.root, ['libs/greet/package.json']);
+  return await lint(workspace.root, ['libs/greet/package.json']);
 }
 
 /** Lints `libs/greet/package.json` with `manifest/recommended` and returns its findings. */

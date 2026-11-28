@@ -118,12 +118,12 @@ test('a target that runs a file importing a built workspace package must depend 
     'apps/cli/scripts/lazy.ts': `const { greet } = await import('@fx/greet');\ngreet();\n`,
     'apps/cli/scripts/tests/greet.test.ts': `import { greet } from '@fx/greet';\ngreet();\n`,
   });
-  buildProjectGraph(workspace.root);
+  await buildProjectGraph(workspace.root);
 
   // Act
-  const findings = lint(workspace.root, ['apps/cli/project.json']).filter(
-    ({ ruleId }) => ruleId === 'zukhruf/no-missing-dependency-build',
-  );
+  const findings = (
+    await lint(workspace.root, ['apps/cli/project.json'])
+  ).filter(({ ruleId }) => ruleId === 'zukhruf/no-missing-dependency-build');
 
   // Assert
   const reported = findings.map(
@@ -187,7 +187,7 @@ test('without the graph that nx caches, as on a fresh clone, the rule checks not
   });
 
   // Act
-  const findings = lint(workspace.root, ['apps/cli/project.json']);
+  const findings = await lint(workspace.root, ['apps/cli/project.json']);
 
   // Assert
   assert.deepEqual(findings, []);

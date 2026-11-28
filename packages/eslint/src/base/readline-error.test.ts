@@ -41,7 +41,7 @@ test('base reports a readline interface over a socket with no error listener in 
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   const reported = findings

@@ -43,7 +43,7 @@ test('a CommonJS file (.cjs or .cts) may call require(), its only import form', 
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   assert.deepEqual(requireAt(findings), []);
@@ -64,7 +64,7 @@ test('an ES module file still may not call require()', async () => {
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   assert.deepEqual(requireAt(findings), [workspace.path('src/paths.ts')]);

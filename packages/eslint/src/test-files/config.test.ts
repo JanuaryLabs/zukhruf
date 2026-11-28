@@ -27,7 +27,7 @@ void test.each(
       });
 
       // Act
-      const config = printConfig(workspace.root, 'src/sum.test.ts');
+      const config = await printConfig(workspace.root, 'src/sum.test.ts');
 
       // Assert
       const rules = isRecord(config) ? config['rules'] : undefined;

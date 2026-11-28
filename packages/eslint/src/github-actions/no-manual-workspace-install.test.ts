@@ -31,7 +31,7 @@ jobs:
   });
 
   // Act
-  const findings = lint(workspace.root, ['.']);
+  const findings = await lint(workspace.root, ['.']);
 
   // Assert
   assert.deepEqual(
@@ -62,7 +62,7 @@ runs:
   });
 
   // Act
-  const findings = lint(workspace.root, ['.']);
+  const findings = await lint(workspace.root, ['.']);
 
   // Assert
   assert.deepEqual(
@@ -92,7 +92,7 @@ jobs:
   });
 
   // Act
-  const findings = lint(workspace.root, ['.']);
+  const findings = await lint(workspace.root, ['.']);
 
   // Assert
   assert.deepEqual(findings, []);
@@ -120,7 +120,7 @@ jobs:
   });
 
   // Act
-  const findings = lint(workspace.root, ['.']);
+  const findings = await lint(workspace.root, ['.']);
 
   // Assert
   assert.deepEqual(findings, []);

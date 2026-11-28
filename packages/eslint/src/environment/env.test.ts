@@ -28,7 +28,7 @@ test('zukhruf/env does not check a tool config file, which runs at build time wi
   });
 
   // Act
-  const findings = lint(workspace.root, ['.']);
+  const findings = await lint(workspace.root, ['.']);
 
   // Assert
   const envFindings = findings.filter(({ ruleId }) => ruleId === RULE);
@@ -52,7 +52,7 @@ test('zukhruf/env with settings.env.startupFile does not check test files', asyn
   });
 
   // Act
-  const findings = lint(workspace.root, ['.']);
+  const findings = await lint(workspace.root, ['.']);
 
   // Assert
   assert.deepEqual(
@@ -78,7 +78,7 @@ test('zukhruf/env with settings.env.startupFile reports an undeclared key agains
   });
 
   // Act
-  const findings = lint(workspace.root, ['.']);
+  const findings = await lint(workspace.root, ['.']);
 
   // Assert
   assert.deepEqual(

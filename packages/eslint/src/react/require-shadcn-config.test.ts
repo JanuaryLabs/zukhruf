@@ -27,7 +27,10 @@ const dialog = [
   ``,
 ].join('\n');
 
-const kitFindings = (root: string, findings: ReturnType<typeof lint>) =>
+const kitFindings = (
+  root: string,
+  findings: Awaited<ReturnType<typeof lint>>,
+) =>
   findings
     .filter(({ ruleId }) =>
       ['zukhruf/require-shadcn-config', 'zukhruf/no-as-child'].includes(
@@ -51,7 +54,7 @@ test('a file that imports @zukhruf/shadcn under a config with the React communit
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   assert.deepEqual(kitFindings(workspace.root, findings), [
@@ -87,7 +90,7 @@ void test.each(
       });
 
       // Act
-      const findings = lint(workspace.root, ['src']);
+      const findings = await lint(workspace.root, ['src']);
 
       // Assert
       assert.deepEqual(
@@ -120,7 +123,7 @@ void test.each(
       });
 
       // Act
-      const findings = lint(workspace.root, ['src']);
+      const findings = await lint(workspace.root, ['src']);
 
       // Assert
       assert.deepEqual(
@@ -164,7 +167,7 @@ test('the shadcn config scoped to some folders leaves a kit import outside them 
   });
 
   // Act
-  const findings = lint(workspace.root, ['packages', 'apps']);
+  const findings = await lint(workspace.root, ['packages', 'apps']);
 
   // Assert
   assert.deepEqual(kitFindings(workspace.root, findings).sort(), [

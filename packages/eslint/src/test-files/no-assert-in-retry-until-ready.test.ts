@@ -20,7 +20,7 @@ async function reportedLines(lines: string[]): Promise<number[]> {
     ),
     'src/ready.test.ts': `${lines.join('\n')}\n`,
   });
-  const findings = lint(workspace.root, ['src/ready.test.ts']);
+  const findings = await lint(workspace.root, ['src/ready.test.ts']);
   const own = findings.filter(({ ruleId }) => ruleId === RULE);
   for (const { message } of own) {
     assert.match(

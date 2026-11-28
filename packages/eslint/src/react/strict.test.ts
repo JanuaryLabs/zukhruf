@@ -64,7 +64,7 @@ test('./shadcn-strict after the shadcn config turns on the six @shadcn/lint rule
   });
 
   // Act
-  const config = printConfig(workspace.root, 'src/box.tsx');
+  const config = await printConfig(workspace.root, 'src/box.tsx');
 
   // Assert
   assert.deepEqual(
@@ -83,7 +83,7 @@ test('./shadcn-strict reports a data-slot restyle of a kit part and an inline st
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   const ruleIds = findings.map(({ ruleId }) => ruleId);
@@ -109,8 +109,8 @@ test('the shadcn config without ./shadcn-strict turns on none of the strict rule
   });
 
   // Act
-  const config = printConfig(workspace.root, 'src/box.tsx');
-  const findings = lint(workspace.root, ['src']);
+  const config = await printConfig(workspace.root, 'src/box.tsx');
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   assert.deepEqual(

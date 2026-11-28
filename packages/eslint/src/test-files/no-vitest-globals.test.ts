@@ -23,7 +23,7 @@ async function findings(
     ),
     ...files,
   });
-  return lint(workspace.root, Object.keys(files))
+  return (await lint(workspace.root, Object.keys(files)))
     .filter(({ ruleId }) => ruleId === RULE)
     .map(({ file, line }) => [relative(workspace.root, file), line]);
 }

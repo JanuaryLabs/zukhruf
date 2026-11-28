@@ -61,7 +61,7 @@ test('base reports a relative import and a relative type import that have no ext
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   assert.deepEqual(extensionFindings(findings), [
@@ -87,7 +87,7 @@ test('base accepts a relative import with .js or .ts, a package, a package subpa
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   assert.deepEqual(extensionFindings(findings), []);

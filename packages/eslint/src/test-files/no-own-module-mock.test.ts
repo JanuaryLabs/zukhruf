@@ -34,7 +34,7 @@ async function findings(lines: string[]): Promise<[number, string][]> {
     ),
     'packages/app/src/view.test.ts': `${lines.join('\n')}\n`,
   });
-  return lint(workspace.root, ['packages/app/src/view.test.ts'])
+  return (await lint(workspace.root, ['packages/app/src/view.test.ts']))
     .filter(({ ruleId }) => ruleId === RULE)
     .map(({ line, message }) => {
       assert.match(

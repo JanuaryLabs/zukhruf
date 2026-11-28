@@ -32,9 +32,11 @@ async function findings(
       Object.entries(files).map(([path, content]) => [`src/${path}`, content]),
     ),
   });
-  return lint(
-    workspace.root,
-    paths.map((path) => `src/${path}`),
+  return (
+    await lint(
+      workspace.root,
+      paths.map((path) => `src/${path}`),
+    )
   )
     .filter(({ ruleId }) => ruleId === RULE)
     .map(({ file, message, line }) => {

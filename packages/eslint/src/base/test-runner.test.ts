@@ -53,7 +53,7 @@ test('base reports a Jest or Mocha import in a test file and in a setup file', a
   });
 
   // Act
-  const findings = lint(workspace.root, ['src']);
+  const findings = await lint(workspace.root, ['src']);
 
   // Assert
   assert.deepEqual(reported(findings, 'zukhruf/no-other-test-runner'), [
@@ -83,7 +83,7 @@ test('an end-to-end folder that turns off the Playwright ban keeps the ban on ot
   });
 
   // Act
-  const findings = lint(workspace.root, ['e2e']);
+  const findings = await lint(workspace.root, ['e2e']);
 
   // Assert
   assert.deepEqual(reported(findings, 'zukhruf/no-playwright-test'), []);

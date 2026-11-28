@@ -25,7 +25,7 @@ async function lintWorkspace(
       ...greet,
     }),
   });
-  return lint(workspace.root, [file]);
+  return await lint(workspace.root, [file]);
 }
 
 /** Lints `libs/greet/package.json`, a project below the workspace root, with `manifest/recommended`. */

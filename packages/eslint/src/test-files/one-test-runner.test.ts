@@ -25,9 +25,11 @@ async function findings(
     ),
     ...files,
   });
-  return lint(
-    workspace.root,
-    Object.keys(files).filter((path) => path.endsWith('.test.ts')),
+  return (
+    await lint(
+      workspace.root,
+      Object.keys(files).filter((path) => path.endsWith('.test.ts')),
+    )
   )
     .filter(({ ruleId }) => ruleId === RULE)
     .map(({ file, line, message }) => [

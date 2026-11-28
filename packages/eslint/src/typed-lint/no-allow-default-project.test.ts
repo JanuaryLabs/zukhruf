@@ -32,10 +32,12 @@ async function findings(
         .join(',\n'),
     ),
   });
-  return lint(workspace.root, paths).map(({ file, ruleId, message }) => [
-    relative(workspace.root, file),
-    ruleId === RULE ? message : (ruleId ?? message),
-  ]);
+  return (await lint(workspace.root, paths)).map(
+    ({ file, ruleId, message }) => [
+      relative(workspace.root, file),
+      ruleId === RULE ? message : (ruleId ?? message),
+    ],
+  );
 }
 
 test('a non-empty allowDefaultProject is reported on each file whose parser options carry it, with what to do', async () => {
