@@ -1,6 +1,6 @@
 # @zukhruf/chaos
 
-> **Design for review (backlog #6078).** This is the API on paper. There is no code, and the folder is not a project yet. Each decision is a proposed ADR, and each detail that no record decides is in [Open for the review](#open-for-the-review).
+> **In build (backlog #6078).** The API on paper was approved on 2026-11-28, and there is no code yet. Each decision is an accepted ADR, and each detail that the review decided is in [Decided in the review](#decided-in-the-review).
 
 Put faults between a client of a test and a real server. A `Proxy` forwards each connection to its upstream, the real server. A `Server` of `@zukhruf/net` serves it on a free port, and the client connects to that port in place of the server's. `proxy.add(toxic)` puts a fault on one stream of each connection, also of each connection that is open: a latency, a partition, a reset, a stall after a count of bytes, a side that vanishes. The model is [Toxiproxy](https://github.com/Shopify/toxiproxy), in the process of the test ([ADR 0001](./docs/adr/0001-a-tool-package-on-net-holds-the-faults-that-a-proxy-injects-between-a-client-and-a-real-server.md)).
 
@@ -131,7 +131,7 @@ The package has no error class of its own.
 
 ## Why not a package of npm
 
-The npm candidates are not probed yet. By their npm metadata of 2026-11-28, `toxy` 0.3.16 (last change 2022) is "Hackable HTTP proxy to simulate server failure scenarios and network conditions" and `chaos-proxy` 1.0.0 is "Express-based proxy and CLI for injecting network chaos ... into API requests": both are HTTP proxies, and the copies fault raw TCP of database drivers. Their probe is item 10 of [Open for the review](#open-for-the-review).
+No npm package does the job (probe of 2026-11-28 on Node.js 26). `toxy` 0.3.16 (archived) and `@fetchkit/chaos-proxy` 3.4.3, the successor of `chaos-proxy`, are HTTP proxies: a raw TCP `PING` through each came back as `HTTP/1.1 400 Bad Request`, so neither carries the protocol of a database driver. Neither has faults for one direction, a slicer or a stall after a count of bytes, and `@fetchkit/chaos-proxy` cannot listen on port 0.
 
 ## API
 
@@ -208,9 +208,9 @@ export class Vanish implements Toxic {
 }
 ```
 
-## Open for the review
+## Decided in the review
 
-Each item is a detail that a caller sees and that no record decides. Each has a proposal and the leader that it follows.
+Each item is a detail that a caller sees. Ezz approved each proposal on 2026-11-28 ("Approve as written"; item 12, the name `Proxy`: "Proxy"), and each follows the leader that it names. The npm candidates are probed before the build.
 
 1. **The type of the upstream.** Proposal: `{ host, port }`, where `host` can be a host name, as Toxiproxy's `upstream` is `host:port`. A `net.SocketAddress` refuses a host name (`ERR_INVALID_ADDRESS` for `localhost`, Node 26.13.1), and a Docker host can be a name. An upstream on a pipe (a `PipeAddress`) is later, for `EngineProxy`.
 2. **The clock is an option of `Proxy`, not of each toxic.** Proposal: one required `clock` for the proxy, given to each toxic through `link.clock`, so a test gives it once (root ADR 0004). Toxiproxy's toxics read the time of Go.
@@ -221,7 +221,7 @@ Each item is a detail that a caller sees and that no record decides. Each has a 
 7. **No `jitter` and no `toxicity` now.** Toxiproxy has both. Proposal: later, when a consumer needs one; each takes a source of random numbers as an input then.
 8. **What `StallAfter.reached` gives.** elt's `stallAfter` resolves with the bytes that the client had sent. Proposal: `Promise<void>`; a count of bytes is a fact of the connection, not of the toxic. elt's move decides it.
 9. **The count of `StallAfter` is for each connection, and it acts on later connections too.** elt counts over all connections and lets a later connection pass. Proposal: Toxiproxy's model, one state for each link; the move of elt's two tests proves it is enough, or names the gap.
-10. **npm candidates.** `toxy` and `chaos-proxy` are not probed. Proposal: probe both before the build, and record why each fails or is used.
+10. **npm candidates.** Probed on 2026-11-28: `toxy` and `@fetchkit/chaos-proxy` are HTTP proxies and cannot carry raw TCP, so the package builds its own proxy.
 11. **The `link.reset()` side.** Toxiproxy's `reset_peer` closes its stub ([reset_peer.go](https://github.com/Shopify/toxiproxy/blob/main/toxics/reset_peer.go)). Proposal: `resetAndDestroy()` on both sockets, so the client and the server each see `ECONNRESET`.
 12. **The class name `Proxy` hides the global `Proxy` of JavaScript** in each module that imports it. The record names it `class Proxy(upstream)`, after Toxiproxy's proxy. Proposal: keep the name, because a test file seldom uses the global `Proxy`; the other choice is `TcpProxy`, which names the transport as Go names `TCPConn`.
 

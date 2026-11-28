@@ -1,6 +1,6 @@
 # A proxy is a handler that a server serves, and it forwards each connection to its upstream
 
-Status: Proposed 2026-11-28 (backlog #6078).
+Status: Accepted 2026-11-28 (backlog #6078). Ezz approved the paper of 028f631b as written.
 
 Decision-makers: Ezz, on 2026-11-28, for the shape. The record says: "class Proxy(upstream) is a handler that a Server serves; ... forwarding through node:stream/promises pipeline". The zukhruf session of backlog #6078 proposes the rest from the leaders and the probes below. The type of the upstream, the place of the clock, and the name of the handler are in the "Open for the review" list of the README.
 

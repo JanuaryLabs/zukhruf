@@ -1,6 +1,6 @@
 # A toxic is a strategy for one stream of each connection, and add gives a disposable
 
-Status: Proposed 2026-11-28 (backlog #6078).
+Status: Accepted 2026-11-28 (backlog #6078). Ezz approved the paper of 028f631b as written.
 
 Decision-makers: Ezz, on 2026-11-28, for the shape. The record says: "interface Toxic (a Transform per direction, Strategy) with classes Latency, Timeout (0 = partition), ResetPeer, Slicer (Toxiproxy names), StallAfter, Vanish; proxy.add(toxic) returns a Disposable". The zukhruf session of backlog #6078 proposes the method of the interface and what a removal does, from Toxiproxy's source. The default of the stream is in the "Open for the review" list of the README.
 

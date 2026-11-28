@@ -1,6 +1,6 @@
 # The toxics are Latency, Timeout, ResetPeer and Slicer after Toxiproxy, and StallAfter and Vanish are our own
 
-Status: Proposed 2026-11-28 (backlog #6078).
+Status: Accepted 2026-11-28 (backlog #6078). Ezz approved the paper of 028f631b as written.
 
 Decision-makers: Ezz, on 2026-11-28, for the six classes: "Latency, Timeout (0 = partition), ResetPeer, Slicer (Toxiproxy names), StallAfter, Vanish". The record also says: "Decided by the session from the leaders (not questions): ... both own faults ship (stallAfter for elt, vanish for mutex ADR 0035)". The zukhruf session of backlog #6078 proposes the options of each class; their names and units are in the "Open for the review" list of the README.
 

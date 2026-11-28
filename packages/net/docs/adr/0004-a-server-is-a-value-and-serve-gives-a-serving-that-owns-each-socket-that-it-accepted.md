@@ -1,6 +1,6 @@
 # A server is a value, and serve gives a serving that owns each socket that it accepted
 
-Status: Proposed 2026-11-28 (backlog #6078).
+Status: Accepted 2026-11-28 (backlog #6078). Ezz approved the paper of 028f631b as written.
 
 Decision-makers: Ezz, on 2026-11-28. The record says: "the composable shape, no statics (the step 2 draft copied httptest.NewServer and Toxiproxy as statics Server.listen / Proxy.to; Go has no constructors, TS does): ... class Server is a value (handler, options) whose serve(endpoint) returns a Serving (address: net.SocketAddress, close(): ends each tracked socket and awaits its close, shutdown(signal), asyncDispose), as Command#start returns a Process". The type of `address` follows [ADR 0003](./0003-an-endpoint-listens-and-gives-a-listener-that-never-ends-an-accepted-socket.md).
 

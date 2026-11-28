@@ -1,6 +1,6 @@
 # @zukhruf/net
 
-> **Design for review (backlog #6078).** This is the API on paper. There is no code, and the folder is not a project yet. Each decision is a proposed ADR, and each detail that no record decides is in [Open for the review](#open-for-the-review).
+> **In build (backlog #6078).** The API on paper was approved on 2026-11-28, and there is no code yet. Each decision is an accepted ADR, and each detail that the review decided is in [Decided in the review](#decided-in-the-review).
 
 A server of this program that accepts connections, and that ends each one at its end. A `Server` says what to do with each connection. `server.serve(endpoint)` listens on a TCP port of the loopback address or on a pipe, and gives a `Serving`. The serving keeps each socket that it accepted. Its `close()` destroys each one and waits for its close, and its `shutdown(signal)` waits until each one ends by itself and closes the rest at the abort. `@zukhruf/net/http` is the same server for HTTP.
 
@@ -138,7 +138,7 @@ The package has no error class of its own. A caller does not do a different next
 
 ## Why not a package of npm
 
-The leaders' standard libraries split listener and server, and Node.js 26 gives every part but the tracking of accepted sockets on a `net.Server`: `net.Server` has no `closeAllConnections` (probe of 2026-11-28). The package adds that one part. The npm candidates are not probed yet. By their npm metadata of 2026-11-28, `stoppable` 1.1.0 (last change 2022) and `http-terminator` 3.2.0 (last change 2022, "Gracefully terminates HTTP(S) server") are for HTTP servers, by their names and descriptions. Their probe is item 13 of [Open for the review](#open-for-the-review).
+The leaders' standard libraries split listener and server, and Node.js 26 gives every part but the tracking of accepted sockets on a `net.Server`: `net.Server` has no `closeAllConnections` (probe of 2026-11-28). The package adds that one part. No npm package does that part (probe of 2026-11-28 on Node.js 26). `stoppable` 1.1.0 (last release 2018) ends and destroys the sockets of a raw `net.Server`, but its grace is a fixed time with no abort signal, and with sockets that `emit('connection')` gave an `http.Server` it calls back before their close. `http-terminator` 3.2.0 (last release 2022) skips the sockets of a raw `net.Server` and polls every 10 ms. Both lean on `server.close()`, so neither waits for sockets that the server did not accept itself.
 
 ## API
 
@@ -229,9 +229,9 @@ export type HttpServing<A> = Serving<A> &
   (A extends SocketAddress ? { readonly origin: string } : unknown);
 ```
 
-## Open for the review
+## Decided in the review
 
-Each item is a detail that a caller sees and that no record decides. Each has a proposal and the leader that it follows.
+Each item is a detail that a caller sees. Ezz approved each proposal on 2026-11-28 ("Approve as written"; item 2, `address` on `PipeServer`: "Add address"), and each follows the leader that it names. The npm candidates are probed before the build.
 
 1. **The type of `serving.address`.** The record says `net.SocketAddress`. It cannot hold a pipe's path. Proposal: `Endpoint<A>` and `Serving<A>`, so the address is a `net.SocketAddress` for TCP and a `PipeAddress` for a pipe (.NET's `IConnectionListener.EndPoint`, typed by the endpoint) ([ADR 0003](./docs/adr/0003-an-endpoint-listens-and-gives-a-listener-that-never-ends-an-accepted-socket.md)).
 2. **`address` on `PipeServer`.** `PipeServer` has `endpoint.address`, not `address`, so `PipeEndpoint` does not meet `Endpoint` yet. Proposal: pipes adds `readonly address: PipeAddress` in its own commit, after Go's `Listener.Addr()`. This is a change of `@zukhruf/pipes`.
@@ -245,7 +245,7 @@ Each item is a detail that a caller sees and that no record decides. Each has a 
 10. **`origin` only on TCP.** Proposal: `HttpServing<A>` has `origin` only when `A` is a `net.SocketAddress`, so a serving on a pipe has no URL to misuse (httptest's `URL`).
 11. **`HttpServer` options.** Proposal: the options of `http.createServer` and `upgrade`. Go's `http.Server` has its fields; Node's `http.createServer(options)` has these.
 12. **The call of the 106 importers changes.** The record of 2026-11-27 says "change one import, no alias"; the composable shape of 2026-11-28 changes the call too (see the table in [Serve HTTP](#serve-http)). Proposal: the later ruling, with no `start()` kept.
-13. **npm candidates.** `stoppable` and `http-terminator` are not probed yet. Proposal: probe both before the build, for the tracking and the shutdown of a raw `net.Server`, and record why each fails or is used.
+13. **npm candidates.** Probed on 2026-11-28: `stoppable` and `http-terminator` do part of the job and fail at the rest (see [The same concepts in other systems](#the-same-concepts-in-other-systems) above), so the package tracks its sockets itself.
 
 ## Documentation
 

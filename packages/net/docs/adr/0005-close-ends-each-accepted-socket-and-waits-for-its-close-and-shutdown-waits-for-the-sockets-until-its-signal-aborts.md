@@ -1,6 +1,6 @@
 # Close ends each accepted socket and waits for its close, and shutdown waits for the sockets until its signal aborts
 
-Status: Proposed 2026-11-28 (backlog #6078).
+Status: Accepted 2026-11-28 (backlog #6078). Ezz approved the paper of 028f631b as written.
 
 Decision-makers: the zukhruf session of backlog #6078 (2026-11-28), from the leaders. The record says: "Decided by the session from the leaders (not questions): shutdown(signal) waits for the connections and closes them at the abort (Go Shutdown(ctx), Kestrel)". Ezz ruled the methods: "close(): ends each tracked socket and awaits its close, shutdown(signal), asyncDispose". What `shutdown` gives after an abort is in the "Open for the review" list of the README.
 

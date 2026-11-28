@@ -1,6 +1,6 @@
 # The name is net, after Go net and Node net
 
-Status: Proposed 2026-11-28 (backlog #6078).
+Status: Accepted 2026-11-28 (backlog #6078). Ezz approved the paper of 028f631b as written.
 
 Decision-makers: Ezz, on 2026-11-28. The record says: "DECIDED (Ezz, 2026-11-28, step 2): the base package follows Go: @zukhruf/net (Go net and Node net; Go names for its types: Server, Close, Shutdown, Addr as address)". The step 2 draft had proposed `@zukhruf/connections`.
 

@@ -1,6 +1,6 @@
 # The HTTP view is a server whose handler gives each socket to an http.Server
 
-Status: Proposed 2026-11-28 (backlog #6078).
+Status: Accepted 2026-11-28 (backlog #6078). Ezz approved the paper of 028f631b as written.
 
 Decision-makers: Ezz, on 2026-11-28. The record says: "./http HttpServer is a Server whose handler emits each socket into an http.Server (Node's emit('connection'); close uses the native closeAllConnections)". The probe below shows that the native `closeAllConnections` does nothing for such sockets. The zukhruf session of backlog #6078 proposes what takes its place. The call of each importer changes ("Open for the review" in the README).
 

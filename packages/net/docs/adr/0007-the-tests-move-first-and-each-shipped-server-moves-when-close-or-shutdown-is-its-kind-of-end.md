@@ -1,6 +1,6 @@
 # The tests move first, and each shipped server moves when close or shutdown is its kind of end
 
-Status: Proposed 2026-11-28 (backlog #6078).
+Status: Accepted 2026-11-28 (backlog #6078). Ezz approved the paper of 028f631b as written.
 
 Decision-makers: Ezz, on 2026-11-28. The record says: "the 5 shipped servers move LATER (tests first; each moves when close/shutdown matches its kind of end)". The zukhruf session of backlog #6078 made the map below (session f0478ea1, kept in `~/.claude/plans/test-primitives-6078/map.txt`).
 

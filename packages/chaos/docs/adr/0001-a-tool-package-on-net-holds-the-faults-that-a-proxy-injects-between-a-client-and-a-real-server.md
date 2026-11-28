@@ -1,6 +1,6 @@
 # A tool package on net holds the faults that a proxy injects between a client and a real server
 
-Status: Proposed 2026-11-28 (backlog #6078).
+Status: Accepted 2026-11-28 (backlog #6078). Ezz approved the paper of 028f631b as written.
 
 Decision-makers: Ezz, on 2026-11-27. The record says: "HOME: a BASE package owns the connections ... The faults (delay, partition, silence, stall after N bytes, reset) go in a separate TOOL package on top of it." The zukhruf session of backlog #6078 decided the shape from the leaders (step 1 verdict, 2026-11-27): "The fault hop is the TOOL package, Toxiproxy-shaped".
 

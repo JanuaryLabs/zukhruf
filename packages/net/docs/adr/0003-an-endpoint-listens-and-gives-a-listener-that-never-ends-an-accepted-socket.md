@@ -1,6 +1,6 @@
 # An endpoint listens and gives a listener that never ends an accepted socket
 
-Status: Proposed 2026-11-28 (backlog #6078).
+Status: Accepted 2026-11-28 (backlog #6078). Ezz approved the paper of 028f631b as written.
 
 Decision-makers: Ezz, on 2026-11-28, for the shape. The record says: "interface Endpoint { listen(handler): Promise<Listener> } (PipeEndpoint of @zukhruf/pipes already has it; new TcpEndpoint({ host = 127.0.0.1, port = 0 }) over net.Server.listen), Listener never ends accepted sockets (Go net.Listener)". The zukhruf session of backlog #6078 proposes the type of the address and the `address` of `PipeServer` below; both are in the "Open for the review" list of the README.
 

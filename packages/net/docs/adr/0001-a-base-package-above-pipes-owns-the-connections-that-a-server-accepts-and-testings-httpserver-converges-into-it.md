@@ -1,6 +1,6 @@
 # A base package above pipes owns the connections that a server accepts, and testing's HttpServer converges into it
 
-Status: Proposed 2026-11-28 (backlog #6078).
+Status: Accepted 2026-11-28 (backlog #6078). Ezz approved the paper of 028f631b as written.
 
 Decision-makers: Ezz, on 2026-11-27, on two splits. On the home, the record says: "HOME: a BASE package owns the connections, for shipped code and tests (Ezz chose it over a test tool package ...). The faults ... go in a separate TOOL package on top of it." On HttpServer: "HttpServer of @zukhruf/testing/http CONVERGES into the base server package as its HTTP view". The zukhruf session of backlog #6078 decided the rest from the leaders (step 1 verdict, 2026-11-27): a new package above `@zukhruf/pipes`, and pipes does not converge into it.
 

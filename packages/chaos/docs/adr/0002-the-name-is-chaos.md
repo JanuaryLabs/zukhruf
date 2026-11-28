@@ -1,6 +1,6 @@
 # The name is chaos
 
-Status: Proposed 2026-11-28 (backlog #6078).
+Status: Accepted 2026-11-28 (backlog #6078). Ezz approved the paper of 028f631b as written.
 
 Decision-makers: Ezz, on 2026-11-28. The record says: "the tool package is @zukhruf/chaos". The step 2 draft had proposed `@zukhruf/fault-injection`, after Polly Simmy's term, with `chaos` as the alternative.
 
