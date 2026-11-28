@@ -130,11 +130,11 @@ const page = new Page('Haiku and DeepSeek on 7eea4f3', [
 
 ```ts
 const page = new Page('offers over the climb', [
-  new Trend([first, second, third], { scores, bootstrap }),
+  new Trend([first, second, third], { scores, slices, bootstrap }),
 ]);
 ```
 
-`Trend` keeps the order that the caller gives, and takes two runs or more (a tuple type). It gives one primitive, its line, which carries the table of the runs (ADR 0011). Each score shows its value and its interval in each run. A test that only some runs have counts in each run that has it, and the page says how many tests each run has.
+`Trend` keeps the order that the caller gives, and takes two runs or more (a tuple type). It takes the scores and slices that `Summary` takes, so a host passes both the same values. It gives one primitive, its line, which carries the table of the runs (ADR 0011). Each score shows its value and its interval in each run, over all its samples. A score whose bar is on a slice also gets a series right after its own, from each run's samples of that key, named as `Summary` names that row, such as `values_precision · page = offers` (#6410). A run with no sample of the key has no value in that series: a gap in the line and a dash in the table. The claim reads the first score over the whole run. A test that only some runs have counts in each run that has it, and the page says how many tests each run has.
 
 ## When each page is written
 

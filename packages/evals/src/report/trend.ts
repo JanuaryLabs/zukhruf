@@ -4,24 +4,30 @@ import {
   Line,
   type Primitive,
   type RunLog,
+  type Sample,
   type Section,
   Table,
 } from '../index.ts';
 import { withEnds, withKept } from './data-tables.ts';
 import { type Numbers, measure } from './part.ts';
-import type { Score } from './summary.ts';
+import type { Score, Slice } from './summary.ts';
 
 const plain = (text: string): Cell => ({ text, tone: 'neutral' });
 
 // Where do the scores go over the runs? One line for each score over the
 // runs, in the order the caller gives, with its value and its interval in
 // each run, as Phoenix's chart strip, LangSmith and HELM, carrying a table of
-// the same numbers with the tests of each run (ADR 0011). The value is
-// Run#total and the interval Bootstrap's (measure), drawn run by run and score
-// by score, so the bootstrap keeps its state across the calls. A run where a score has no value
-// is a gap in its line. The claim reads the first score and says no more than
+// the same numbers with the tests of each run (ADR 0011). A score whose bar is
+// on a slice has a second line right after its own, on each run's samples of
+// that key, named as Summary names its row, so a host passes Summary's scores
+// and slices and reads the bar's numbers over the runs (#6410). The value is
+// Run#total and the interval Bootstrap's (measure), drawn run by run and line
+// by line, so the bootstrap keeps its state across the calls. A run where a
+// line has no value, such as a run with no sample of the key, is a gap in it.
+// The claim reads the first score over the whole run and says no more than
 // its numbers (report ADR 0002).
-// Bars are not read: a bar holds for a score over one run.
+// The bar's number and verdict are not read: a bar holds for a score over one
+// run.
 export class Trend<Answer, C> implements Section {
   readonly id = 'trend';
   readonly claim: string;
@@ -36,8 +42,13 @@ export class Trend<Answer, C> implements Section {
     ],
     {
       scores,
+      slices,
       bootstrap,
-    }: { readonly scores: readonly Score[]; readonly bootstrap: Bootstrap },
+    }: {
+      readonly scores: readonly Score[];
+      readonly slices: readonly Slice<Answer, C>[];
+      readonly bootstrap: Bootstrap;
+    },
   ) {
     const [head] = scores;
     if (head === undefined)
@@ -49,13 +60,36 @@ export class Trend<Answer, C> implements Section {
       const run = log.run();
       for (const { name } of scores) run.total(name);
     }
+    const lines = scores.flatMap((score) => {
+      const whole = {
+        label: score.name,
+        name: score.name,
+        of: (): boolean => true,
+      };
+      const on = score.bar?.slice;
+      if (on === undefined) return [whole];
+      const [sliceName, key] = on;
+      const slice = slices.find(({ name }) => name === sliceName);
+      if (slice === undefined)
+        throw new RangeError(
+          `The bar of ${score.name} reads the slice "${sliceName}", and the slices are: ${slices.map(({ name }) => name).join(', ')}`,
+        );
+      return [
+        whole,
+        {
+          label: `${score.name} · ${sliceName} = ${key}`,
+          name: score.name,
+          of: (sample: Sample<Answer, C>) => slice.key(sample) === key,
+        },
+      ];
+    });
     const runs = logs.map((log) => ({
       id: log.info.id,
       createdAt: log.info.createdAt,
       // A test that only some runs have counts in each run that has it.
       tests: new Set(log.samples.map(({ test }) => test)).size,
-      numbers: scores.map(({ name }) =>
-        measure(log, log.samples, name, bootstrap),
+      numbers: lines.map(({ name, of }) =>
+        measure(log, log.samples.filter(of), name, bootstrap),
       ),
     }));
     this.claim = Trend.#claim(
@@ -70,8 +104,8 @@ export class Trend<Answer, C> implements Section {
     this.primitives = [
       new Line({
         steps: runs.map(({ id }) => id),
-        series: scores.map(({ name }, index) => ({
-          label: name,
+        series: lines.map(({ label }, index) => ({
+          label,
           values: runs.flatMap(({ numbers }) =>
             numbers
               .slice(index, index + 1)
@@ -79,7 +113,7 @@ export class Trend<Answer, C> implements Section {
           ),
         })),
         table: new Table(
-          ['run', 'created', 'tests', ...scores.map(({ name }) => name)],
+          ['run', 'created', 'tests', ...lines.map(({ label }) => label)],
           runs.map(({ id, createdAt, tests, numbers }) => [
             plain(id),
             plain(createdAt.toISOString().slice(0, 10)),

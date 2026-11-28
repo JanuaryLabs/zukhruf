@@ -70,6 +70,18 @@ Changes: `FieldDiff.#pair` sorts out the leaves of one side, since their marks (
 
 The item classes of `FieldErrors` (`#itemClass`, `#isUnder`) are not copied: `FieldDiff` shows leaves, and a leaf of an unpaired item is on its own side by its own class. The leaf options (`nullIsMissing`) and the comparison (`Comparer#compare`, `Comparison#leaves`) are the parts both call, so neither copies them.
 
+## The slice of a bar
+
+`Trend` (`src/report/trend.ts`) reads the slice that a score's bar names as `Summary` (`src/report/summary.ts`) reads it (#6410). The lookup is in its second place, so it stays a copy (Rule of Three). A third place starts the extraction (backlog #6413). Until then, make each fix in both copies, and name both files in the commit.
+
+**The slice of a bar: `Summary`'s barred row → `Trend`'s series of a slice.**
+Both find the `Slice` named by `score.bar.slice` with `slices.find`, refuse an unknown name with the same `RangeError` ("The bar of <score> reads the slice …, and the slices are: …"), and name the row or series `<score> · <slice> = <key>`.
+Changes: `Summary` measures the bar's samples once for its verdict; `Trend` gives a series that each run measures on its samples of the key.
+
+### Not copied
+
+`Slices` (`src/report/slices.ts`) builds a table for each key of each slice; it reads no bar, so it is not a copy.
+
 ## Copies in test files
 
 **A sample of a structured answer against its case (test data).**

@@ -94,6 +94,7 @@ test('each point is measure of its score on its run, drawn run by run and score 
   const { line } = parts(
     new Trend(runs, {
       scores: [higher('recall'), higher('precision')],
+      slices: [],
       bootstrap: seeded(7),
     }),
   );
@@ -111,7 +112,11 @@ test('the runs keep the order the caller gives, even when their creation times r
     single('eval-a', '2026-11-01', { f1: new Ratio(1, 4) }),
   ] as const;
 
-  const trend = new Trend(runs, { scores: [higher('f1')], bootstrap: first() });
+  const trend = new Trend(runs, {
+    scores: [higher('f1')],
+    slices: [],
+    bootstrap: first(),
+  });
   const { line, rows } = parts(trend);
 
   assert.deepEqual(
@@ -146,7 +151,7 @@ test('the tests of a run are its distinct tests, and a test that only some runs 
   ] as const;
 
   const { columns, rows } = parts(
-    new Trend(runs, { scores: [higher('f1')], bootstrap: first() }),
+    new Trend(runs, { scores: [higher('f1')], slices: [], bootstrap: first() }),
   );
 
   assert.deepEqual(
@@ -161,7 +166,7 @@ test('a Trend of one run cannot be written', () => {
   const trend = new Trend(
     // @ts-expect-error A trend needs two runs or more.
     runs,
-    { scores: [higher('f1')], bootstrap: first() },
+    { scores: [higher('f1')], slices: [], bootstrap: first() },
   );
 
   // The section still builds at run time; the claim is the type error.
@@ -183,6 +188,7 @@ test('the table gives each run its id, the day it was created and each score wit
   const { columns, rows } = parts(
     new Trend(runs, {
       scores: [higher('recall'), higher('precision')],
+      slices: [],
       bootstrap: first(),
     }),
   );
@@ -218,7 +224,11 @@ test('the markdown of a trend holds one table, a row for each run, so each value
   ] as const;
 
   const { blocks } = render(
-    new Trend(runs, { scores: [higher('recall')], bootstrap: first() }),
+    new Trend(runs, {
+      scores: [higher('recall')],
+      slices: [],
+      bootstrap: first(),
+    }),
   );
 
   assert.deepEqual(blocks, [
@@ -238,7 +248,7 @@ test('a run where a score has no whole is a gap in its line and a dash in the ta
   ] as const;
 
   const { line, rows } = parts(
-    new Trend(runs, { scores: [higher('f1')], bootstrap: first() }),
+    new Trend(runs, { scores: [higher('f1')], slices: [], bootstrap: first() }),
   );
 
   assert.deepEqual(
@@ -298,6 +308,7 @@ void test.each(
     test(`the claim when ${name}`, () => {
       const trend = new Trend(runs, {
         scores: [higher('f1')],
+        slices: [],
         bootstrap: first(),
       });
 
@@ -319,6 +330,7 @@ test('the claim reads the first score only', () => {
 
   const trend = new Trend(runs, {
     scores: [higher('f1'), higher('recall')],
+    slices: [],
     bootstrap: first(),
   });
 
@@ -334,10 +346,13 @@ test('a Trend of no scores is a RangeError', () => {
     single('eval-2', '2026-11-02', { f1: new Ratio(1, 2) }),
   ] as const;
 
-  assert.throws(() => new Trend(runs, { scores: [], bootstrap: first() }), {
-    name: 'RangeError',
-    message: 'A Trend section needs a score to show',
-  });
+  assert.throws(
+    () => new Trend(runs, { scores: [], slices: [], bootstrap: first() }),
+    {
+      name: 'RangeError',
+      message: 'A Trend section needs a score to show',
+    },
+  );
 });
 
 test('a score that no sample of one of the runs gives is an error, not a gap', () => {
@@ -347,7 +362,12 @@ test('a score that no sample of one of the runs gives is an error, not a gap', (
   ] as const;
 
   assert.throws(
-    () => new Trend(runs, { scores: [higher('f1')], bootstrap: first() }),
+    () =>
+      new Trend(runs, {
+        scores: [higher('f1')],
+        slices: [],
+        bootstrap: first(),
+      }),
     {
       name: 'Error',
       message: 'No scorecard of the run gave a ratio named "f1"',
@@ -362,7 +382,7 @@ test('a Trend section with a gap renders as HTML and Markdown with its claim and
       single('eval-2', '2026-11-02', { f1: new Ratio(0, 0) }),
       single('eval-3', '2026-11-03', { f1: new Ratio(3, 4) }),
     ],
-    { scores: [higher('f1')], bootstrap: first() },
+    { scores: [higher('f1')], slices: [], bootstrap: first() },
   );
   const { html, markdown, heading } = render(section);
 
@@ -397,6 +417,7 @@ test('a point whose interval comes from fewer resamples than the bootstrap drew 
   const { rows } = parts(
     new Trend([run, next], {
       scores: [higher('recall')],
+      slices: [],
       bootstrap: seeded(7),
     }),
   );
@@ -410,4 +431,147 @@ test('a point whose interval comes from fewer resamples than the bootstrap drew 
     ],
     ['eval-2', '2026-11-02', '1', '1.000 [1.000, 1.000]'],
   ]);
+});
+
+test('a score with a bar on a slice has a line of its own on each run’s samples of the key, named as Summary names its row, right after the line of the score', () => {
+  // The pages a and b have offers, the page c is empty.
+  const page = {
+    name: 'page',
+    key: ({ test: testId }: Sample<string, null>) =>
+      testId === 'c' ? 'empty' : 'offers',
+  };
+  const runs = [
+    log('eval-1', '2026-11-01', [
+      sample('a', { precision: new Ratio(1, 4), recall: new Ratio(1, 1) }),
+      sample('b', { precision: new Ratio(2, 4), recall: new Ratio(0, 1) }),
+      sample('c', { precision: new Ratio(4, 4), recall: new Ratio(1, 2) }),
+    ]),
+    log('eval-2', '2026-11-02', [
+      sample('a', { precision: new Ratio(3, 4), recall: new Ratio(1, 2) }),
+      sample('b', { precision: new Ratio(4, 4), recall: new Ratio(2, 2) }),
+      sample('c', { precision: new Ratio(0, 4), recall: new Ratio(1, 1) }),
+    ]),
+  ] as const;
+  const expected = seeded(7);
+  const points = runs.map((run) => {
+    const offers = run.samples.filter(({ test: testId }) => testId !== 'c');
+    return [
+      measure(run, run.samples, 'precision', expected),
+      measure(run, offers, 'precision', expected),
+      measure(run, run.samples, 'recall', expected),
+    ].map(({ value, ends }) => ({ value, ends }));
+  });
+
+  const { line, columns } = parts(
+    new Trend(runs, {
+      scores: [
+        {
+          name: 'precision',
+          higherIsBetter: true,
+          bar: { atLeast: 0.9, slice: ['page', 'offers'] },
+        },
+        higher('recall'),
+      ],
+      slices: [page],
+      bootstrap: seeded(7),
+    }),
+  );
+
+  assert.deepEqual(
+    { series: line.series, columns },
+    {
+      series: [
+        { label: 'precision', values: points.map(([whole]) => whole) },
+        {
+          label: 'precision · page = offers',
+          values: points.map(([, offers]) => offers),
+        },
+        { label: 'recall', values: points.map(([, , recall]) => recall) },
+      ],
+      columns: [
+        'run',
+        'created',
+        'tests',
+        'precision',
+        'precision · page = offers',
+        'recall',
+      ],
+    },
+  );
+});
+
+test('a run with no sample of a bar’s key is a gap in the line of the slice and a dash in the table', () => {
+  const page = {
+    name: 'page',
+    key: ({ test: testId }: Sample<string, null>) =>
+      testId === 'c' ? 'empty' : 'offers',
+  };
+  const runs = [
+    log('eval-1', '2026-11-01', [
+      sample('a', { f1: new Ratio(1, 2) }),
+      sample('c', { f1: new Ratio(1, 1) }),
+    ]),
+    log('eval-2', '2026-11-02', [sample('a', { f1: new Ratio(1, 4) })]),
+  ] as const;
+
+  const { line, rows } = parts(
+    new Trend(runs, {
+      scores: [
+        {
+          name: 'f1',
+          higherIsBetter: true,
+          bar: { atLeast: 0.9, slice: ['page', 'empty'] },
+        },
+      ],
+      slices: [page],
+      bootstrap: first(),
+    }),
+  );
+
+  assert.deepEqual(
+    {
+      values: line.series.map(({ label, values }) => ({
+        label,
+        gaps: values.map(({ value }) => Number.isNaN(value)),
+      })),
+      rows: rows.map(([run, , , whole, empty]) => [run, whole, empty]),
+    },
+    {
+      values: [
+        { label: 'f1', gaps: [false, false] },
+        { label: 'f1 · page = empty', gaps: [false, true] },
+      ],
+      rows: [
+        ['eval-1', '0.667 [0.500, 0.500]', '1.000 [1.000, 1.000]'],
+        ['eval-2', '0.250 [0.250, 0.250]', '—'],
+      ],
+    },
+  );
+});
+
+test('a bar on a slice that the Trend is not given is a RangeError', () => {
+  const runs = [
+    single('eval-1', '2026-11-01', { f1: new Ratio(1, 2) }),
+    single('eval-2', '2026-11-02', { f1: new Ratio(1, 2) }),
+  ] as const;
+
+  assert.throws(
+    () =>
+      new Trend(runs, {
+        scores: [
+          {
+            name: 'f1',
+            higherIsBetter: true,
+            bar: { atLeast: 0.9, slice: ['page', 'offers'] },
+          },
+        ],
+        slices: [{ name: 'model', key: () => 'haiku' }],
+        bootstrap: first(),
+      }),
+    {
+      name: 'RangeError',
+      message:
+        'The bar of f1 reads the slice "page", and the slices are: model',
+    },
+  );
 });
