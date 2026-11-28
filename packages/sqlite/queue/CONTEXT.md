@@ -83,3 +83,15 @@ _Avoid_: Internal queue, outbox
 **Queue file**:
 The SQLite file that keeps the queues, the jobs and the schedules. A file that an earlier release made keeps its rows: `start()` makes it store the declared schema.
 _Avoid_: Database (also the `database` option), store, old file
+
+**Thread form**:
+`SqliteJobQueueThread`: the engine in a worker thread of its own, so its synchronous statements never block the host. Paper v2 of #4984 named the off-thread form of an engine after PGlite's `PGliteWorker`; this package says thread, since worker is a word of pg-boss here.
+_Avoid_: Worker (a polling loop of `work()`), off-thread queue, async queue
+
+**Host**:
+The thread that made a `SqliteJobQueueThread`, where the `work()` handlers run and the events are emitted.
+_Avoid_: Main thread (a host can be a worker thread too), parent, client
+
+**Host clock**:
+The clock of a thread form that is not `systemClock`. The engine arms each of its timers on it and reads its time, also through `Date.now`, from the host.
+_Avoid_: Remote clock (the word of the paper), proxy clock, fake clock

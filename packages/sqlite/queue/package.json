@@ -29,6 +29,12 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./thread": {
+      "@zukhruf/source": "./src/thread/index.ts",
+      "types": "./dist/thread/index.d.ts",
+      "import": "./dist/thread/index.js",
+      "default": "./dist/thread/index.js"
     }
   },
   "files": [
@@ -42,6 +48,7 @@
   },
   "dependencies": {
     "@zukhruf/async": "^0.8.70",
+    "@zukhruf/rpc": "^0.8.70",
     "@zukhruf/sqlite-drift": "^0.8.70",
     "@zukhruf/sqlite-notify": "^0.8.70",
     "@zukhruf/sqlite-open": "^0.8.70",

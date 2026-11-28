@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 import { Parity } from './parity.ts';
 
 describe('Parity', () => {
-  it('runs the scenario on both backends and resolves to the shared observation', async () => {
+  it('runs the scenario on each backend and resolves to the shared observation', async () => {
     const queues: string[] = [];
 
     const observed = await Parity.assertSame(async ({ queue }) => {
@@ -13,7 +13,11 @@ describe('Parity', () => {
     });
 
     assert.deepStrictEqual(observed, { value: 1 });
-    assert.deepStrictEqual(queues, ['PgBoss', 'SqliteJobQueue']);
+    assert.deepStrictEqual(queues, [
+      'PgBoss',
+      'SqliteJobQueue',
+      'SqliteJobQueueThread',
+    ]);
   });
 
   it('rejects with the deep-equal diff when one field differs between backends', async () => {

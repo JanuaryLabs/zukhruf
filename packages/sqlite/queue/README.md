@@ -63,6 +63,51 @@ const queue: JobQueue = new PgBoss(process.env.DATABASE_URL);
 - Job data is `unknown`. `work()` gives each handler `Job<unknown>`, and `findJobs()` gives `FoundJob<unknown>`. Validate the data that you read.
 - A listener for `error` is necessary. A failure in work that no caller awaits, for example a worker poll, goes to the `error` event. With no listener, `EventEmitter` throws.
 
+## Run the engine in a thread of its own
+
+`node:sqlite` is synchronous. A commit with `synchronous` FULL waits for the disk, and a write waits for the lock of another connection for up to the busy timeout of 5000 ms. On the main thread, each such wait stops every timer and every request of the host: a loaded host stalled up to 4.5 s (#4984). pg-boss never blocks its host, because Postgres writes in its own process. `SqliteJobQueueThread`, from `@zukhruf/sqlite-queue/thread`, runs a `SqliteJobQueue` in a worker thread, so the waits block that thread only ([ADR 0008](./docs/adr/0008-the-engine-runs-in-a-thread-of-its-own-and-the-handlers-stay-on-the-host.md)). Pick it for a host that must stay responsive: a server, an app with a UI, a pool of workers. `SqliteJobQueue` stays the choice for a CLI or a test that has nothing else to do while it waits.
+
+```ts
+import { mkdtempDisposable } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { SqliteJobQueueThread } from '@zukhruf/sqlite-queue/thread';
+
+await using scratch = await mkdtempDisposable(join(tmpdir(), 'queue-'));
+await using queue = new SqliteJobQueueThread({
+  path: join(scratch.path, 'jobs.sqlite'),
+});
+queue.on('error', (error) => console.error(error));
+await queue.start();
+await queue.createQueue('email');
+
+const sent = Promise.withResolvers<void>();
+await queue.work('email', async ([job]) => {
+  console.log('send to', job?.data);
+  sent.resolve();
+});
+await queue.send('email', { to: 'ada@example.com' });
+await sent.promise;
+```
+
+Output:
+
+```
+send to { to: 'ada@example.com' }
+```
+
+- It is a `JobQueue`, as `SqliteJobQueue` and `PgBoss` are, and it is `AsyncDisposable`. It emits `error`, `warning`, `wip` and `stopped`.
+- It takes the options of `SqliteJobQueue` without `database`, because a `DatabaseSync` cannot go to another thread, and `path` is necessary. `resourceLimits` sets the limits of the thread's heap and stack, as `new Worker` does. Node reads `--max-old-space-size` once for the process, so with that flag, also in `NODE_OPTIONS`, the thread's `maxOldGenerationSizeMb` does not apply.
+- `start()` starts the thread, opens the file with `synchronous` FULL and starts the engine. When it fails, it rejects and leaves no thread. `stop({ close: true })`, the default, and the dispose end the thread and wait for its exit.
+- The `work()` handlers run on the host. The engine in the thread gives each batch to the handler, and a job's `signal` aborts on the host when the engine aborts it.
+- With `systemClock`, or no clock, the engine uses the timers of its thread. Any other clock is the host's: the engine arms each timer on it, and reads its time. A `TestClock` waits in `tick()` for the statements of the engine, as for the statements of pg-boss.
+- The errors keep their class and their fields. An error of `node:sqlite` keeps `code`, `errcode` and `errstr`, so `sqliteResultCode` reads it as on the main thread.
+- With no `error` listener on the host, the engine behaves as with no listener: for example, a stop that fails to fail a worker's jobs warns the process with `ZUKHRUF_SQLITE_QUEUE_STOP_FAIL_UNHEARD`. Each process warning of the thread is emitted again on the host, under the host's flags.
+- A thread that ends outside a stop, for example out of memory, is started again after 1 s, then 2 s, doubling up to 30 s, on the queue's clock, as pg-boss reconnects (`db.js:129-178`). Each attempt that fails emits `error`. A call that was in flight rejects with `ConnectionLostError` of `@zukhruf/rpc` and is not sent again: a `send` may have committed, as a lost Postgres commit may. A call made during the restart waits for the attempt, and gets its error when it fails. The new thread starts with the last options of `start()` and registers each `work()` again, under the ids that `work()` gave, so `offWork(name, { id })` still finds it. The registered workers fetch at once, as pg-boss fetches when its listener comes back.
+- A value that the structured clone refuses, such as a `WeakMap`, cannot cross. The call rejects with `ConnectionLostError`, and the thread is started again.
+- A host that `node --eval` started cannot start the thread: the thread takes the host's `--input-type`, which Node allows only for `--eval`. Start the host from a file.
+
 ## Notify queues
 
 A queue with `notify: true` wakes its workers when a job comes, so they do not wait for their poll. pg-boss does this with `LISTEN` and `NOTIFY`. On a queue file, this package does it with [`@zukhruf/sqlite-notify`](../notify/README.md) ([ADR 0007](./docs/adr/0007-a-notify-queue-notifies-each-listener-on-the-file-through-sqlite-notify.md)).
@@ -130,6 +175,7 @@ Other methods of `PgBoss` are not in the subset, for example `getQueue`, `getJob
 | `UnsupportedStartAfterError`               | A `startAfter` string outside the forms that this package resolves: a `Date`, seconds, an ISO 8601 date time or duration, or Postgres interval units with integer amounts.                                 |
 | The `Error` or `AssertionError` of pg-boss | A refused argument, with the message that pg-boss gives. For example `Workers are disabled. pg-boss is stopped`.                                                                                           |
 | The error of SQLite                        | All other failures.                                                                                                                                                                                        |
+| `ConnectionLostError` of `@zukhruf/rpc`    | The thread form only: a call was in flight when its thread ended. It is not sent again.                                                                                                                    |
 
 Code that runs on both engines examines `code`, not the class. On Postgres, the error comes from the driver, not from this package, and `instanceof DatabaseError` is false. The `code` is the same on both engines.
 
@@ -332,6 +378,26 @@ class TimekeeperWarning extends Error {
 }
 ```
 
+```ts
+// @zukhruf/sqlite-queue/thread
+interface SqliteJobQueueThreadOptions extends Omit<
+  SqliteJobQueueOptions,
+  'database' | 'path'
+> {
+  path: string;
+  resourceLimits?: ResourceLimits; // node:worker_threads
+}
+
+class SqliteJobQueueThread
+  extends EventEmitter<
+    Pick<PgBossEventMap, 'error' | 'warning' | 'wip' | 'stopped'>
+  >
+  implements JobQueue, AsyncDisposable
+{
+  constructor(options: SqliteJobQueueThreadOptions);
+}
+```
+
 `src/several-processes.test.ts` opens the queue file with the string form, `new SqliteJobQueue(path)`.
 
 ## Documentation
@@ -348,6 +414,7 @@ class TimekeeperWarning extends Error {
 - [0004 The schema is a declaration and keeps the jobs](./docs/adr/0004-the-schema-is-a-declaration-and-keeps-the-jobs.md)
 - [0005 The queue keeps the durability of pg-boss](./docs/adr/0005-the-queue-keeps-the-durability-of-pg-boss.md)
 - [0007 A notify queue notifies each listener on the file through sqlite-notify](./docs/adr/0007-a-notify-queue-notifies-each-listener-on-the-file-through-sqlite-notify.md)
+- [0008 The engine runs in a thread of its own, and the handlers stay on the host](./docs/adr/0008-the-engine-runs-in-a-thread-of-its-own-and-the-handlers-stay-on-the-host.md)
 
 ## Development
 
@@ -366,9 +433,10 @@ The test target sets `TZ=Asia/Kolkata`. The parity suite needs a zone that is no
 src/
   index.ts           SqliteJobQueue and the exports
   job-queue.ts       JobQueue, the subset, FoundJob and ListedQueue
+  thread/            SqliteJobQueueThread (@zukhruf/sqlite-queue/thread): the host's end and the thread's end
   *.ts               the parts of the port, each one cites the pg-boss code that it copies
   *.test.ts          the unit tests, for behavior that only SQLite has
-  parity/            the parity suite: each scenario on pg-boss over PGlite and on SQLite
+  parity/            the parity suite: each scenario on pg-boss over PGlite, on SQLite and on SQLite in its thread
 ```
 
 Each pg-boss citation names lines of the pinned pg-boss, and lint holds it there ([ADR 0001](./docs/adr/0001-pg-boss-api-on-sqlite.md)). On a pg-boss bump, lint fails with `cited`. Install the new pin, then run `npx nx run sqlite-queue:repoint-citations` before you edit a citation by hand, because it leaves the lines changed since HEAD alone. It moves each cited line to its line in the new version. It lists each cited line in a block that the new version changed, and then exits 1. Cite those lines by hand, run `npx nx run sqlite-queue:repoint-citations --checked` to record the new version in `pg-boss-citations.json`, and commit. In Markdown, the codemod also reads a `(N)` in prose after a citation as a line of that citation; the flagged list and a review of the diff catch such a move.

@@ -32,7 +32,7 @@ async function schedules({ backend, rows }: ParityRun) {
       ? 'SELECT name, key, kind, cron, timezone, data, options, created_on, updated_on FROM pgboss.schedule'
       : 'SELECT queue_name AS name, key, kind, cron, timezone, data, options, created_on, updated_on FROM pgboss_schedule';
   const json = (value: unknown) =>
-    backend === 'sqlite' && typeof value === 'string'
+    backend !== 'pg-boss' && typeof value === 'string'
       ? JSON.parse(value)
       : value;
   const since = (value: unknown) =>

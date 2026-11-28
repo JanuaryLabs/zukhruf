@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 
 import { PGlite } from '@electric-sql/pglite';
@@ -11,11 +12,13 @@ import {
   fromPglite,
 } from 'pg-boss';
 
+import { TemporaryFiles } from '@zukhruf/fs';
 import { open } from '@zukhruf/sqlite-open';
 
 import type { JobQueue } from '../index.ts';
 import { SqliteJobQueue } from '../index.ts';
 import { DateFollowsClock } from '../testing/date-follows-clock.ts';
+import { SqliteJobQueueThread } from '../thread/index.ts';
 
 export type WipWorker = Omit<WipData, 'options' | 'lastError'> & {
   options: Record<string, unknown>;
@@ -271,6 +274,48 @@ export class SqliteBackend {
         await queue.stop({ graceful: false, close: true });
       } finally {
         database.close();
+      }
+    });
+  }
+}
+
+export class SqliteThreadBackend {
+  readonly name = 'sqlite-thread';
+
+  async open(options: RunOptions = {}): Promise<ParityRun> {
+    // A thread cannot share a database in memory, so each run has a file of
+    // its own, which the test's own connection reads and writes beside the
+    // thread's.
+    const dir = await new TemporaryFiles().directory('sqlite-queue-parity-');
+    const path = join(dir.path, 'queue.db');
+    const errors: Error[] = [];
+    const clock = new TestClock(ParityRun.start);
+    const events = new RunEvents(clock);
+    const queue = new SqliteJobQueueThread({
+      path,
+      schedule: false,
+      supervise: false,
+      clock,
+      useListenNotify: true,
+      ...options,
+    });
+    queue.on('error', (error) => errors.push(error));
+    queue.on('wip', events.onWip);
+    queue.on('warning', events.onWarning);
+    queue.on('stopped', events.onStopped);
+    let own: DatabaseSync | undefined;
+    const connection = () => (own ??= open(path));
+    const sql = async (text: string) => {
+      connection().exec(text);
+    };
+    const rows = async (text: string) => connection().prepare(text).all();
+    const handle = { backend: this.name, sql, rows };
+    return new ParityRun(queue, errors, events, clock, handle, async () => {
+      try {
+        await queue.stop({ graceful: false, close: true });
+      } finally {
+        own?.close();
+        await dir[Symbol.asyncDispose]();
       }
     });
   }

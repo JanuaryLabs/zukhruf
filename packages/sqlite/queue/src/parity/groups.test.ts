@@ -851,26 +851,31 @@ describe('local group concurrency', () => {
   );
 
   it('limits a fetch that lands while stop() closes the listener, and refuses its batch once failWip ran', async () => {
-    const observed = await Parity.assertSame(async ({ queue, clock }) => {
-      await queue.start();
-      await queue.createQueue('jobs');
-      for (const n of [1, 2]) {
-        await queue.send('jobs', null, { id: id(n), group: { id: 'g1' } });
-      }
-      const held = holding();
-      await queue.work(
-        'jobs',
-        { batchSize: 2, localGroupConcurrency: 1 },
-        held.handler,
-      );
-      try {
-        await queue.stop({ graceful: false, close: false });
-        await flush(clock);
-        return { batches: [...held.batches], states: await jobStates(queue) };
-      } finally {
-        held.release();
-      }
-    });
+    // On the thread, work() answers after a round trip, so the fetch has
+    // landed before the stop arrives (ADR 0008).
+    const observed = await Parity.assertSameOnTheMainThread(
+      'a stop right after work() reaches the thread after its first fetch',
+      async ({ queue, clock }) => {
+        await queue.start();
+        await queue.createQueue('jobs');
+        for (const n of [1, 2]) {
+          await queue.send('jobs', null, { id: id(n), group: { id: 'g1' } });
+        }
+        const held = holding();
+        await queue.work(
+          'jobs',
+          { batchSize: 2, localGroupConcurrency: 1 },
+          held.handler,
+        );
+        try {
+          await queue.stop({ graceful: false, close: false });
+          await flush(clock);
+          return { batches: [...held.batches], states: await jobStates(queue) };
+        } finally {
+          held.release();
+        }
+      },
+    );
 
     // The first fetch lands while stop() closes the listener (index.js:309),
     // and job 2, over g1's limit, is restored; the restore's I/O outlasts the
