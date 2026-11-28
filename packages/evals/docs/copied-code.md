@@ -51,7 +51,7 @@ Both test the one that was chosen before the runs alone, adjust the p-values of 
 Changes: the family is the scores of one pair, not each pair of models on each score, so the primary is a score's name and must be one of the scores (a `RangeError` otherwise); mteb's primary is optional. The primary row comes first.
 
 **The decision: `ALPHA = 0.05` and `decide` → `ALPHA` and `decide`.**
-Both count a deciding p-value below 0.05, and read better or worse from the sign of the observed difference.
+Both count a deciding p-value at most 0.05 (the rule of `Holm` of `@zukhruf/statistics`, backlog #6299), and read better or worse from the sign of the observed difference.
 Changes: the sign is read in the direction of the score (`higherIsBetter`), since a score of this package can be better lower; mteb always reads a higher score as better. The result that is not beyond chance reads "no difference", not "inconclusive", the word of report ADR 0002's claims.
 
 ### Not copied

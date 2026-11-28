@@ -503,3 +503,49 @@ test('a difference from fewer resamples than the bootstrap drew says how many it
     ['+1.000 [+1.000, +1.000] from 1 of 2 resamples'],
   );
 });
+
+// A bootstrap p is a share of resamples: 25 of 2000 against recall give
+// p = 2 · 25 / 2000 = 0.025, which Holm doubles beside precision's p of 1 to
+// 0.05 exactly, as mteb's `decide` decides it.
+void test.each(
+  [
+    { against: 25, p: '0.025', holm: '0.050', verdict: 'better' },
+    { against: 26, p: '0.026', holm: '0.052', verdict: 'no difference' },
+  ] as const,
+  ({ against, p, holm, verdict }) =>
+    test(`a score whose Holm-adjusted p is ${holm} reads ${verdict}`, () => {
+      const draws = [0, against, 1000].flatMap((count) =>
+        Array.from({ length: 2000 }, (_, resample) =>
+          resample < count ? [0, 0] : [0, 1],
+        ).flat(),
+      );
+      const section = new Verdicts(
+        pairOf({ primary: 'rises', recall: 'rises', precision: 'rises' }),
+        {
+          scores: [higher('primary'), higher('recall'), higher('precision')],
+          primary: 'primary',
+          bootstrap: new PairedBootstrap({
+            nResamples: 2000,
+            randomIndex: () => draws.shift() ?? Number.NaN,
+            interval: percentile,
+          }),
+        },
+      );
+
+      assert.deepEqual(
+        texts(section).rows.map(
+          ([score, , , , actualP, actualHolm, actual]) => [
+            score,
+            actualP,
+            actualHolm,
+            actual,
+          ],
+        ),
+        [
+          ['primary', '0.000', '—', 'better'],
+          ['recall', p, holm, verdict],
+          ['precision', '1.000', '1.000', 'no difference'],
+        ],
+      );
+    }),
+);

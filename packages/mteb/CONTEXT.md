@@ -109,7 +109,7 @@ The model that a comparison tests against its baseline, such as an experiment of
 _Avoid_: Candidate (a document of top ranked), treatment
 
 **Verdict**:
-The answer of a paired bootstrap test on a change and its baseline for one score: `better`, `worse` or `inconclusive`, with the mean difference over the queries, its 95% interval and the p-value. `pairedBootstrapTest` gives a `ChangeVerdict`. A `Verdict` of a report adds the baseline, the change, the score and the p-value that decides the result. A difference counts when that p-value is below 0.05. Not from MTEB.
+The answer of a paired bootstrap test on a change and its baseline for one score: `better`, `worse` or `inconclusive`, with the mean difference over the queries, its 95% interval and the p-value. `pairedBootstrapTest` gives a `ChangeVerdict`. A `Verdict` of a report adds the baseline, the change, the score and the p-value that decides the result. A difference counts when that p-value is at most 0.05, as a level-0.05 test rejects (#6299). Not from MTEB.
 _Avoid_: Decision, outcome, significance
 
 **Report**:

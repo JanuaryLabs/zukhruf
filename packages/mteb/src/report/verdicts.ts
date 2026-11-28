@@ -12,13 +12,14 @@ import { perQueryScores } from '../significance/per-query-scores.ts';
 // difference on a split is more than chance: a paired bootstrap test over the
 // queries (pairedBootstrapTest), on the predictions that evaluate wrote.
 
-// The level below which a deciding p-value counts.
+// The level at or below which a deciding p-value counts.
 const ALPHA = 0.05;
 
 // The result of a test from the p-value that decides it: a difference counts
-// when p is below 0.05, and its sign says better or worse.
+// when p is at most 0.05, the rule of Holm of @zukhruf/statistics, and its
+// sign says better or worse.
 export const decide = (p: number, observed: number): ChangeVerdict['result'] =>
-  p >= ALPHA ? 'inconclusive' : observed > 0 ? 'better' : 'worse';
+  p > ALPHA ? 'inconclusive' : observed > 0 ? 'better' : 'worse';
 
 // A pair of models: the change against its baseline.
 export type Comparison = readonly [baseline: MTEBModels, change: MTEBModels];

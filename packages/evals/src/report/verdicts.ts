@@ -15,20 +15,21 @@ import {
 import { fixed, kept } from './data-tables.ts';
 import type { Score } from './summary.ts';
 
-// The level below which a deciding p-value counts, as in mteb's report.
+// The level at or below which a deciding p-value counts, as in mteb's report.
 const ALPHA = 0.05;
 
 type Result = 'better' | 'worse' | 'no difference';
 
 // The result of a test from the p-value that decides it, read in the
-// direction of its score: a difference counts when p is below 0.05, and its
-// sign says better or worse (mteb's `decide`, docs/copied-code.md).
+// direction of its score: a difference counts when p is at most 0.05, the
+// rule of Holm of @zukhruf/statistics, and its sign says better or worse
+// (mteb's `decide`, docs/copied-code.md).
 const decide = (
   p: number,
   observed: number,
   higherIsBetter: boolean,
 ): Result => {
-  if (p >= ALPHA) return 'no difference';
+  if (p > ALPHA) return 'no difference';
   return observed * (higherIsBetter ? 1 : -1) > 0 ? 'better' : 'worse';
 };
 

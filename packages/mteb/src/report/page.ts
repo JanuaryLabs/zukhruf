@@ -127,10 +127,10 @@ const interval = (score: string, verdict: Verdict) =>
 // matches what it shows.
 const shown = (score: string, number: number) =>
   isShare(score) ? Math.round(number * 100) : Math.round(number * 1000);
-// A comparison whose own p-value is below 0.05, which is unclear only after
+// A comparison whose own p-value is at most 0.05, which is unclear only after
 // the correction for the number of comparisons.
 const clearsAlone = (verdict: Verdict) =>
-  verdict.result === 'inconclusive' && !verdict.primary && verdict.p < 0.05;
+  verdict.result === 'inconclusive' && !verdict.primary && verdict.p <= 0.05;
 const axis = (score: string) =>
   `${label(score)} change${isShare(score) ? ', points' : ''}`;
 // A recall at a cut-off above the size of the corpus is 1 for each model.
@@ -441,10 +441,10 @@ function chance(view: View): string {
     `<ul class="legend results">
       <li data-result="better">${results.better.icon} Better, beyond chance</li>
       <li data-result="worse">${results.worse.icon} Worse, beyond chance</li>
-      <li data-result="inconclusive">Unclear: the deciding p-value is 0.05 or more</li>${
+      <li data-result="inconclusive">Unclear: the deciding p-value is above 0.05</li>${
         view.pairs.some((pair) => pair.verdicts.values().some(clearsAlone))
           ? `
-      <li data-result="inconclusive" class="alone">Dashed: its own p-value is below 0.05, but not after the correction for the number of comparisons</li>`
+      <li data-result="inconclusive" class="alone">Dashed: its own p-value is at most 0.05, but not after the correction for the number of comparisons</li>`
           : ''
       }
     </ul>
@@ -764,7 +764,7 @@ function scoreTable(view: View): string {
     </table></div>
     <dl class="terms">
       ${terms.map(([, name, text]) => `<div><dt>${name}</dt><dd>${text}</dd></div>`).join('')}${timed ? '<div><dt>Evaluation time</dt><dd>How long evaluate took for the model on the task, over all its splits, as its result records it: indexing the corpus, the search of the queries and the scores. It also counts loading the data of the task, which evaluate does for each model unless the task was loaded before it ran.</dd></div>' : ''}
-      <div><dt>95% interval</dt><dd>The likely range of the true difference: the queries are resampled many times. A difference counts when its deciding p-value is below 0.05.</dd></div>
+      <div><dt>95% interval</dt><dd>The likely range of the true difference: the queries are resampled many times. A difference counts when its deciding p-value is at most 0.05.</dd></div>
     </dl>`,
   );
 }
@@ -802,7 +802,7 @@ function method(view: View): string {
         <div><dt>Task</dt><dd>${esc(report.task.name)}: ${esc(report.task.description)}${link}</dd></div>
         <div><dt>Queries</dt><dd>${queriesNote}</dd></div>
         <div><dt>Documents</dt><dd>${split.documents} documents, dataset revision ${esc(report.task.revision)}. A query has ${split.relevantPerQuery.toFixed(1)} relevant documents on average.</dd></div>
-        <div><dt>Chance</dt><dd>A paired bootstrap over the queries: ${replicates} resamples, 95% interval. ${holm} A difference counts when its deciding p-value is below 0.05.</dd></div>
+        <div><dt>Chance</dt><dd>A paired bootstrap over the queries: ${replicates} resamples, 95% interval. ${holm} A difference counts when its deciding p-value is at most 0.05.</dd></div>
       </dl>
     </div>`,
   );
