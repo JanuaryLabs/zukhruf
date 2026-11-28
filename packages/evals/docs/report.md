@@ -49,7 +49,13 @@ import { PromptfooSamples } from '@zukhruf/evals/promptfoo';
 const log = new RunLog(
   { id: evalId, label: 'claude-haiku-5-5', createdAt },
   new PromptfooSamples(results, {
-    test: (result) => result.testCase.description, // the test id (ADR 0004, point 1)
+    // The test id (ADR 0004, point 1). promptfoo's description is optional,
+    // so a config whose tests all have one refuses a test without it.
+    test: ({ testCase: { description } }) => {
+      if (description === undefined)
+        throw new RangeError('Each test of the config has a description');
+      return description;
+    },
     cases: pages, // the CaseReader of the eval reads the case from the vars
     answer: (output) => JsonValue.from(output), // the stored output as the comparer reads it
   }),

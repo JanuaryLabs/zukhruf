@@ -114,7 +114,7 @@ const bootstrap = new Bootstrap({
     method: new Linear(),
   }),
 });
-bootstrap.interval(run, 'values_recall'); // { low, high, resamples, nResamples }
+bootstrap.interval(run, 'values_recall'); // { low, high, resamples, nResamples }, or undefined when no resample has a value
 ```
 
 A test with 3 epochs is one unit of a resample, so its answers are not counted as independent (Inspect AI reduces the epochs of a sample before its metrics). A name that no test gives throws an `Error`, and a run with no tests throws a `RangeError`.
@@ -451,27 +451,30 @@ A hook cannot write `namedScoreWeights`, so promptfoo gives each score of the ho
 
 A failure of the run, such as a 401, is not a failed call: each call would fail. Throw it. The result then stays an error result, and `promptfoo retry <evalId>` runs it again.
 
+An assertion that throws is not a failed call either: it is a defect of the scorer, so the score of its test is unknown. promptfoo 0.126.0 grades it as a failed assertion with no named scores, and `PromptfooSamples` refuses the run with a `ThrownAssertionError`, whose `tests` hold each test and epoch that the assertion threw on, with the reason that promptfoo wrote. A host that must still finish its own work, such as writing a failed line, catches the class by its type. An assertion that fails on its scores is an answered sample with those scores.
+
 ## Errors
 
-The package throws the built-in error classes. A `RangeError` is a value outside the rules of a part. An `Error` is a name that no scorecard gives, or a case field that a case reader cannot read. A `TypeError` is a value of the wrong type.
+The package throws the built-in error classes, and `ThrownAssertionError` of `./promptfoo`. A `RangeError` is a value outside the rules of a part. An `Error` is a name that no scorecard gives, or a case field that a case reader cannot read. A `TypeError` is a value of the wrong type.
 
-| Error        | When                                                                                                                                                                                                                                                                        |
-| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `RangeError` | `run.add` gets another weight for a test id that the run has.                                                                                                                                                                                                               |
-| `RangeError` | `paired.verdict` gets a test id that is in one run only, or a test whose weight differs between the two runs.                                                                                                                                                               |
-| `RangeError` | A penalty of `Penalized` gives a factor outside [0, 1].                                                                                                                                                                                                                     |
-| `RangeError` | `ShortfallPenalty` gets a target or a power that is not more than 0.                                                                                                                                                                                                        |
-| `RangeError` | `BinaryAverage` reads multilabel counts, a class set of more than two classes, or a positive label outside the class set.                                                                                                                                                   |
-| `RangeError` | `ProbabilityComparer` gets a case that does not have exactly one expected label, or a probability outside [0, 1].                                                                                                                                                           |
-| `RangeError` | `ClassCounts` gets a row of a label indicator matrix that does not hold one 0 or 1 for each column, sides and weights of different lengths, or a multiclass answer with no label or more than one label on a side. `confusionMatrix()` of multilabel counts also throws it. |
-| `RangeError` | `brierScore.mean` gets weights of another length, or an answer with no probability of the label that it reads.                                                                                                                                                              |
-| `Error`      | `totals.get(name)` gets a name that no scorecard gave.                                                                                                                                                                                                                      |
-| `Error`      | `bootstrap.interval` gets a name that a scorecard does not give.                                                                                                                                                                                                            |
-| `Error`      | `paired.verdict` gets a name that no scorecard of the baseline run or of the change run gives.                                                                                                                                                                              |
-| `Error`      | `LabelVarsCase` or `LabelConfigCase` reads an expected value that is not a label or a list of labels. `LabelVarsCase` reads a `vars.weight` that is not a number.                                                                                                           |
-| `TypeError`  | `BrierScore` without a `positiveLabel` sorts the labels of an answer, and they mix a number and a string, which scikit-learn refuses.                                                                                                                                       |
-| `TypeError`  | `LabelComparer` gets a stated answer that is not a label, a list of labels or text, such as a `Map` or a `Set`.                                                                                                                                                             |
-| `TypeError`  | `ProbabilityComparer` gets a stated answer that is not a `Map`, a plain object or the JSON text of an object.                                                                                                                                                               |
+| Error                  | When                                                                                                                                                                                                                                                                        |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RangeError`           | `run.add` gets another weight for a test id that the run has.                                                                                                                                                                                                               |
+| `RangeError`           | `paired.verdict` gets a test id that is in one run only, or a test whose weight differs between the two runs.                                                                                                                                                               |
+| `RangeError`           | A penalty of `Penalized` gives a factor outside [0, 1].                                                                                                                                                                                                                     |
+| `RangeError`           | `ShortfallPenalty` gets a target or a power that is not more than 0.                                                                                                                                                                                                        |
+| `RangeError`           | `BinaryAverage` reads multilabel counts, a class set of more than two classes, or a positive label outside the class set.                                                                                                                                                   |
+| `RangeError`           | `ProbabilityComparer` gets a case that does not have exactly one expected label, or a probability outside [0, 1].                                                                                                                                                           |
+| `RangeError`           | `ClassCounts` gets a row of a label indicator matrix that does not hold one 0 or 1 for each column, sides and weights of different lengths, or a multiclass answer with no label or more than one label on a side. `confusionMatrix()` of multilabel counts also throws it. |
+| `RangeError`           | `brierScore.mean` gets weights of another length, or an answer with no probability of the label that it reads.                                                                                                                                                              |
+| `ThrownAssertionError` | `PromptfooSamples` reads a run in which an assertion threw; `tests` holds each test and epoch with promptfoo's reason.                                                                                                                                                      |
+| `Error`                | `totals.get(name)` gets a name that no scorecard gave.                                                                                                                                                                                                                      |
+| `Error`                | `bootstrap.interval` gets a name that a scorecard does not give.                                                                                                                                                                                                            |
+| `Error`                | `paired.verdict` gets a name that no scorecard of the baseline run or of the change run gives.                                                                                                                                                                              |
+| `Error`                | `LabelVarsCase` or `LabelConfigCase` reads an expected value that is not a label or a list of labels. `LabelVarsCase` reads a `vars.weight` that is not a number.                                                                                                           |
+| `TypeError`            | `BrierScore` without a `positiveLabel` sorts the labels of an answer, and they mix a number and a string, which scikit-learn refuses.                                                                                                                                       |
+| `TypeError`            | `LabelComparer` gets a stated answer that is not a label, a list of labels or text, such as a `Map` or a `Set`.                                                                                                                                                             |
+| `TypeError`            | `ProbabilityComparer` gets a stated answer that is not a `Map`, a plain object or the JSON text of an object.                                                                                                                                                               |
 
 ## What the package does not do
 
@@ -762,7 +765,16 @@ export class PromptfooSamples<Answer, C extends Weighted> implements Iterable<
       readonly cases: CaseReader<C>; // reads the case from the vars
       readonly answer: (output: unknown) => Answer;
     },
-  ); // RangeError: rows of more than one prompt, two rows of one test and epoch that promptfoo cannot order, or an error row that was neither retried nor graded by a hook
+  ); // RangeError: rows of more than one prompt, two rows of one test and epoch that promptfoo cannot order, or an error row that was neither retried nor graded by a hook; ThrownAssertionError: a row whose assertion threw
+}
+
+/** A run in which an assertion threw: the score of each such test is unknown (ADR 0009). */
+export class ThrownAssertionError extends Error {
+  readonly tests: readonly {
+    readonly test: string;
+    readonly epoch: number;
+    readonly reason: string; // promptfoo's reason, such as "Custom function threw error: ..."
+  }[];
 }
 
 /** The part of promptfoo's GradingResult that the assertion gives. */

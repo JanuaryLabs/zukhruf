@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { Ratio } from '../aggregation/ratio.ts';
 import type { Sample, Usage } from '../scoring/run-log.ts';
 import type { CaseReader, Weighted } from '../scoring/scorecard-scorer.ts';
+import { ThrownAssertionError } from './thrown-assertion-error.ts';
 
 // The part of promptfoo's EvaluateResult that the samples read (promptfoo
 // 0.126.0, dist/src/index.d.ts). The rows of an afterAll extension
@@ -14,6 +15,7 @@ export type PromptfooResult = {
   readonly repeatIndex?: number;
   readonly vars: Readonly<Record<string, unknown>>;
   readonly testCase: {
+    readonly description?: string | undefined;
     readonly metadata?: Readonly<Record<string, unknown>> | undefined;
   };
   readonly response?: {
@@ -27,6 +29,7 @@ export type PromptfooResult = {
   readonly latencyMs: number;
   readonly namedScores: Readonly<Record<string, number>>;
   readonly gradingResult?: {
+    readonly reason: string;
     readonly namedScoreWeights?: Readonly<Record<string, number>> | null;
   } | null;
   readonly cost?: number;
@@ -38,6 +41,7 @@ export type PromptfooResult = {
   };
 };
 
+const assertFailureReason = 1;
 const errorFailureReason = 2;
 
 // How the samples read a row: its test id (promptfoo has no stable one, ADR
@@ -55,10 +59,12 @@ export type PromptfooReaders<Answer, C extends Weighted> = {
 // repeats, so testIdx is the key of an answer and its order. Of the rows of
 // one testIdx, which a retry with --retry-errors gives twice, the newest wins:
 // a row that is not an error, else the error rows, which must have the same
-// scores (promptfoo's own rule, read from its source). A failed call is a failed sample (ADR 0005): a row whose response
-// holds FailedCall's `failed` reason, or an error row that an afterEach hook
-// graded on the answer null, with the error of the row. An error row with no
-// named scores was neither retried nor graded, and is a RangeError.
+// scores (promptfoo's own rule, read from its source). A failed call is a
+// failed sample (ADR 0005): a row whose response holds FailedCall's `failed`
+// reason, or an error row that an afterEach hook graded on the answer null,
+// with the error of the row. An error row with no named scores was neither
+// retried nor graded, and is a RangeError. A row whose assertion threw has no
+// score to read, and is a ThrownAssertionError.
 export class PromptfooSamples<Answer, C extends Weighted> implements Iterable<
   Sample<Answer, C>
 > {
@@ -90,6 +96,30 @@ export class PromptfooSamples<Answer, C extends Weighted> implements Iterable<
           )
           .join(', ')}`,
       );
+    // promptfoo 0.126.0 grades an assertion that throws as a failed
+    // component with no named scores (scriptFailure,
+    // dist/src/evaluator-5tUcjTs8.js:5593-5598, 5613-5616), so its row fails
+    // with ASSERT (applyGradingResult, 7292-7300) and its gradingResult has
+    // no namedScoreWeights, which promptfoo writes only when an assertion
+    // scored a name (1558-1565). An assertion that fails on its scores
+    // writes them with their weights.
+    const thrown = latest.flatMap((result) => {
+      const grading = result.gradingResult;
+      if (
+        result.failureReason !== assertFailureReason ||
+        grading == null ||
+        grading.namedScoreWeights != null
+      )
+        return [];
+      return [
+        {
+          test: readers.test(result),
+          epoch: result.repeatIndex ?? 0,
+          reason: grading.reason,
+        },
+      ];
+    });
+    if (thrown.length > 0) throw new ThrownAssertionError(thrown);
     this.#samples = latest
       .toSorted((a, b) => a.testIdx - b.testIdx)
       .map((result) => PromptfooSamples.#sample(result, readers));

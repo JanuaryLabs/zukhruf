@@ -20,6 +20,7 @@ import {
   type PromptfooReaders,
   type PromptfooResult,
   PromptfooSamples,
+  ThrownAssertionError,
 } from './index.ts';
 
 const execFileAsync = promisify(execFile);
@@ -50,17 +51,20 @@ const readers: PromptfooReaders<
 // Runs `promptfoo eval` in the folder with the provider given as the body of
 // its callApi(prompt), on a test for each q of `tests`, each scored by a
 // PromptfooAssertion of the recall against its expected value, and gives
-// the export of the run.
+// the export of the run. `assertion` is the body of the assertion module's
+// function (output, context), which grades with `grade` by default.
 async function evaluate(
   folder: string,
   {
     callApi,
     tests,
+    assertion = 'return grade(output, context);',
     prompts = ['{{q}}'],
     args = [],
     extensions = [],
   }: {
     readonly callApi: string;
+    readonly assertion?: string;
     readonly tests: readonly {
       readonly q: string;
       readonly expected: unknown;
@@ -78,10 +82,14 @@ async function evaluate(
 import { ConfigCase, TreeWalk, ValueMatches } from '${source('../structured/index.ts')}';
 import { PromptfooAssertion } from '${source('./index.ts')}';
 
-export default new PromptfooAssertion(
+const grade = new PromptfooAssertion(
   new ScorerSet({ recall: new Recall(new ValueMatches()) }, { comparer: new TreeWalk() }),
   new ConfigCase(),
 ).grade;
+
+export default (output: unknown, context: { vars: Record<string, unknown> }) => {
+  ${assertion}
+};
 `,
   );
   await writeFile(
@@ -398,6 +406,81 @@ test('a run whose error rows were neither retried nor graded is refused, and the
   );
 });
 
+test('a run in which an assertion threw is refused with a ThrownAssertionError that holds each test and epoch it threw on, with the reason promptfoo wrote', async () => {
+  await using folder = await new TemporaryFiles().directory('samples-');
+  const exported = await evaluate(folder.path, {
+    callApi: `return { output: '{"a": 1}' };`,
+    assertion: `if (context.vars['q'] === 'b') throw new Error('the scorer broke');
+  return grade(output, context);`,
+    tests: [
+      { q: 'a', expected: { a: 1 } },
+      { q: 'b', expected: { a: 1 } },
+    ],
+    args: ['--repeat', '2'],
+  });
+
+  const read = () => new PromptfooSamples(exported.results.results, readers);
+
+  assert.throws(read, ThrownAssertionError);
+  assert.throws(read, {
+    message:
+      'A run in which an assertion threw has no score for its test; fix the assertion and run promptfoo eval again. Threw: b (epoch 0): Custom function threw error: the scorer broke, b (epoch 1): Custom function threw error: the scorer broke',
+    tests: [
+      {
+        test: 'b',
+        epoch: 0,
+        reason: 'Custom function threw error: the scorer broke',
+      },
+      {
+        test: 'b',
+        epoch: 1,
+        reason: 'Custom function threw error: the scorer broke',
+      },
+    ],
+  });
+});
+
+test('a row whose assertion failed on its scores is an answered sample with those scores, and a row whose assertion passed with no score is one with no scores', async () => {
+  await using folder = await new TemporaryFiles().directory('samples-');
+  const exported = await evaluate(folder.path, {
+    callApi: `return { output: '{"a": 1}' };`,
+    assertion: `if (context.vars['q'] === 'c') return true;
+  const graded = grade(output, context);
+  return context.vars['q'] === 'b' ? { ...graded, pass: false, reason: 'below the bar' } : graded;`,
+    tests: [
+      { q: 'a', expected: { a: 1 } },
+      { q: 'b', expected: { a: 1, b: 2 } },
+      { q: 'c', expected: { a: 1 } },
+    ],
+  });
+
+  const samples = [...new PromptfooSamples(exported.results.results, readers)];
+
+  assert.deepEqual(
+    exported.results.results.map(({ vars, failureReason }) => [
+      vars['q'],
+      failureReason,
+    ]),
+    [
+      ['a', ResultFailureReason.NONE],
+      ['b', ResultFailureReason.ASSERT],
+      ['c', ResultFailureReason.NONE],
+    ],
+  );
+  assert.deepEqual(
+    samples.map(({ test, outcome, scorecard }) => [
+      test,
+      outcome,
+      scorecard.ratios,
+    ]),
+    [
+      ['a', 'answered', new Map([['recall', new Ratio(1, 1)]])],
+      ['b', 'answered', new Map([['recall', new Ratio(1, 2)]])],
+      ['c', 'answered', new Map()],
+    ],
+  );
+});
+
 test('after --retry-errors, the stale error row of each retried epoch gives way to its retried row', async () => {
   await using folder = await new TemporaryFiles().directory('samples-');
   await writeFile(
@@ -645,14 +728,20 @@ export async function afterAll(context) {
 
 test("promptfoo's own rows, of evaluate and of an afterAll extension, are the input of the samples", () => {
   // typecheck proves this test: promptfoo's types, under
-  // exactOptionalPropertyTypes, must be assignable with no cast.
+  // exactOptionalPropertyTypes, must be assignable with no cast, and a reader
+  // reads the test's description, promptfoo's own test id.
+  const described: PromptfooReaders<
+    unknown,
+    { readonly expected: unknown; readonly weight: number }
+  > = { ...readers, test: (result) => result.testCase.description ?? '' };
   const inputs = [
     (results: EvaluateResult[]) => new PromptfooSamples(results, readers),
     (context: AfterAllExtensionHookContext) =>
       new PromptfooSamples(context.results, readers),
+    (results: EvaluateResult[]) => new PromptfooSamples(results, described),
   ];
 
-  assert.equal(inputs.length, 2);
+  assert.equal(inputs.length, 3);
 });
 
 // The guards below read rows that promptfoo does not write for one run, so
@@ -721,22 +810,14 @@ test('a score with no weight is refused, since promptfoo writes the weight of ea
     tests: [{ q: 'a', expected: { a: 1 } }],
   });
   const [row] = exported.results.results;
-  assert.ok(row);
+  assert.ok(row?.gradingResult);
+  const unweighted = {
+    ...row,
+    gradingResult: { ...row.gradingResult, namedScoreWeights: {} },
+  };
 
-  assert.throws(
-    () =>
-      new PromptfooSamples(
-        [
-          {
-            ...row,
-            gradingResult: { ...row.gradingResult, namedScoreWeights: {} },
-          },
-        ],
-        readers,
-      ),
-    {
-      name: 'RangeError',
-      message: 'Score recall of test a has no weight in namedScoreWeights',
-    },
-  );
+  assert.throws(() => new PromptfooSamples([unweighted], readers), {
+    name: 'RangeError',
+    message: 'Score recall of test a has no weight in namedScoreWeights',
+  });
 });
