@@ -69,6 +69,50 @@ jobs email
 true
 ```
 
+## Run the notifications in a thread of their own
+
+`node:sqlite` is synchronous. The commit of a `notify` with `synchronous` FULL waits for the disk, and a `notify` or a `listen` waits for the write lock of another connection for up to the busy timeout of 5000 ms. On the main thread, each such wait stops every timer and every request of the host (#4984). Postgres never blocks the program that sends `NOTIFY`, because it writes in its own process. `NotificationsThread`, from `@zukhruf/sqlite-notify/thread`, runs a `Notifications` in a worker thread, so the waits block that thread only ([ADR 0012](./docs/adr/0012-the-notifications-run-in-a-thread-of-their-own.md)). Pick it for a host that must stay responsive: a server, an app with a UI, a pool of workers. `Notifications` stays the choice for a sender that must notify in its own transaction, and for a CLI or a test.
+
+```ts
+import { mkdtempDisposable } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import type { Notification } from '@zukhruf/sqlite-notify';
+import { NotificationsThread } from '@zukhruf/sqlite-notify/thread';
+
+await using scratch = await mkdtempDisposable(join(tmpdir(), 'notify-'));
+await using notifications = await NotificationsThread.create({
+  path: join(scratch.path, 'app.sqlite'),
+  clock: globalThis,
+});
+notifications.on('error', (error) => console.error(error));
+const heard = Promise.withResolvers<Notification>();
+notifications.on('notification', heard.resolve);
+await notifications.listen('jobs');
+
+// The notify commits in the thread; the host's event loop goes on meanwhile.
+await notifications.notify('jobs', 'email');
+
+const notification = await heard.promise;
+console.log(notification.channel, notification.payload);
+```
+
+Output:
+
+```
+jobs email
+```
+
+- `NotificationsThread.create` takes the options of `new Notifications({ path })`: `path`, `clock` and `maxQueuedNotifications`. It has no `database` option, because a `DatabaseSync` cannot go to another thread. The thread opens the file with `synchronous` FULL. When the open fails, `create` rejects and leaves no thread.
+- `listen`, `unlisten`, the `notification` event and the `error` event are those of `Notifications`. `unlisten` stops the channel at once, also for a notification that the thread sent before it heard the `unlisten`.
+- `notify` returns a promise, which resolves when the notification has committed in a `BEGIN IMMEDIATE` transaction of the thread's connection. It cannot join a transaction of the caller. This is the one difference from `Notifications`: a sender that writes a row and its notification in one transaction uses `Notifications` on its own connection.
+- With `globalThis` as the clock, the thread uses its own timers. Any other clock is the host's: the thread arms each timer on it and reads its time from the host, so a fake clock moves the backstop as it moves the backstop of `Notifications`.
+- The errors keep their class and their fields. An error of `node:sqlite` keeps `code`, `errcode` and `errstr`. An `error` that nobody hears on the host ends the host, as an `error` that nobody hears ends a program with `Notifications`.
+- A thread that ends outside a dispose is started again after 1 s, then 2 s, doubling up to 30 s, on the clock, as pg-boss reconnects its `LISTEN` (`db.js:159-178`). Each attempt that fails emits `error`. The new thread listens again on each channel. A notification that commits while no thread listens does not come, as with a lost `LISTEN` of Postgres. A call that was in flight rejects with `ConnectionLostError` of `@zukhruf/rpc` and is not sent again: a `notify` may have committed, as a lost Postgres commit may. A call made during the restart waits for it, and gets the error of the attempt when that fails.
+- The thread keeps the host alive from `create` to the dispose. The dispose disposes the notifications in the thread, as `Notifications` disposes, and waits for the thread's exit.
+- A host that `node --eval` started cannot start the thread: the thread takes the host's `--input-type`, which Node allows only for `--eval`. Start the host from a file.
+
 ## The API
 
 ```ts
@@ -123,6 +167,20 @@ export {
   UnavailableError,
 } from '@zukhruf/sqlite-open';
 export { UnsafeFolderError } from '@zukhruf/pipes';
+
+// @zukhruf/sqlite-notify/thread
+export class NotificationsThread
+  extends EventEmitter<{ notification: [Notification]; error: [unknown] }>
+  implements AsyncDisposable
+{
+  static create(
+    options: Omit<FileOptions, 'database'>,
+  ): Promise<NotificationsThread>;
+  listen(channel: string): Promise<void>;
+  unlisten(channel: string): Promise<void>;
+  notify(channel: string, payload?: string): Promise<void>;
+  [Symbol.asyncDispose](): Promise<void>;
+}
 ```
 
 ## The rules
@@ -244,15 +302,16 @@ What stays in this package:
 
 ## Errors
 
-| Error               | When                                                                                                                                                                                                                            |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `UnavailableError`  | The file is missing, or the system denies access to it. It is the class of `@zukhruf/sqlite-open`, which opens the connections: a `MissingError` or a `DeniedError` when the system says which. `cause` is the error of SQLite. |
-| `QueueFullError`    | `notify` finds `maxQueuedNotifications` rows that a listener has not read. Its message and `code` are Postgres's: `too many notifications in the NOTIFY queue`, `54000`. The transaction of the call does not commit.           |
-| `UnsafeFolderError` | `listen` finds a socket folder that is not a folder, is a link, belongs to another user, or gives access to its group or others. `path` is the folder. It is the class of `@zukhruf/pipes`, which makes the folder.             |
-| `RangeError`        | A channel or a payload that Postgres refuses, with Postgres's message: `channel name cannot be empty`, `channel name too long` (64 bytes or more), `payload string too long` (8000 bytes or more).                              |
-| `DisposedError`     | `listen`, `unlisten` or `notify` after dispose. .NET throws `ObjectDisposedException` for a call on a disposed object. A second dispose resolves.                                                                               |
-| `TypeError`         | `database` is a database in memory.                                                                                                                                                                                             |
-| The error of SQLite | All other failures, for example `database is locked` when the busy timeout ends.                                                                                                                                                |
+| Error                                   | When                                                                                                                                                                                                                            |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `UnavailableError`                      | The file is missing, or the system denies access to it. It is the class of `@zukhruf/sqlite-open`, which opens the connections: a `MissingError` or a `DeniedError` when the system says which. `cause` is the error of SQLite. |
+| `QueueFullError`                        | `notify` finds `maxQueuedNotifications` rows that a listener has not read. Its message and `code` are Postgres's: `too many notifications in the NOTIFY queue`, `54000`. The transaction of the call does not commit.           |
+| `UnsafeFolderError`                     | `listen` finds a socket folder that is not a folder, is a link, belongs to another user, or gives access to its group or others. `path` is the folder. It is the class of `@zukhruf/pipes`, which makes the folder.             |
+| `RangeError`                            | A channel or a payload that Postgres refuses, with Postgres's message: `channel name cannot be empty`, `channel name too long` (64 bytes or more), `payload string too long` (8000 bytes or more).                              |
+| `DisposedError`                         | `listen`, `unlisten` or `notify` after dispose. .NET throws `ObjectDisposedException` for a call on a disposed object. A second dispose resolves.                                                                               |
+| `TypeError`                             | `database` is a database in memory.                                                                                                                                                                                             |
+| The error of SQLite                     | All other failures, for example `database is locked` when the busy timeout ends.                                                                                                                                                |
+| `ConnectionLostError` of `@zukhruf/rpc` | `NotificationsThread` only: a call was in flight when its thread ended. It is not sent again.                                                                                                                                   |
 
 The package throws its own errors. A host that needs its own error translates at its boundary, and keeps the error of the package as `cause`.
 
@@ -287,3 +346,4 @@ The package throws its own errors. A host that needs its own error translates at
 - [0008 The socket address is the third place, so its extraction comes first](./docs/adr/0008-the-socket-address-is-the-third-place-so-its-extraction-comes-first.md)
 - [0010 The trim wakes the laggard, and a dead listener is forgotten once its rows are gone](./docs/adr/0010-the-trim-wakes-the-laggard-and-a-dead-listener-is-forgotten-once-its-rows-are-gone.md)
 - [0011 A refused connect removes a listener only when its presence is free](./docs/adr/0011-a-refused-connect-removes-a-listener-only-when-its-presence-is-free.md)
+- [0012 The notifications run in a thread of their own](./docs/adr/0012-the-notifications-run-in-a-thread-of-their-own.md)

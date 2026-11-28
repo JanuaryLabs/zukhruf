@@ -29,6 +29,12 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./thread": {
+      "@zukhruf/source": "./src/thread/index.ts",
+      "types": "./dist/thread/index.d.ts",
+      "import": "./dist/thread/index.js",
+      "default": "./dist/thread/index.js"
     }
   },
   "files": [
@@ -44,12 +50,14 @@
     "@zukhruf/async": "^0.8.70",
     "@zukhruf/fs": "^0.8.70",
     "@zukhruf/pipes": "^0.8.70",
+    "@zukhruf/rpc": "^0.8.70",
     "@zukhruf/sqlite-drift": "^0.8.70",
     "@zukhruf/sqlite-open": "^0.8.70",
     "@zukhruf/sqlite-transaction": "^0.8.70"
   },
   "devDependencies": {
     "@sinonjs/fake-timers": "15.5.0",
+    "@zukhruf/parameterized-test": "^0.8.70",
     "@zukhruf/testing": "^0.8.70",
     "esbuild": "0.28.2"
   }

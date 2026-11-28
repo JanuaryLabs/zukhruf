@@ -1,15 +1,23 @@
 import { type ChildProcess, spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { rm } from 'node:fs/promises';
+import { rm, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 
 import { untilAborted } from '@zukhruf/async';
 import { open } from '@zukhruf/sqlite-open';
 
 import type { Notification, Notifications } from '../index.ts';
+import type { NotificationsThread } from '../thread/index.ts';
 
 /** The package index, for a program's `import`. */
 const packageIndex = new URL('../index.ts', import.meta.url).href;
+/** The thread form's index, for a program's `import`. */
+const threadIndex = new URL('../thread/index.ts', import.meta.url).href;
+
+/** Which form of the notifications a program holds. */
+export type ProgramForm = 'main thread' | 'thread';
 
 /** What a program printed: one JSON object a line. */
 export type Printed = Record<string, unknown> & { readonly event: string };
@@ -41,18 +49,40 @@ export type Command =
   | { do: 'release the write lock' }
   | { do: 'dispose' };
 
-/** The source of a program that holds one `Notifications` on the file and obeys commands. */
-function source(path: string, maxQueuedNotifications: number | undefined) {
+/**
+ * The source of a program that holds one `Notifications`, or one
+ * `NotificationsThread`, on the file and obeys commands. The thread form's
+ * notify cannot join the program's transaction, so it obeys only the commands
+ * that need none.
+ */
+function source(
+  path: string,
+  maxQueuedNotifications: number | undefined,
+  form: ProgramForm,
+) {
+  const make =
+    form === 'thread'
+      ? `await NotificationsThread.create({ path: ${JSON.stringify(path)}, clock: globalThis, maxQueuedNotifications: ${String(maxQueuedNotifications)} })`
+      : `new Notifications({ database, clock: globalThis, maxQueuedNotifications: ${String(maxQueuedNotifications)} })`;
+  const notify =
+    form === 'thread' ? 'await notifications.notify' : 'notifications.notify';
+  // A program from a file resolves a package from the file's folder, where
+  // none is: it imports what the test process resolves.
+  const resolved = (specifier: string) =>
+    JSON.stringify(
+      form === 'thread' ? import.meta.resolve(specifier) : specifier,
+    );
   return `
 import { createInterface } from 'node:readline';
-import { Lock } from '@zukhruf/async';
+import { Lock } from ${resolved('@zukhruf/async')};
 import { Notifications } from ${JSON.stringify(packageIndex)};
-import { WriteAheadLog, open } from '@zukhruf/sqlite-open';
-import { transaction } from '@zukhruf/sqlite-transaction';
+import { NotificationsThread } from ${JSON.stringify(threadIndex)};
+import { WriteAheadLog, open } from ${resolved('@zukhruf/sqlite-open')};
+import { transaction } from ${resolved('@zukhruf/sqlite-transaction')};
 
 const print = (value) => process.stdout.write(JSON.stringify(value) + '\\n');
 const database = open(${JSON.stringify(path)}, { journal: new WriteAheadLog({ synchronous: 'full' }) });
-const notifications = new Notifications({ database, clock: globalThis, maxQueuedNotifications: ${String(maxQueuedNotifications)} });
+const notifications = ${make};
 database.exec('CREATE TABLE IF NOT EXISTS jobs (name TEXT NOT NULL) STRICT');
 notifications.on('notification', (notification) => print({ event: 'notification', ...notification }));
 notifications.on('error', (error) => print({ event: 'error', message: String(error) }));
@@ -66,7 +96,7 @@ const commands = {
   async unlisten(command) { await notifications.unlisten(command.channel); print({ event: 'unlistened', channel: command.channel }); },
   async notify(command) {
     for (const payload of command.payloads) {
-      notifications.notify(command.channel, payload);
+      ${notify}(command.channel, payload);
       if (command.turns === 'microtask') await null;
     }
     print({ event: 'sent' });
@@ -145,6 +175,8 @@ export interface ProgramOptions {
   /** The limit of each wait of the program and of its disposal, for example `t.signal`. */
   signal: AbortSignal;
   maxQueuedNotifications?: number;
+  /** The main thread's `Notifications` by default. */
+  form?: ProgramForm;
 }
 
 /**
@@ -158,14 +190,16 @@ export async function startProgram(
   path: string,
   options: ProgramOptions,
 ): Promise<Program> {
-  const { signal } = options;
+  const { signal, form = 'main thread' } = options;
+  const text = source(path, options.maxQueuedNotifications, form);
+  // A program started with --eval cannot start a thread of a file, since the
+  // thread inherits its --input-type: the thread form runs from a file
+  // beside the database.
+  const file = join(dirname(path), `program-${randomUUID()}.mjs`);
+  if (form === 'thread') await writeFile(file, text);
   const child = spawn(
     process.execPath,
-    [
-      '--input-type=module',
-      '--eval',
-      source(path, options.maxQueuedNotifications),
-    ],
+    form === 'thread' ? [file] : ['--input-type=module', '--eval', text],
     { stdio: ['pipe', 'pipe', 'inherit'] },
   );
   const exited = once(child, 'exit').then(() => child.exitCode);
@@ -259,7 +293,9 @@ export interface Heard {
   ): Promise<readonly Notification[]>;
 }
 
-export function hear(notifications: Notifications): Heard {
+export function hear(
+  notifications: Notifications | NotificationsThread,
+): Heard {
   const heard: Notification[] = [];
   const errors: unknown[] = [];
   const watchers = new Set<() => void>();

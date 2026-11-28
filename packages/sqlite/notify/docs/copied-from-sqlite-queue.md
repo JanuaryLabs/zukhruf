@@ -41,3 +41,25 @@ Both prove that a bundle of the package loads in a folder with no `package.json`
 
 - The bundle has no `banner` that gives it a `require`. Why: pg-boss requires CommonJS modules, and this package has no CommonJS dependency.
 - The test reads `Notifications`, not `SqliteJobQueue`.
+
+## The thread form (#4984 step 3)
+
+`NotificationsThread` copies parts of `SqliteJobQueueThread` (queue `src/thread/`, the source at `7a469580`). This is strike 2: backlog #6374 waits for a third thread form. Until then, mirror every fix in both copies and name both files in the commit.
+
+**`thread/host-clock.ts` → `thread/host-clock.ts`.**
+
+- Same: the thread's clock over the host's. A timer is armed with `arm(timer, ms)` and cleared with `disarm(timer)` to the host, fires when the host sends `fire(timer)`, and the time is the host's last stamp.
+- Differs: it implements `Clock` of `@zukhruf/async` (`setTimeout`, `clearTimeout`, `performance.now()`), not pg-boss's `AttachableClock`. Why: `Notifications` takes that clock. So it has no `setInterval`, no `repeat` flag, and no `attach` or `idle`: `@zukhruf/async` has no clock that a statement waits for.
+
+**`thread/engine-thread.ts` → `thread/engine-thread.ts`.**
+
+- Same: one worker, one `ConnectionSupervisor` over a `WorkerConnection` that is given once, a `Client` and a `Server` on it; `exit` and `disconnected` while serving report the thread lost; `end` and `terminate`; the timers the thread armed on the host's clock, cleared at its exit; `time(now)` before each message on a host clock.
+- Differs: no `resourceLimits`, handlers, batches or `idle`. Why: `Notifications` has no handlers and no attached clock. Added: `close()` (dispose the notifications in the thread, then end it) and `crash` (the thread's uncaught error, which an attempt rejects with in place of `ConnectionLostError`). Why: `Notifications` has a dispose that removes its listener row, and a thread that cannot start (a host from `--eval`) must reject `create` with its reason.
+
+**The backoff of `thread/sqlite-job-queue-thread.ts` → `thread/notifications-thread.ts`.**
+`backoff(failures)`: 1 s doubling up to 30 s, pg-boss's reconnect. The restart around it differs: there is no session, no `start()` options and no `work()` to replay; the new thread listens again on each wanted channel.
+
+**The test helpers of `thread/sqlite-job-queue-thread.test.ts` → `thread/notifications-thread.test.ts`.**
+
+- `seen`: copied without a change.
+- `startHost`: the same host process from a file, with its report on the IPC channel; it takes no `execArgv`, and its module imports `Notifications` and `NotificationsThread`.

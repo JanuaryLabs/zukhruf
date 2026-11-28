@@ -34,3 +34,12 @@ The Rule of Three counts places, not packages. Code that a second place needs is
 - `src/parity/queue-lifecycle.test.ts` gives `resolved`, and the code of a driver error.
 - `src/parity/send-request.test.ts` gives the result of the call in a `resolved` field.
 - `src/parity/transactional.test.ts` gives the fields of an `AssertionError`.
+
+## Copied by `@zukhruf/sqlite-notify`
+
+The thread form of `@zukhruf/sqlite-notify` copies parts of this package's thread form, strike 2 (backlog #6374). Mirror every fix in both copies and name both files in the commit. The ledger with what differs and why is [sqlite-notify's copied-from-sqlite-queue.md](../../notify/docs/copied-from-sqlite-queue.md).
+
+- `src/thread/host-clock.ts` → sqlite-notify `src/thread/host-clock.ts`.
+- `src/thread/engine-thread.ts` → sqlite-notify `src/thread/engine-thread.ts`: the host side of the clock and the thread's lifecycle.
+- `backoff` of `src/thread/sqlite-job-queue-thread.ts` → sqlite-notify `src/thread/notifications-thread.ts`.
+- `seen` and `startHost` of `src/thread/sqlite-job-queue-thread.test.ts` → sqlite-notify `src/thread/notifications-thread.test.ts`.

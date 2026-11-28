@@ -95,3 +95,15 @@ _Avoid_: Straggler, slow consumer, blocker
 **Release**:
 A published version of this package, by the `version` of its `package.json`. The file records the release that last applied the tables, in `zukhruf_notify_version`. A release leaves a file of a later release as it is (ADR 0009).
 _Avoid_: Schema version (no person keeps a schema number), migration, user_version
+
+**Thread form**:
+`NotificationsThread`, from `@zukhruf/sqlite-notify/thread`: a `Notifications` in a worker thread of its own, so its synchronous transactions never block the host. Its `notify` resolves after its own commit and cannot join a transaction of the caller (ADR 0012). `@zukhruf/sqlite-queue` names its thread form the same way.
+_Avoid_: Worker (paper v2's name, `NotificationsWorker`), async notifications, off-thread notifications
+
+**Host**:
+The thread that made a `NotificationsThread`, where the `notification` and `error` events are emitted.
+_Avoid_: Main thread (a host can be a worker thread too), parent, client
+
+**Host clock**:
+The clock of a thread form that is not `globalThis`. The thread arms each of its timers on it and reads its time from the host (ADR 0012).
+_Avoid_: Remote clock (the word of the paper), proxy clock, fake clock
