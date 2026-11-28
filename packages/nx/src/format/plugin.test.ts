@@ -11,6 +11,7 @@ const unformatted = 'export const   value=1\n';
 
 // Nx and Prettier linked from zukhruf, and the plugin entry in `nx.json`.
 const workspace = (
+  signal: AbortSignal,
   files: Record<string, string>,
   plugin: string | object = pluginEntry,
 ) =>
@@ -19,13 +20,14 @@ const workspace = (
     plugins: [plugin],
     links: ['nx', 'prettier'],
     packages: {},
+    signal,
   });
 
 const packageJson = (name: string) =>
   `${JSON.stringify({ name, version: '0.0.0' }, null, 2)}\n`;
 
-test('each workspace project gets format and format:check', async () => {
-  await using probe = await workspace({
+test('each workspace project gets format and format:check', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/a/package.json': packageJson('a'),
     'packages/b/project.json': '{ "name": "b" }\n',
     'packages/c/package.json': packageJson('c'),
@@ -47,8 +49,9 @@ test('each workspace project gets format and format:check', async () => {
   );
 });
 
-test('no folder outside the projects of Nx becomes a project', async () => {
+test('no folder outside the projects of Nx becomes a project', async (t) => {
   await using probe = await workspace(
+    t.signal,
     {
       'packages/a/package.json': packageJson('a'),
       'packages/a/fixtures/inside/package.json': packageJson('inside'),
@@ -61,7 +64,7 @@ test('no folder outside the projects of Nx becomes a project', async () => {
   const listed = await probe.nx('show', 'projects', '--json');
   const excluded = await probe.targets('excluded');
 
-  assert.equal(listed.code, 0, listed.output);
+  assert.equal(listed.exitCode, 0, listed.output);
   const projects: string[] = JSON.parse(listed.stdout);
   assert.deepEqual(projects.sort(), ['a', 'excluded']);
   assert.deepEqual(
@@ -70,8 +73,8 @@ test('no folder outside the projects of Nx becomes a project', async () => {
   );
 });
 
-test('a workspace root with an nx key gets no format targets, so each file is checked once', async () => {
-  await using probe = await workspace({
+test('a workspace root with an nx key gets no format targets, so each file is checked once', async (t) => {
+  await using probe = await workspace(t.signal, {
     'package.json': `${JSON.stringify({ name: 'probe', private: true, nx: {}, workspaces: ['packages/*'] })}\n`,
     'packages/a/package.json': packageJson('a'),
     'packages/a/index.ts': unformatted,
@@ -100,21 +103,21 @@ test('a workspace root with an nx key gets no format targets, so each file is ch
   );
 });
 
-test('format:check fails on an unformatted file and leaves it as it was', async () => {
-  await using probe = await workspace({
+test('format:check fails on an unformatted file and leaves it as it was', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/a/package.json': packageJson('a'),
     'packages/a/index.ts': unformatted,
   });
 
   const run = await probe.nx('run', 'a:format:check', '--skip-nx-cache');
 
-  assert.notEqual(run.code, 0, run.output);
+  assert.notEqual(run.exitCode, 0, run.output);
   assert.match(run.output, /packages\/a\/index\.ts/);
   assert.equal(await probe.read('packages/a/index.ts'), unformatted);
 });
 
-test('format:check runs again when the Prettier config changes', async () => {
-  await using probe = await workspace({
+test('format:check runs again when the Prettier config changes', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/a/package.json': packageJson('a'),
     'packages/a/index.ts': 'export const value = "a";\n',
     'prettier.config.mjs': 'export default { singleQuote: false };\n',
@@ -127,13 +130,13 @@ test('format:check runs again when the Prettier config changes', async () => {
   );
   const second = await probe.nx('run', 'a:format:check');
 
-  assert.equal(first.code, 0, first.output);
-  assert.notEqual(second.code, 0, second.output);
+  assert.equal(first.exitCode, 0, first.output);
+  assert.notEqual(second.exitCode, 0, second.output);
   assert.match(second.output, /packages\/a\/index\.ts/);
 });
 
-test('format:check reads the Prettier plugins that the config names', async () => {
-  await using probe = await workspace({
+test('format:check reads the Prettier plugins that the config names', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/a/package.json': packageJson('a'),
     '.prettierrc': `${JSON.stringify({ plugins: ['@trivago/prettier-plugin-sort-imports'] })}\n`,
   });
@@ -158,8 +161,8 @@ test('format:check reads the Prettier plugins that the config names', async () =
   );
 });
 
-test('a project.json target replaces the inferred target', async () => {
-  await using probe = await workspace({
+test('a project.json target replaces the inferred target', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/a/project.json': `${JSON.stringify({
       name: 'a',
       targets: { 'format:check': { command: 'tofu fmt -check -recursive' } },
@@ -173,14 +176,14 @@ test('a project.json target replaces the inferred target', async () => {
   });
 });
 
-test('format writes the formatted file', async () => {
-  await using probe = await workspace({
+test('format writes the formatted file', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/a/package.json': packageJson('a'),
     'packages/a/index.ts': unformatted,
   });
 
   const run = await probe.nx('run', 'a:format');
 
-  assert.equal(run.code, 0, run.output);
+  assert.equal(run.exitCode, 0, run.output);
   assert.equal(await probe.read('packages/a/index.ts'), formatted);
 });

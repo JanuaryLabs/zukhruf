@@ -1,11 +1,10 @@
 import assert from 'node:assert/strict';
-import { execFileSync, spawn } from 'node:child_process';
-import { once } from 'node:events';
 import { mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { Command, ExitError } from '@zukhruf/process';
 
 export const zukhrufModules = fileURLToPath(
   new URL('../../../../node_modules', import.meta.url),
@@ -20,12 +19,17 @@ const nxBin = join(zukhrufModules, 'nx/dist/bin/nx.js');
  */
 const toolFolders = [
   ...new Set(
-    ['basename', 'mkdir', 'rm'].map((tool) =>
-      dirname(
-        execFileSync('sh', ['-c', `command -v ${tool}`], {
-          encoding: 'utf8',
-        }).trim(),
-      ),
+    await Promise.all(
+      ['basename', 'mkdir', 'rm'].map(async (tool) => {
+        const found = await new Command('sh', ['-c', `command -v ${tool}`], {
+          env: process.env,
+          clock: globalThis,
+        }).run();
+        if (found.exitCode !== 0) {
+          throw new ExitError(`command -v ${tool}`, found);
+        }
+        return dirname(found.stdout.trim());
+      }),
     ),
   ),
 ];
@@ -43,18 +47,21 @@ interface Manifest {
  * `nx.json`, and `files` written over those. Each package of `links` is
  * linked from zukhruf with its bins and its lockfile entry, as npm installs
  * it; `packages` adds more lockfile entries. Nx sees none of the user's
- * config and no environment of the Nx task that runs the test.
+ * config and no environment of the Nx task that runs the test. An abort of
+ * `signal`, the test's `t.signal`, stops the running nx process.
  */
 export async function workspace<Target>({
   files,
   plugins,
   links,
   packages,
+  signal,
 }: {
   files: Record<string, string>;
   plugins: (string | object)[];
   links: string[];
   packages: Record<string, object>;
+  signal: AbortSignal;
 }) {
   const manifests = new Map<string, Manifest>();
   for (const name of links) {
@@ -143,26 +150,19 @@ export async function workspace<Target>({
   // "No cached ProjectGraph is available" (#6138).
   let previous: Promise<unknown> = Promise.resolve();
   const nx = (...args: string[]) => {
-    const run = previous.then(() => spawnNx(args));
+    const run = previous.then(() => runNx(args));
     previous = run.catch(() => undefined);
     return run;
   };
-  const spawnNx = async (args: string[]) => {
-    const child = spawn(process.execPath, [nxBin, ...args], {
+  const runNx = (args: string[]) =>
+    new Command(process.execPath, [nxBin, ...args], {
       cwd: root,
       env: environment,
-      timeout: 60_000,
-    });
-    const stdoutChunks = child.stdout.toArray();
-    const stderrChunks = child.stderr.toArray();
-    const [code] = await once(child, 'close');
-    const stdout = Buffer.concat(await stdoutChunks).toString();
-    const stderr = Buffer.concat(await stderrChunks).toString();
-    return { code, stdout, output: stdout + stderr };
-  };
+      clock: globalThis,
+    }).run({ signal });
   const targets = async (project: string) => {
     const shown = await nx('show', 'project', project, '--json');
-    assert.equal(shown.code, 0, shown.output);
+    assert.equal(shown.exitCode, 0, shown.output);
     const configuration: { targets: Record<string, Target> } = JSON.parse(
       shown.stdout,
     );

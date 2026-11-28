@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { posix } from 'node:path';
 
@@ -11,6 +10,8 @@ import {
   runTasksInSerial,
   updateJson,
 } from '@nx/devkit';
+
+import { Command, ExitError } from '@zukhruf/process';
 
 import { appDirectory, projectNameOf } from '../app-directory.ts';
 import { envMarker, infraRoot } from '../dokploy/files.ts';
@@ -411,9 +412,16 @@ function authTargets(options: TargetOptions) {
  * Runs auth:generate after the install, so the CLI writes the models of the
  * plugins into the placeholder.
  */
-function generateModels(workspaceRoot: string, backendName: string): void {
-  execFileSync('npx', ['nx', 'run', `${backendName}:auth:generate`], {
+async function generateModels(
+  workspaceRoot: string,
+  backendName: string,
+): Promise<void> {
+  const target = `${backendName}:auth:generate`;
+  const started = await new Command('npx', ['nx', 'run', target], {
     cwd: workspaceRoot,
-    stdio: 'inherit',
-  });
+    env: process.env,
+    clock: globalThis,
+  }).start({ stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' });
+  const end = await started.ended;
+  if (end.exitCode !== 0) throw new ExitError(`nx run ${target}`, end);
 }

@@ -1,8 +1,9 @@
 // The steps that smoke.ts and upgrade.ts share: a workspace of the standard
 // made with create-nx-workspace and the generators of one published version,
 // as a person makes it from the README (packages/nx ADR 0020).
-import { execFileSync, spawnSync } from 'node:child_process';
 import { join } from 'node:path';
+
+import { Command, ExitError, StartError } from '@zukhruf/process';
 
 /** The folder name, and so the scope `@acme` of every workspace made here. */
 const name = 'acme';
@@ -38,43 +39,52 @@ const environment: NodeJS.ProcessEnv = {
  * Runs one step with its output on this terminal. stdin is closed, so no tool
  * waits for an answer: create-nx-workspace and `nx migrate` ask only on a TTY.
  */
-export function step(
+export async function step(
   title: string,
   command: string,
   args: string[],
   cwd: string,
-): void {
+): Promise<void> {
   console.log(`\n==> ${title}\n    ${command} ${args.join(' ')}`);
-  const run = spawnSync(command, args, {
+  const started = await new Command(command, args, {
     cwd,
     env: environment,
-    stdio: ['ignore', 'inherit', 'inherit'],
-  });
-  if (run.error !== undefined) {
-    throw new StepFailed(`${title}: ${run.error.message}`);
-  }
-  if (run.status !== 0) {
-    const ending =
-      run.status === null ? `signal ${run.signal}` : `exit code ${run.status}`;
-    throw new StepFailed(
-      `${title}: \`${command} ${args.join(' ')}\` in ${cwd} ended with ${ending}.`,
-    );
+    clock: globalThis,
+  })
+    .start({ stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' })
+    .catch((error: unknown) => {
+      if (!(error instanceof StartError)) throw error;
+      throw new StepFailed(`${title}: ${error.message}`, { cause: error });
+    });
+  const end = await started.ended;
+  if (end.exitCode !== 0) {
+    const failure = new ExitError(`${command} ${args.join(' ')}`, end);
+    throw new StepFailed(`${title}, in ${cwd}: ${failure.message}.`, {
+      cause: failure,
+    });
   }
 }
 
 /** Runs a command that prints a value, and returns its standard output. */
-export function read(command: string, args: string[], cwd: string): string {
-  return execFileSync(command, args, {
+export async function read(
+  command: string,
+  args: string[],
+  cwd: string,
+): Promise<string> {
+  const run = await new Command(command, args, {
     cwd,
     env: environment,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'inherit'],
-  });
+    clock: globalThis,
+  }).run();
+  if (run.exitCode !== 0) {
+    throw new ExitError(`${command} ${args.join(' ')}`, run);
+  }
+  return run.stdout;
 }
 
 /** The version that the `latest` tag of @zukhruf/nx names on npm. */
-export function latestVersion(cwd: string): string {
-  return read('npm', ['view', '@zukhruf/nx', 'version'], cwd).trim();
+export async function latestVersion(cwd: string): Promise<string> {
+  return (await read('npm', ['view', '@zukhruf/nx', 'version'], cwd)).trim();
 }
 
 /**
@@ -83,9 +93,12 @@ export function latestVersion(cwd: string): string {
  * pair, a db package wired into the backend, sign-in on both, and a UI
  * package. Returns the workspace root.
  */
-export function generateWorkspace(parent: string, version: string): string {
+export async function generateWorkspace(
+  parent: string,
+  version: string,
+): Promise<string> {
   const root = join(parent, name);
-  step(
+  await step(
     `Create the workspace with @zukhruf/nx@${version}`,
     'npx',
     [
@@ -111,14 +124,14 @@ export function generateWorkspace(parent: string, version: string): string {
     ['ui-package', ['packages/ui', '--importPath', `@${name}/ui`]],
   ];
   for (const [generator, options] of generators) {
-    step(
+    await step(
       `Run the ${generator} generator`,
       'npx',
       ['nx', 'g', `@zukhruf/nx:${generator}`, ...options],
       root,
     );
   }
-  step('Install the dependencies', 'npm', ['install'], root);
-  step('Sync the workspace', 'npx', ['nx', 'sync'], root);
+  await step('Install the dependencies', 'npm', ['install'], root);
+  await step('Sync the workspace', 'npx', ['nx', 'sync'], root);
   return root;
 }

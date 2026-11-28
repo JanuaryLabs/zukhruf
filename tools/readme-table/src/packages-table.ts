@@ -1,10 +1,8 @@
-import { execFile } from 'node:child_process';
 import { matchesGlob } from 'node:path';
-import { promisify } from 'node:util';
 
 import { format, resolveConfig } from 'prettier';
 
-const execFileAsync = promisify(execFile);
+import { Command, ExitError } from '@zukhruf/process';
 
 export const START = '<!-- packages-table:start -->';
 export const END = '<!-- packages-table:end -->';
@@ -60,20 +58,13 @@ export async function indexed(
   workspace: string,
   path: string,
 ): Promise<string> {
-  const { stdout } = await execFileAsync('git', ['show', `:${path}`], {
-    cwd: workspace,
-    maxBuffer: 16 * 1024 * 1024,
-  });
-  return stdout;
+  return git(workspace, ['show', `:${path}`]);
 }
 
 // The index of the checkout at `workspace`, as Files: CI checks the README
 // against what a commit or a checkout holds.
 export async function indexFiles(workspace: string): Promise<Files> {
-  const { stdout } = await execFileAsync('git', ['ls-files', '-z'], {
-    cwd: workspace,
-    maxBuffer: 64 * 1024 * 1024,
-  });
+  const stdout = await git(workspace, ['ls-files', '-z']);
   const paths = new Set(stdout.split('\0').filter((path) => path !== ''));
   return {
     entries: (globs) =>
@@ -132,4 +123,17 @@ function workspaces(source: string): string[] {
       (glob): glob is string => typeof glob === 'string',
     );
   throw new Error('the root package.json has no workspaces array');
+}
+
+async function git(
+  workspace: string,
+  args: readonly string[],
+): Promise<string> {
+  const run = await new Command('git', args, {
+    env: process.env,
+    clock: globalThis,
+    cwd: workspace,
+  }).run();
+  if (run.exitCode !== 0) throw new ExitError('git', run);
+  return run.stdout;
 }

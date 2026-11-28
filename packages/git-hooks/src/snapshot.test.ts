@@ -359,7 +359,7 @@ await preCommit([new Show()]);
   });
 });
 
-test('a command in a snapshot gives its exit code, or null for a signal, and its output; a command that cannot start throws the error of Node', async () => {
+test('a command in a snapshot gives its exit code, or null for a signal, and its output; a command that cannot start throws a StartError whose cause is the error of Node', async () => {
   // Arrange
   await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await repository(
@@ -373,7 +373,7 @@ class Show extends Step<Commit> {
     const killed = await snapshot.run('node', ['-e', 'process.kill(process.pid, "SIGKILL")']);
     const missing = await snapshot.run('no-such-command-in-path', []).then(
       () => 'started',
-      (error: NodeJS.ErrnoException) => error.code,
+      (error: Error) => [error.name, (error.cause as NodeJS.ErrnoException).code],
     );
     return this.pass(JSON.stringify({ failed, killed: killed.status, missing }));
   }
@@ -391,7 +391,7 @@ await preCommit([new Show()]);
   assert.deepEqual(printed(result.stderr, 'process'), {
     failed: { status: 3, stdout: 'out', stderr: 'err' },
     killed: null,
-    missing: 'ENOENT',
+    missing: ['StartError', 'ENOENT'],
   });
 });
 

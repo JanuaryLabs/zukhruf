@@ -1,8 +1,6 @@
-import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
-import { promisify } from 'node:util';
 
-const execFileAsync = promisify(execFile);
+import { gitIn } from './git.ts';
 
 interface Trailer {
   readonly key: string;
@@ -32,25 +30,18 @@ export class CommitMessage {
     environment: NodeJS.ProcessEnv,
     file: string,
   ): Promise<CommitMessage> {
-    const git = (args: readonly string[], input: string) => {
-      const run = execFileAsync('git', args, {
-        cwd: root,
-        env: environment,
-        encoding: 'utf8',
-      });
-      run.child.stdin?.end(input);
-      return run;
-    };
-    const { stdout: text } = await git(
-      ['stripspace', '--strip-comments'],
+    const text = await gitIn(
+      root,
+      environment,
       await readFile(file, 'utf8'),
-    );
+    )('stripspace', '--strip-comments');
     // `--parse` prints each trailer as `key: value`. The input is a commit
     // message, not a patch, so `--no-divider`: a "---" line of the body does
     // not end the message.
-    const { stdout: trailers } = await git(
-      ['interpret-trailers', '--parse', '--no-divider'],
-      text,
+    const trailers = await gitIn(root, environment, text)(
+      'interpret-trailers',
+      '--parse',
+      '--no-divider',
     );
     return new CommitMessage(
       text,

@@ -54,7 +54,8 @@
   },
   "dependencies": {
     "@zukhruf/async": "^0.8.70",
-    "@zukhruf/fs": "^0.8.70"
+    "@zukhruf/fs": "^0.8.70",
+    "@zukhruf/process": "^0.8.70"
   },
   "peerDependencies": {
     "eslint": "^9.30.0 || ^10.0.0",

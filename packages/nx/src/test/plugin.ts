@@ -22,8 +22,12 @@ const viteConfig = /^vite\.config\.(?:js|ts|mjs|mts|cjs|cts)$/;
 const vitestConfig = /^vitest\.config\.(?:js|ts|mjs|mts|cjs|cts)$/;
 const ownGlobalSetup = 'src/testing/docker-global-setup.ts';
 // The script of the test target ships beside this file: `.ts` in the source
-// that zukhruf runs, `.js` in the build that npm installs.
+// that zukhruf runs, `.js` in the build that npm installs. The source script
+// imports the packages of zukhruf by their source, so a test needs no build of
+// them; the test process it starts resolves packages as before.
 const run = join(import.meta.dirname, `run${extname(import.meta.filename)}`);
+const node =
+  extname(run) === '.ts' ? 'node --conditions=@zukhruf/source' : 'node';
 
 /**
  * Gives the `test` target, a `node --test` run, to each project root that
@@ -78,7 +82,7 @@ export const createNodes: CreateNodes<TestOptions> = [
           new Set(configFiles),
         ).includes('test:docker');
         const command = [
-          `node "${relative(join(context.workspaceRoot, root), run)}" --test --no-warnings`,
+          `${node} "${relative(join(context.workspaceRoot, root), run)}" --test --no-warnings`,
           `--test-timeout=${timeout}`,
           ...new Set([
             ...flags,

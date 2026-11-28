@@ -9,6 +9,9 @@
   "exclude": ["src/**/*.test.ts"],
   "references": [
     {
+      "path": "../../process/tsconfig.lib.json"
+    },
+    {
       "path": "../../fs/tsconfig.lib.json"
     },
     {

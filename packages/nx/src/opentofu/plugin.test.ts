@@ -31,6 +31,7 @@ if [ "$1" = plan ]; then echo plan > tfplan; fi
 // Nx (and Prettier for the format plugin) linked from zukhruf, the fake
 // `tofu`, and the plugin entries in `nx.json`.
 async function workspace(
+  signal: AbortSignal,
   files: Record<string, string>,
   plugins: (string | object)[] = [pluginEntry],
 ) {
@@ -42,6 +43,7 @@ async function workspace(
     plugins,
     links: ['nx', 'prettier'],
     packages: {},
+    signal,
   });
   await probe.write('node_modules/.bin/tofu', fakeTofu(probe.path));
   await chmod(join(probe.path, 'node_modules/.bin/tofu'), 0o755);
@@ -56,8 +58,8 @@ const config = 'output "name" {\n  value = "probe"\n}\n';
 const guard =
   ': "${TF_ENCRYPTION_PASSPHRASE:?TF_ENCRYPTION_PASSPHRASE missing: set it in the environment or in the .env file of the project}" && TF_VAR_tf_encryption_passphrase="$TF_ENCRYPTION_PASSPHRASE"';
 
-test('a project with an environment gets the OpenTofu targets, and no apply', async () => {
-  await using probe = await workspace({
+test('a project with an environment gets the OpenTofu targets, and no apply', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/infra/project.json': projectJson('infra'),
     'packages/infra/src/environments/production/main.tf': config,
   });
@@ -119,8 +121,8 @@ test('a project with an environment gets the OpenTofu targets, and no apply', as
   );
 });
 
-test('only a *.tf file directly in src/environments/<name> of its own project root makes an environment', async () => {
-  await using probe = await workspace({
+test('only a *.tf file directly in src/environments/<name> of its own project root makes an environment', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/modules-only/project.json': projectJson('modules-only'),
     'packages/modules-only/src/modules/network/main.tf': config,
     'packages/deep/project.json': projectJson('deep'),
@@ -132,12 +134,12 @@ test('only a *.tf file directly in src/environments/<name> of its own project ro
 
   const listed = await probe.nx('show', 'projects', '--withTarget', 'preview');
 
-  assert.equal(listed.code, 0, listed.output);
+  assert.equal(listed.exitCode, 0, listed.output);
   assert.equal(listed.stdout.trim(), 'stack');
 });
 
-test('each environment is a configuration, production is the default, and typecheck validates each one', async () => {
-  await using probe = await workspace({
+test('each environment is a configuration, production is the default, and typecheck validates each one', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/infra/project.json': projectJson('infra'),
     'packages/infra/src/environments/staging/main.tf': config,
     'packages/infra/src/environments/production/main.tf': config,
@@ -171,8 +173,8 @@ test('each environment is a configuration, production is the default, and typech
   );
 });
 
-test('preview -c staging runs init and plan in staging with the passphrase of the project .env', async () => {
-  await using probe = await workspace({
+test('preview -c staging runs init and plan in staging with the passphrase of the project .env', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/infra/project.json': projectJson('infra'),
     'packages/infra/.env': 'TF_ENCRYPTION_PASSPHRASE=from-dotenv\n',
     'packages/infra/src/environments/staging/main.tf': config,
@@ -181,15 +183,15 @@ test('preview -c staging runs init and plan in staging with the passphrase of th
 
   const run = await probe.nx('run', 'infra:preview', '-c', 'staging');
 
-  assert.equal(run.code, 0, run.output);
+  assert.equal(run.exitCode, 0, run.output);
   assert.deepEqual(await probe.log(), [
     'staging: tofu init -input=false passphrase=from-dotenv data=',
     'staging: tofu plan -out tfplan passphrase=from-dotenv data=',
   ]);
 });
 
-test('a target that reads the state stops before tofu when the passphrase is missing', async () => {
-  await using probe = await workspace({
+test('a target that reads the state stops before tofu when the passphrase is missing', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/infra/project.json': projectJson('infra'),
     'packages/infra/src/environments/production/main.tf': config,
     'tofu.log': '',
@@ -197,13 +199,13 @@ test('a target that reads the state stops before tofu when the passphrase is mis
 
   const run = await probe.nx('run', 'infra:output');
 
-  assert.notEqual(run.code, 0);
+  assert.notEqual(run.exitCode, 0);
   assert.match(run.output, /TF_ENCRYPTION_PASSPHRASE missing/);
   assert.equal(await probe.read('tofu.log'), '');
 });
 
-test('arguments after -- go to tofu output', async () => {
-  await using probe = await workspace({
+test('arguments after -- go to tofu output', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/infra/project.json': projectJson('infra'),
     'packages/infra/.env': 'TF_ENCRYPTION_PASSPHRASE=secret\n',
     'packages/infra/src/environments/production/main.tf': config,
@@ -211,14 +213,14 @@ test('arguments after -- go to tofu output', async () => {
 
   const run = await probe.nx('run', 'infra:output', '--', '-raw', 'name');
 
-  assert.equal(run.code, 0, run.output);
+  assert.equal(run.exitCode, 0, run.output);
   assert.deepEqual(await probe.log(), [
     'production: tofu output -raw name passphrase=secret data=',
   ]);
 });
 
-test('typecheck needs no secret, keeps its data folder apart, and replays from the cache', async () => {
-  await using probe = await workspace({
+test('typecheck needs no secret, keeps its data folder apart, and replays from the cache', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/infra/project.json': projectJson('infra'),
     'packages/infra/src/environments/production/main.tf': config,
   });
@@ -226,8 +228,8 @@ test('typecheck needs no secret, keeps its data folder apart, and replays from t
   const first = await probe.nx('run', 'infra:typecheck');
   const second = await probe.nx('run', 'infra:typecheck');
 
-  assert.equal(first.code, 0, first.output);
-  assert.equal(second.code, 0, second.output);
+  assert.equal(first.exitCode, 0, first.output);
+  assert.equal(second.exitCode, 0, second.output);
   assert.match(second.output, /Cache: +1\/1 hit/);
   // `tofu version` runs for the hash of each run; `init` and `validate` run
   // one time.
@@ -240,8 +242,8 @@ test('typecheck needs no secret, keeps its data folder apart, and replays from t
   );
 });
 
-test('show stops with no plan, shows a fresh plan, and stops when a file of the project changed after preview', async () => {
-  await using probe = await workspace({
+test('show stops with no plan, shows a fresh plan, and stops when a file of the project changed after preview', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/infra/project.json': projectJson('infra'),
     'packages/infra/.env': 'TF_ENCRYPTION_PASSPHRASE=secret\n',
     'packages/infra/compose.dokploy.yml': 'services: {}\n',
@@ -256,7 +258,7 @@ test('show stops with no plan, shows a fresh plan, and stops when a file of the 
   const at = (seconds: number) => new Date(Date.UTC(2026, 0, 1, 0, 0, seconds));
 
   const missing = await probe.nx('run', 'infra:show');
-  assert.notEqual(missing.code, 0);
+  assert.notEqual(missing.exitCode, 0);
   assert.match(missing.output, /has no tfplan\. Run the preview target/);
 
   await writeFile(join(production, 'tfplan'), 'plan\n');
@@ -277,7 +279,7 @@ test('show stops with no plan, shows a fresh plan, and stops when a file of the 
     'plan\n',
   );
   const fresh = await probe.nx('run', 'infra:show');
-  assert.equal(fresh.code, 0, fresh.output);
+  assert.equal(fresh.exitCode, 0, fresh.output);
   assert.deepEqual(await probe.log(), [
     'production: tofu show tfplan passphrase=secret data=',
   ]);
@@ -288,15 +290,16 @@ test('show stops with no plan, shows a fresh plan, and stops when a file of the 
     at(20),
   );
   const stale = await probe.nx('run', 'infra:show');
-  assert.notEqual(stale.code, 0);
+  assert.notEqual(stale.exitCode, 0);
   assert.match(
     stale.output,
     /tfplan is stale: \.\.\/\.\.\/\.\.\/compose\.dokploy\.yml changed after preview wrote the plan/,
   );
 });
 
-test('after @zukhruf/nx/format, an OpenTofu project gets the tofu format targets and another project keeps Prettier', async () => {
+test('after @zukhruf/nx/format, an OpenTofu project gets the tofu format targets and another project keeps Prettier', async (t) => {
   await using probe = await workspace(
+    t.signal,
     {
       'packages/infra/project.json': projectJson('infra'),
       'packages/infra/src/environments/production/main.tf': config,

@@ -39,6 +39,9 @@
   "publishConfig": {
     "access": "public"
   },
+  "dependencies": {
+    "@zukhruf/process": "^0.8.70"
+  },
   "devDependencies": {
     "@zukhruf/fs": "^0.8.70",
     "@zukhruf/launchd": "^0.8.70",

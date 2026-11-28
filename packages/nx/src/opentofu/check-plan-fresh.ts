@@ -4,9 +4,10 @@
 // changed after `preview` wrote the plan. A file of the project is one that
 // Git tracks or does not ignore, so `.terraform`, `.env` and the other plans
 // do not count.
-import { execFileSync } from 'node:child_process';
 import { stat } from 'node:fs/promises';
 import { basename } from 'node:path';
+
+import { Command, ExitError } from '@zukhruf/process';
 
 const [projectRoot = '.'] = process.argv.slice(2);
 
@@ -31,7 +32,7 @@ if (planned === undefined) {
 
 // Paths come back relative to the working folder, so each one can be read
 // from here.
-const files = execFileSync(
+const listed = await new Command(
   'git',
   [
     'ls-files',
@@ -42,8 +43,10 @@ const files = execFileSync(
     '--',
     projectRoot,
   ],
-  { encoding: 'utf8' },
-)
+  { env: process.env, clock: globalThis },
+).run();
+if (listed.exitCode !== 0) throw new ExitError('git ls-files', listed);
+const files = listed.stdout
   .split('\0')
   .filter((file) => file !== '' && basename(file) !== 'tfplan');
 

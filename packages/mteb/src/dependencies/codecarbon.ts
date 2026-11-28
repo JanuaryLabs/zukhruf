@@ -1,4 +1,3 @@
-import { execFile, spawn } from 'node:child_process';
 import {
   closeSync,
   existsSync,
@@ -15,6 +14,7 @@ import { bestMatch, createScorer, normalizeText, search } from 'rapidfuzz-js';
 import { ratio, tokenSetRatio } from 'rapidfuzz-js/fuzz';
 
 import { type Clock, delay, timeout } from '@zukhruf/async';
+import { Command, ExitError } from '@zukhruf/process';
 import { NeumaierSum } from '@zukhruf/python';
 import { mean } from '@zukhruf/statistics';
 
@@ -618,31 +618,27 @@ class ApplePowermetrics {
 
   // _log_values, with its empty argument. A non-zero exit code is only
   // logged in Python.
-  #logValues(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      execFile(
-        'sudo',
-        [
-          '-n',
-          'powermetrics',
-          '-n',
-          '10',
-          '',
-          '--samplers',
-          'cpu_power',
-          '--format',
-          'csv',
-          '-i',
-          '100',
-          '-o',
-          this.#logFilePath,
-        ],
-        (error) => {
-          if (error !== null && error.code === 'ENOENT') reject(error);
-          else resolve();
-        },
-      );
-    });
+  async #logValues(): Promise<void> {
+    const powermetrics = new Command(
+      '/usr/bin/sudo',
+      [
+        '-n',
+        'powermetrics',
+        '-n',
+        '10',
+        '',
+        '--samplers',
+        'cpu_power',
+        '--format',
+        'csv',
+        '-i',
+        '100',
+        '-o',
+        this.#logFilePath,
+      ],
+      { env: {}, clock: globalThis },
+    );
+    await powermetrics.run();
   }
 }
 
@@ -676,37 +672,24 @@ async function isPowermetricsAvailable(): Promise<boolean> {
 // _has_powermetrics_sudo: false when sudo asks for a password, an error for
 // another failure.
 async function hasPowermetricsSudo(): Promise<boolean> {
-  const { code, stderr } = await new Promise<{
-    readonly code: number | null;
-    readonly stderr: string;
-  }>((resolve, reject) => {
-    const child = spawn(
-      'sudo',
-      [
-        '-n',
-        'powermetrics',
-        '--samplers',
-        'cpu_power',
-        '-n',
-        '1',
-        '-i',
-        '1',
-        '-o',
-        '/dev/null',
-      ],
-      { stdio: ['ignore', 'pipe', 'pipe'] },
-    );
-    let text = '';
-    child.stderr.setEncoding('utf8');
-    child.stderr.on('data', (chunk: string) => {
-      text += chunk;
-    });
-    child.stdout.resume();
-    child.on('error', reject);
-    child.on('close', (exitCode) => resolve({ code: exitCode, stderr: text }));
-  });
-  if (/[sudo][^\n]*password/.test(stderr)) return false;
-  if (code !== 0) throw new Error('Return code != 0');
+  const run = await new Command(
+    '/usr/bin/sudo',
+    [
+      '-n',
+      'powermetrics',
+      '--samplers',
+      'cpu_power',
+      '-n',
+      '1',
+      '-i',
+      '1',
+      '-o',
+      '/dev/null',
+    ],
+    { env: {}, clock: globalThis },
+  ).run();
+  if (/[sudo][^\n]*password/.test(run.stderr)) return false;
+  if (run.exitCode !== 0) throw new ExitError('sudo', run);
   return true;
 }
 

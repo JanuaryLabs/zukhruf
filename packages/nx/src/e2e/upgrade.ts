@@ -7,6 +7,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { TemporaryFiles, isErrno } from '@zukhruf/fs';
+import { ExitError } from '@zukhruf/process';
 
 import {
   StepFailed,
@@ -60,9 +61,9 @@ function stringAt(value: unknown, what: string): string {
  * `oldestBase`. npm 12 prints `npm view --json` as an array with one entry for
  * the one package asked.
  */
-function baseVersion(cwd: string): string {
+async function baseVersion(cwd: string): Promise<string> {
   const printed: unknown = JSON.parse(
-    read('npm', ['view', '@zukhruf/nx', 'time', '--json'], cwd),
+    await read('npm', ['view', '@zukhruf/nx', 'time', '--json'], cwd),
   );
   if (
     !Array.isArray(printed) ||
@@ -110,10 +111,15 @@ function leaves(value: unknown, path: string, into: Map<string, string>) {
   return into;
 }
 
-async function readJson(path: string): Promise<Record<string, unknown>> {
-  const value: unknown = JSON.parse(await readFile(path, 'utf8'));
-  if (!isRecord(value)) throw new Error(`${path} is not a JSON object.`);
+/** The JSON object of `text`, or an error that names `what`. */
+function parseObject(text: string, what: string): Record<string, unknown> {
+  const value: unknown = JSON.parse(text);
+  if (!isRecord(value)) throw new Error(`${what} is not a JSON object.`);
   return value;
+}
+
+async function readJson(path: string): Promise<Record<string, unknown>> {
+  return parseObject(await readFile(path, 'utf8'), path);
 }
 
 /** project.json of a project root. A project of the standard may have none. */
@@ -132,17 +138,15 @@ async function configuration(root: string): Promise<Map<string, string>> {
   const nxJson = await readJson(join(root, 'nx.json'));
   for (const key of nxJsonKeys) leaves(nxJson[key], `nx.json ${key}`, compared);
 
-  // Nx writes each graph to a file: a workspace's task graph is larger than
-  // the 1 MiB that execFileSync takes from stdout (ENOBUFS, 2026-11-22).
-  const projectGraph = join(root, '..', 'project-graph.json');
-  step(
-    'Write the project graph',
-    'npx',
-    ['nx', 'graph', `--file=${projectGraph}`],
-    root,
+  // Nx prints each graph as JSON on stdout with `--file=stdout` and
+  // `--graph=stdout`.
+  console.log(`\n==> Read the project graph of ${root}`);
+  const projectGraph = parseObject(
+    await read('npx', ['nx', 'graph', '--file=stdout'], root),
+    'nx graph',
   );
   const projects = recordAt(
-    recordAt(await readJson(projectGraph), 'graph', 'nx graph'),
+    recordAt(projectGraph, 'graph', 'nx graph'),
     'nodes',
     'nx graph.graph',
   );
@@ -167,15 +171,17 @@ async function configuration(root: string): Promise<Map<string, string>> {
     );
   }
 
-  const taskGraph = join(root, '..', 'task-graph.json');
-  step(
-    'Write the task graph of every target',
-    'npx',
-    ['nx', 'run-many', '-t', ...targets, `--graph=${taskGraph}`],
-    root,
+  console.log(`\n==> Read the task graph of every target of ${root}`);
+  const taskGraph = parseObject(
+    await read(
+      'npx',
+      ['nx', 'run-many', '-t', ...targets, '--graph=stdout'],
+      root,
+    ),
+    'nx run-many --graph',
   );
   const tasks = recordAt(
-    recordAt(await readJson(taskGraph), 'tasks', 'nx run-many --graph'),
+    recordAt(taskGraph, 'tasks', 'nx run-many --graph'),
     'dependencies',
     'nx run-many --graph tasks',
   );
@@ -209,27 +215,27 @@ await using latestFolder = await new TemporaryFiles().directory(
   'zukhruf-nx-upgrade-latest-',
 );
 // Both sides get the one version, also when a release lands during the run.
-const latest = latestVersion(baseFolder.path);
-const base = baseVersion(baseFolder.path);
+const latest = await latestVersion(baseFolder.path);
+const base = await baseVersion(baseFolder.path);
 try {
-  const upgraded = generateWorkspace(baseFolder.path, base);
-  step(
+  const upgraded = await generateWorkspace(baseFolder.path, base);
+  await step(
     `Move the workspace of ${base} to ${latest}`,
     'npx',
     ['nx', 'migrate', `@zukhruf/nx@${latest}`],
     upgraded,
   );
-  step('Install the moved versions', 'npm', ['install'], upgraded);
+  await step('Install the moved versions', 'npm', ['install'], upgraded);
   // Nx writes migrations.json only when a migration is in the range, and
   // --if-exists runs nothing without it. --agentic=false keeps a run inside an
   // AI agent the same as in CI.
-  step(
+  await step(
     'Run the migrations',
     'npx',
     ['nx', 'migrate', '--run-migrations', '--if-exists', '--agentic=false'],
     upgraded,
   );
-  const fresh = generateWorkspace(latestFolder.path, latest);
+  const fresh = await generateWorkspace(latestFolder.path, latest);
 
   const [upgradedNx, freshNx] = await Promise.all([
     nxVersion(upgraded),
@@ -266,7 +272,7 @@ try {
     }
   }
 } catch (error) {
-  if (!(error instanceof StepFailed)) throw error;
+  if (!(error instanceof StepFailed || error instanceof ExitError)) throw error;
   console.error(`\nThe upgrade check failed at a step. ${error.message}`);
   process.exitCode = 1;
 }

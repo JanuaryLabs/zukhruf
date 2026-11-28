@@ -1,7 +1,4 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-
-const execFileAsync = promisify(execFile);
+import { gitIn } from './git.ts';
 
 // The environment without the variables that tie git to one repo, such as
 // GIT_DIR, GIT_WORK_TREE and GIT_INDEX_FILE. A hook gets some of them from
@@ -13,12 +10,11 @@ const execFileAsync = promisify(execFile);
 export async function withoutRepoVariables(
   environment: NodeJS.ProcessEnv,
 ): Promise<NodeJS.ProcessEnv> {
-  const { stdout } = await execFileAsync(
-    'git',
-    ['rev-parse', '--local-env-vars'],
-    { env: environment, encoding: 'utf8' },
+  const names = new Set(
+    (
+      await gitIn(process.cwd(), environment)('rev-parse', '--local-env-vars')
+    ).split('\n'),
   );
-  const names = new Set(stdout.split('\n'));
   return Object.fromEntries(
     Object.entries(environment).filter(([name]) => !names.has(name)),
   );

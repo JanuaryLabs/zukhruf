@@ -33,12 +33,13 @@ const installed = {
 
 // Nx linked from zukhruf, `prisma` and `@prisma/client` in the lockfile, the
 // fake `prisma`, and the plugin entry in `nx.json`.
-async function workspace(files: Record<string, string>) {
+async function workspace(signal: AbortSignal, files: Record<string, string>) {
   const probe = await temporaryWorkspace<Target>({
     files,
     plugins: [pluginEntry],
     links: ['nx'],
     packages: installed,
+    signal,
   });
   await probe.write('node_modules/.bin/prisma', fakePrisma(probe.path));
   await chmod(join(probe.path, 'node_modules/.bin/prisma'), 0o755);
@@ -52,8 +53,8 @@ const schema = (output?: string) =>
   `generator client {\n  provider = "prisma-client"\n${output === undefined ? '' : `  output   = "${output}"\n`}}\n\ndatasource db {\n  provider = "postgresql"\n}\n`;
 const model = 'model User {\n  id Int @id\n}\n';
 
-test('a project with prisma.config.ts gets generate, migrate, migrate:check, migrate:create, deploy, reset and pull', async () => {
-  await using probe = await workspace({
+test('a project with prisma.config.ts gets generate, migrate, migrate:check, migrate:create, deploy, reset and pull', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/db/project.json': projectJson('db'),
     'packages/db/prisma.config.ts': prismaConfig,
     'packages/db/schema.prisma': schema('src/prisma'),
@@ -106,8 +107,8 @@ test('a project with prisma.config.ts gets generate, migrate, migrate:check, mig
   assert.equal(targets['build'], undefined);
 });
 
-test('a project with a schema but no prisma.config.ts gets no Prisma targets', async () => {
-  await using probe = await workspace({
+test('a project with a schema but no prisma.config.ts gets no Prisma targets', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/db/project.json': projectJson('db'),
     'packages/db/prisma.config.ts': prismaConfig,
     'packages/db/schema.prisma': schema('src/prisma'),
@@ -117,12 +118,12 @@ test('a project with a schema but no prisma.config.ts gets no Prisma targets', a
 
   const listed = await probe.nx('show', 'projects', '--withTarget', 'generate');
 
-  assert.equal(listed.code, 0, listed.output);
+  assert.equal(listed.exitCode, 0, listed.output);
   assert.equal(listed.stdout.trim(), 'db');
 });
 
-test('each output is relative to the file of its generator block, and a block with no output turns the cache off', async () => {
-  await using probe = await workspace({
+test('each output is relative to the file of its generator block, and a block with no output turns the cache off', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/nested/project.json': projectJson('nested'),
     'packages/nested/prisma.config.ts': prismaConfig,
     'packages/nested/prisma/schema.prisma': `${schema('../generated/client')}\ngenerator erd {\n  provider = "prisma-erd-generator"\n  output   = "./erd.svg"\n}\n`,
@@ -144,8 +145,8 @@ test('each output is relative to the file of its generator block, and a block wi
   assert.equal(fallback?.['generate']?.outputs, undefined);
 });
 
-test('generate replays from the cache, restores its output, and runs again when a model file changes', async () => {
-  await using probe = await workspace({
+test('generate replays from the cache, restores its output, and runs again when a model file changes', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/db/project.json': projectJson('db'),
     'packages/db/prisma.config.ts': prismaConfig,
     'packages/db/schema.prisma': schema('src/prisma'),
@@ -162,19 +163,19 @@ test('generate replays from the cache, restores its output, and runs again when 
   );
   const changed = await probe.nx('run', 'db:generate');
 
-  assert.equal(first.code, 0, first.output);
-  assert.equal(replayed.code, 0, replayed.output);
+  assert.equal(first.exitCode, 0, first.output);
+  assert.equal(replayed.exitCode, 0, replayed.output);
   assert.match(replayed.output, /Cache: +1\/1 hit/);
   assert.equal(restored, 'client\n');
-  assert.equal(changed.code, 0, changed.output);
+  assert.equal(changed.exitCode, 0, changed.output);
   assert.equal(
     await probe.read('prisma.log'),
     'prisma generate\nprisma generate\n',
   );
 });
 
-test('migrate runs generate first, in the project root', async () => {
-  await using probe = await workspace({
+test('migrate runs generate first, in the project root', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/db/project.json': projectJson('db'),
     'packages/db/prisma.config.ts': prismaConfig,
     'packages/db/schema.prisma': schema('src/prisma'),
@@ -182,7 +183,7 @@ test('migrate runs generate first, in the project root', async () => {
 
   const run = await probe.nx('run', 'db:migrate', '--', '--name', 'init');
 
-  assert.equal(run.code, 0, run.output);
+  assert.equal(run.exitCode, 0, run.output);
   assert.equal(
     await probe.read('prisma.log'),
     'prisma generate\nprisma migrate dev --name init\n',
@@ -193,8 +194,8 @@ test('migrate runs generate first, in the project root', async () => {
   );
 });
 
-test('migrate:check of a SQLite schema diffs with no shadow database URL, so Prisma replays the migrations in memory', async () => {
-  await using probe = await workspace({
+test('migrate:check of a SQLite schema diffs with no shadow database URL, so Prisma replays the migrations in memory', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/db/project.json': projectJson('db'),
     'packages/db/prisma.config.ts': prismaConfig,
     'packages/db/schema.prisma': schema('src/prisma').replace(
@@ -206,15 +207,15 @@ test('migrate:check of a SQLite schema diffs with no shadow database URL, so Pri
 
   const run = await probe.nx('run', 'db:migrate:check');
 
-  assert.equal(run.code, 0, run.output);
+  assert.equal(run.exitCode, 0, run.output);
   assert.equal(
     await probe.read('prisma.log'),
     'prisma migrate diff --from-migrations migrations --to-schema . --exit-code\nSHADOW_CONNECTION_STRING=unset\n',
   );
 });
 
-test('migrate:create of a SQLite schema writes the migration with no shadow database URL', async () => {
-  await using probe = await workspace({
+test('migrate:create of a SQLite schema writes the migration with no shadow database URL', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/db/project.json': projectJson('db'),
     'packages/db/prisma.config.ts': prismaConfig,
     'packages/db/schema.prisma': schema('src/prisma').replace(
@@ -225,15 +226,15 @@ test('migrate:create of a SQLite schema writes the migration with no shadow data
 
   const run = await probe.nx('run', 'db:migrate:create', '--name', 'init');
 
-  assert.equal(run.code, 0, run.output);
+  assert.equal(run.exitCode, 0, run.output);
   assert.match(
     await probe.read('prisma.log'),
     /^prisma migrate diff --from-migrations migrations --to-schema \. --script --output migrations\/\d{14}_init\/migration\.sql\nSHADOW_CONNECTION_STRING=unset\n$/,
   );
 });
 
-test('migrate:check of a schema whose provider has no shadow database here stops before Prisma and names the provider', async () => {
-  await using probe = await workspace({
+test('migrate:check of a schema whose provider has no shadow database here stops before Prisma and names the provider', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/db/project.json': projectJson('db'),
     'packages/db/prisma.config.ts': prismaConfig,
     'packages/db/schema.prisma': schema('src/prisma').replace(
@@ -244,7 +245,7 @@ test('migrate:check of a schema whose provider has no shadow database here stops
 
   const run = await probe.nx('run', 'db:migrate:check');
 
-  assert.notEqual(run.code, 0, run.output);
+  assert.notEqual(run.exitCode, 0, run.output);
   assert.match(run.output, /provider "mysql"/);
   await assert.rejects(probe.read('prisma.log'), { code: 'ENOENT' });
 });

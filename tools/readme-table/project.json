@@ -7,6 +7,7 @@
   "targets": {
     "generate": {
       "executor": "nx:run-commands",
+      "dependsOn": ["^build"],
       "cache": false,
       "options": {
         "command": "node tools/readme-table/src/generate.ts"
@@ -14,6 +15,7 @@
     },
     "check": {
       "executor": "nx:run-commands",
+      "dependsOn": ["^build"],
       "cache": false,
       "options": {
         "command": "node tools/readme-table/src/check.ts"

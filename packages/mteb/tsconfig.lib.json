@@ -10,31 +10,34 @@
   "exclude": ["src/**/*.test.ts", "src/**/*.spec.ts", "src/testing/**"],
   "references": [
     {
-      "path": "../async/tsconfig.lib.json"
-    },
-    {
-      "path": "../python/tsconfig.lib.json"
-    },
-    {
-      "path": "../random/tsconfig.lib.json"
-    },
-    {
-      "path": "../testing/tsconfig.lib.json"
-    },
-    {
       "path": "../statistics/tsconfig.lib.json"
-    },
-    {
-      "path": "../evals/tsconfig.lib.json"
-    },
-    {
-      "path": "../fs/tsconfig.lib.json"
     },
     {
       "path": "../retrieval/tsconfig.lib.json"
     },
     {
+      "path": "../random/tsconfig.lib.json"
+    },
+    {
+      "path": "../python/tsconfig.lib.json"
+    },
+    {
+      "path": "../process/tsconfig.lib.json"
+    },
+    {
+      "path": "../evals/tsconfig.lib.json"
+    },
+    {
+      "path": "../async/tsconfig.lib.json"
+    },
+    {
+      "path": "../testing/tsconfig.lib.json"
+    },
+    {
       "path": "../parameterized-test/tsconfig.lib.json"
+    },
+    {
+      "path": "../fs/tsconfig.lib.json"
     }
   ]
 }

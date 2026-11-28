@@ -10,9 +10,10 @@
 //   empty database of @zukhruf/testing/postgres, and drops it after the diff.
 // - sqlite: with no shadow URL, Prisma replays the migrations on an in-memory
 //   SQLite database, so this script sets nothing and starts no database.
-import { spawn } from 'node:child_process';
 import { glob, readFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
+
+import { Command, ExitError } from '@zukhruf/process';
 
 type Run = { command: 'check' } | { command: 'create'; output: string };
 
@@ -115,7 +116,7 @@ if (shadowOf === undefined) {
   );
 }
 await using shadow = await shadowOf();
-const prisma = spawn(
+const prisma = await new Command(
   'prisma',
   [
     'migrate',
@@ -130,33 +131,19 @@ const prisma = spawn(
       ? ['--exit-code']
       : ['--script', '--output', run.output]),
   ],
-  {
-    stdio: 'inherit',
-    env: { ...process.env, ...shadow.environment },
-  },
-);
-const {
-  promise: exit,
-  resolve,
-  reject,
-} = Promise.withResolvers<{
-  code: number | null;
-  signal: NodeJS.Signals | null;
-}>();
-prisma.once('error', reject);
-prisma.once('close', (code, signal) => resolve({ code, signal }));
-// Node gives the code null when a signal ended the child.
-const { code, signal } = await exit;
-if (code === null) {
-  throw new Error(`prisma migrate diff stopped on ${signal}.`);
+  { env: { ...process.env, ...shadow.environment }, clock: globalThis },
+).start({ stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' });
+const end = await prisma.ended;
+if (end.signal !== undefined) {
+  throw new ExitError('prisma migrate diff', end);
 }
 // With --exit-code, Prisma exits 2 when the diff is not empty.
-if (run.command === 'check' && code === 2) {
+if (run.command === 'check' && end.exitCode === 2) {
   console.error(
     'The migrations do not build the schema. The diff above goes from the migrations to the schema. Write it as a new migration with the migrate:create target of this project (--name <name>), or change the schema to match the migrations.',
   );
 }
-if (run.command === 'create' && code === 0) {
+if (run.command === 'create' && end.exitCode === 0) {
   console.error(`Wrote ${run.output}.`);
 }
-process.exitCode = code;
+process.exitCode = end.exitCode;

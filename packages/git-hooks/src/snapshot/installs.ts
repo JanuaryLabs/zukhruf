@@ -1,4 +1,3 @@
-import { execFile } from 'node:child_process';
 import { hash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync } from 'node:fs';
 import {
@@ -12,15 +11,13 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { basename, isAbsolute, join, normalize, sep } from 'node:path';
-import { promisify } from 'node:util';
 
 import type { Clock } from '@zukhruf/async';
 import { Presence, isErrno } from '@zukhruf/fs';
+import { Command, ExitError } from '@zukhruf/process';
 
 import { Lockfile } from '../npm/lockfile.ts';
 import { workspaceFolders } from './workspaces.ts';
-
-const execFileAsync = promisify(execFile);
 
 // The installs that the hook keeps: the ones that it used last.
 const kept = 2;
@@ -167,23 +164,15 @@ async function npm(
   environment: NodeJS.ProcessEnv,
   ...args: string[]
 ): Promise<void> {
-  try {
-    await execFileAsync('npm', args, {
-      cwd,
-      env: environment,
-      encoding: 'utf8',
-      maxBuffer: 2 ** 30,
-      // npm is a .cmd file on Windows, which only a shell runs. The
-      // arguments are npm's own flags and package names, which need no quotes.
-      shell: process.platform === 'win32',
+  const run = await new Command('npm', args, {
+    env: environment,
+    clock: globalThis,
+    cwd,
+  }).run();
+  if (run.exitCode !== 0)
+    throw new Error(`npm ${args.join(' ')} failed:\n${run.stderr.trimEnd()}`, {
+      cause: new ExitError('npm', run),
     });
-  } catch (error) {
-    if (!Error.isError(error) || !('stderr' in error)) throw error;
-    throw new Error(
-      `npm ${args.join(' ')} failed:\n${String(error.stderr).trimEnd()}`,
-      { cause: error },
-    );
-  }
 }
 
 async function prune(installs: string): Promise<void> {

@@ -1,7 +1,6 @@
-import { execFile } from 'node:child_process';
-
 import { untilAborted } from '@zukhruf/async';
 import { isErrno } from '@zukhruf/fs';
+import { Command, ExitError, StartError } from '@zukhruf/process';
 
 import {
   LaunchctlError,
@@ -123,20 +122,20 @@ export class Launchctl {
   // A cancel stops the wait, not the subcommand, as a cancel of the bootout
   // wait leaves launchd to finish the bootout (ADR 0004).
   #run(args: readonly string[], signal: AbortSignal | undefined) {
-    const { promise, resolve, reject } = Promise.withResolvers<Answer>();
-    execFile(
-      '/bin/launchctl',
-      args,
-      { encoding: 'utf8' },
-      (error, stdout, stderr) => {
-        if (error === null) resolve({ exitCode: 0, stdout, stderr });
-        else if (typeof error.code === 'number') {
-          resolve({ exitCode: error.code, stdout, stderr });
-        } else if (isErrno(error, 'ENOENT')) {
-          reject(new LaunchdUnavailableError(error));
-        } else reject(error);
-      },
-    );
-    return untilAborted(promise, signal);
+    return untilAborted(this.#answer(args), signal);
+  }
+
+  async #answer(args: readonly string[]): Promise<Answer> {
+    const launchctl = new Command('/bin/launchctl', args, {
+      env: {},
+      clock: globalThis,
+    });
+    const run = await launchctl.run().catch((error: unknown) => {
+      if (error instanceof StartError && isErrno(error.cause, 'ENOENT'))
+        throw new LaunchdUnavailableError(error);
+      throw error;
+    });
+    if (run.exitCode === undefined) throw new ExitError('launchctl', run);
+    return { exitCode: run.exitCode, stdout: run.stdout, stderr: run.stderr };
   }
 }

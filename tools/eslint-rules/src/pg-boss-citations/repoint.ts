@@ -9,7 +9,6 @@
 // After the hand check, `--checked` writes the record. Lines that `git diff
 // HEAD` adds, and untracked files, are skipped: they cite the new version
 // already.
-import { execFileSync, spawnSync } from 'node:child_process';
 import { globSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { findPackageJSON } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
@@ -21,6 +20,7 @@ import * as prettier from 'prettier';
 import tseslint from 'typescript-eslint';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { Command, ExitError } from '@zukhruf/process';
 
 import { type Citation, citations, commentCitations } from './citations.ts';
 
@@ -67,10 +67,10 @@ if (to !== pinned) {
   console.log(`Recorded pg-boss ${to} in ${RECORD}.`);
 } else {
   await using folder = await new TemporaryFiles().directory('pg-boss-repoint-');
-  const oldDist = unpack(from, folder.path);
+  const oldDist = await unpack(from, folder.path);
   const newDist = join(dirname(installedManifest), 'dist');
-  const maps = lineMaps(oldDist, newDist);
-  const skipped = linesChangedSinceHead(packageDir);
+  const maps = await lineMaps(oldDist, newDist);
+  const skipped = await linesChangedSinceHead(packageDir);
 
   const { moved, skippedCount, flags, changed } = await moveCitations(
     maps,
@@ -193,9 +193,9 @@ async function format(path: string, text: string): Promise<string> {
 }
 
 /** Unpacks the tarball of pg-boss `version` into `into`, and returns its dist. Its code is never run. */
-function unpack(version: string, into: string): string {
+async function unpack(version: string, into: string): Promise<string> {
   // npm runs in the package, so the registry of the workspace's .npmrc applies.
-  execFileSync(
+  const npm = new Command(
     'npm',
     [
       'pack',
@@ -204,20 +204,20 @@ function unpack(version: string, into: string): string {
       '--pack-destination',
       into,
     ],
-    {
-      cwd: packageDir,
-      stdio: ['ignore', 'ignore', 'inherit'],
-      // npm is a .cmd file on Windows, which only a shell runs. The
-      // arguments are npm's own flags and a package spec, which need no quotes.
-      shell: process.platform === 'win32',
-    },
+    { env: process.env, clock: globalThis, cwd: packageDir },
   );
+  const packed = await (
+    await npm.start({ stdin: 'ignore', stdout: 'ignore', stderr: 'inherit' })
+  ).ended;
+  // Its stderr went to the terminal, so the error has only the end.
+  if (packed.exitCode !== 0) throw new ExitError('npm', packed);
   // The folder is new, so the tarball is its only file.
   const [filename] = readdirSync(into);
   if (filename === undefined) {
     throw new Error(`npm pack pg-boss@${version} wrote no tarball`);
   }
-  execFileSync('tar', ['-xzf', join(into, filename), '-C', into]);
+  const tar = await run('tar', ['-xzf', join(into, filename), '-C', into]);
+  if (tar.exitCode !== 0) throw new ExitError('tar', tar);
   return join(into, 'package', 'dist');
 }
 
@@ -226,30 +226,28 @@ function unpack(version: string, into: string): string {
  * The lines outside the hunks of `git diff -U0` are the lines both files
  * share, as the equal blocks of a difflib SequenceMatcher are.
  */
-function lineMaps(oldDist: string, newDist: string): Map<string, LineMap> {
+async function lineMaps(
+  oldDist: string,
+  newDist: string,
+): Promise<Map<string, LineMap>> {
   const newFiles = new Set(jsFiles(newDist));
   const maps = new Map<string, LineMap>();
   for (const file of jsFiles(oldDist)) {
     if (!newFiles.has(file)) continue;
     const oldFile = join(oldDist, file);
-    const diff = spawnSync(
-      'git',
-      [
-        'diff',
-        '--no-index',
-        '--no-color',
-        '--no-ext-diff',
-        '--diff-algorithm=myers',
-        '-U0',
-        oldFile,
-        join(newDist, file),
-      ],
-      { encoding: 'utf8', maxBuffer: 2 ** 30 },
-    );
+    const diff = await run('git', [
+      'diff',
+      '--no-index',
+      '--no-color',
+      '--no-ext-diff',
+      '--diff-algorithm=myers',
+      '-U0',
+      oldFile,
+      join(newDist, file),
+    ]);
     // git diff --no-index exits 1 when the files differ.
-    if (diff.status !== 0 && diff.status !== 1) {
-      throw new Error(`git diff of ${file} failed:\n${diff.stderr}`);
-    }
+    if (diff.exitCode !== 0 && diff.exitCode !== 1)
+      throw new ExitError('git', diff);
     maps.set(file, keptLines(diff.stdout, lineCount(oldFile)));
   }
   return maps;
@@ -300,22 +298,27 @@ function lineCount(file: string): number {
 }
 
 /** The lines of each file of the package that changed since HEAD: added lines, or 'all' for an untracked file. */
-function linesChangedSinceHead(
+async function linesChangedSinceHead(
   cwd: string,
-): Map<string, ReadonlySet<number> | 'all'> {
-  const git = (...args: string[]) =>
-    execFileSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 2 ** 30 });
+): Promise<Map<string, ReadonlySet<number> | 'all'>> {
+  const git = async (...args: string[]) => {
+    const completed = await run('git', args, cwd);
+    if (completed.exitCode !== 0) throw new ExitError('git', completed);
+    return completed.stdout;
+  };
   const changed = new Map<string, Set<number> | 'all'>();
   let current: Set<number> | undefined;
-  for (const line of git(
-    'diff',
-    '--relative',
-    '--no-color',
-    '--no-ext-diff',
-    '-U0',
-    'HEAD',
-    '--',
-    '.',
+  for (const line of (
+    await git(
+      'diff',
+      '--relative',
+      '--no-color',
+      '--no-ext-diff',
+      '-U0',
+      'HEAD',
+      '--',
+      '.',
+    )
   ).split('\n')) {
     if (line.startsWith('+++ b/')) {
       current = new Set();
@@ -331,7 +334,7 @@ function linesChangedSinceHead(
       }
     }
   }
-  for (const file of git('ls-files', '--others', '--exclude-standard')
+  for (const file of (await git('ls-files', '--others', '--exclude-standard'))
     .split('\n')
     .filter(Boolean)) {
     changed.set(file, 'all');
@@ -360,4 +363,12 @@ function lineOf(text: string, offset: number): number {
     index = text.indexOf('\n', index + 1);
   }
   return line;
+}
+
+function run(file: string, args: readonly string[], cwd?: string) {
+  return new Command(file, args, {
+    env: process.env,
+    clock: globalThis,
+    ...(cwd === undefined ? {} : { cwd }),
+  }).run();
 }

@@ -344,8 +344,8 @@ test('a repo that installs the packed package runs a hook that imports it by nam
   );
   // npm pack gives the files that npm publish uploads. The repo's own
   // Prettier, which formatRepository links, is the peer dependency, and
-  // @zukhruf/async and @zukhruf/fs are the dependencies that npm would install
-  // beside the package.
+  // @zukhruf/async, @zukhruf/fs and @zukhruf/process are the dependencies that
+  // npm would install beside the package.
   const { stdout } = await execFileAsync(
     'npm',
     ['pack', `--pack-destination=${packed.path}`],
@@ -360,7 +360,11 @@ test('a repo that installs the packed package runs a hook that imports it by nam
     installed,
     '--strip-components=1',
   ]);
-  for (const dependency of ['@zukhruf/async', '@zukhruf/fs']) {
+  for (const dependency of [
+    '@zukhruf/async',
+    '@zukhruf/fs',
+    '@zukhruf/process',
+  ]) {
     await symlink(
       join(zukhrufModules, dependency),
       join(repo.root, 'node_modules', dependency),

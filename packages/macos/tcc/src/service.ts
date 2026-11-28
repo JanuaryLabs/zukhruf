@@ -1,9 +1,8 @@
-import { execFile, execFileSync } from 'node:child_process';
-import { promisify } from 'node:util';
+import { execFileSync } from 'node:child_process';
+
+import { Command, ExitError } from '@zukhruf/process';
 
 import type { Client } from './client.ts';
-
-const run = promisify(execFile);
 
 // The strings of the Privacy & Security pane of System Settings, by key.
 const strings =
@@ -39,6 +38,11 @@ export abstract class Service {
   }
 
   async openSettings(): Promise<void> {
-    await run('/usr/bin/open', [this.url.href]);
+    const open = new Command('/usr/bin/open', [this.url.href], {
+      env: {},
+      clock: globalThis,
+    });
+    const run = await open.run();
+    if (run.exitCode !== 0) throw new ExitError('open', run);
   }
 }

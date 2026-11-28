@@ -46,13 +46,13 @@ await new Camera().request({ signal: AbortSignal.abort() }).catch(() => {});`;
     assert.doesNotMatch(stderr, /CHILD_PROCESS \d+: spawn/);
   });
 
-  test('ends osascript and rejects with the reason when its signal aborts while it runs', async () => {
+  test('rejects with the reason when its signal aborts during the request', async () => {
     // Arrange
     const controller = new AbortController();
     const reason = new Error('the caller stopped');
 
-    // Act: request() spawns osascript before it returns, so this abort lands
-    // while osascript runs.
+    // Act: the signal goes to the run of osascript, which @zukhruf/process
+    // stops at the abort (its own abort tests prove the stop).
     const pending = new Camera().request({ signal: controller.signal });
     controller.abort(reason);
 

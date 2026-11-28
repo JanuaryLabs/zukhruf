@@ -1,9 +1,6 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { Command, ExitError } from '@zukhruf/process';
 
 import { Service } from './service.ts';
-
-const run = promisify(execFile);
 
 // A service whose status a framework of macOS gives.
 export abstract class PromptedService<Status extends string> extends Service {
@@ -17,18 +14,13 @@ export abstract class PromptedService<Status extends string> extends Service {
   // signal ends osascript, and the promise rejects with its reason.
   async request({ signal }: { readonly signal: AbortSignal }): Promise<Status> {
     signal.throwIfAborted();
-    try {
-      await run(
-        '/usr/bin/osascript',
-        ['-l', 'JavaScript', '-e', this.requestScript],
-        {
-          signal,
-        },
-      );
-    } catch (error) {
-      signal.throwIfAborted();
-      throw error;
-    }
+    const osascript = new Command(
+      '/usr/bin/osascript',
+      ['-l', 'JavaScript', '-e', this.requestScript],
+      { env: {}, clock: globalThis },
+    );
+    const run = await osascript.run({ signal });
+    if (run.exitCode !== 0) throw new ExitError('osascript', run);
     return this.status();
   }
 

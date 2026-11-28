@@ -248,10 +248,11 @@ export default defineConfig(
   },
   // The freshness check of @zukhruf/nx/opentofu is a command line program
   // that the `show` target runs: it tells the person why the saved plan is
-  // refused, and its exit code stops the target (packages/nx ADR 0007).
+  // refused, and its exit code stops the target (packages/nx ADR 0007). It
+  // gives its environment to git.
   {
     files: ['packages/nx/src/opentofu/check-plan-fresh.ts'],
-    rules: { 'island/no-console': 'off' },
+    rules: { 'island/no-console': 'off', 'island/no-process-env': 'off' },
   },
   // The migration diff of @zukhruf/nx/prisma is a command line program that
   // the migrate:check and migrate:create targets run: it gives its
@@ -265,6 +266,18 @@ export default defineConfig(
       'island/no-process-env': 'off',
       'island/no-ambient-time': 'off',
     },
+  },
+  // The runner of the inferred test target is a command line program: it
+  // gives its environment to the test process (packages/nx ADR 0004).
+  {
+    files: ['packages/nx/src/test/run.ts'],
+    rules: { 'island/no-process-env': 'off' },
+  },
+  // The auth generator's follow-up task runs `nx run` in the environment of
+  // the person's shell, as a generator's install task does.
+  {
+    files: ['packages/nx/src/generators/auth/generator.ts'],
+    rules: { 'island/no-process-env': 'off' },
   },
   // The nightly checks of @zukhruf/nx are not shipped. Like the tests, they
   // import the tool layer. They are command line programs: they give their

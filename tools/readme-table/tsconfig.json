@@ -8,10 +8,13 @@
   "include": ["src/**/*.ts"],
   "references": [
     {
+      "path": "../../packages/fs"
+    },
+    {
       "path": "../../packages/git-hooks"
     },
     {
-      "path": "../../packages/fs/tsconfig.json"
+      "path": "../../packages/process"
     }
   ]
 }

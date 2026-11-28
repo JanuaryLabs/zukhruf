@@ -20,20 +20,20 @@ import {
 const { values } = parseArgs({ options: { version: { type: 'string' } } });
 
 await using folder = await new TemporaryFiles().directory('zukhruf-nx-smoke-');
-const version = values.version ?? latestVersion(folder.path);
+const version = values.version ?? (await latestVersion(folder.path));
 try {
-  const root = generateWorkspace(folder.path, version);
+  const root = await generateWorkspace(folder.path, version);
   // The auth generator writes the models of better-auth and no migration; the
   // README says to write the first migration then (migrate:check fails until
   // the migrations build the schema).
-  step(
+  await step(
     'Write the first migration',
     'npx',
     ['nx', 'run', `${dbProject}:migrate:create`, '--name', 'auth'],
     root,
   );
-  step('Stage every file', 'git', ['add', '--', '.'], root);
-  step(
+  await step('Stage every file', 'git', ['add', '--', '.'], root);
+  await step(
     'Commit through the hooks of the workspace',
     'git',
     ['commit', '--message', 'chore: the generated workspace', '--', '.'],
@@ -44,7 +44,7 @@ try {
   // out of each node_modules, where the `dist` rule of .gitignore matches the
   // built files of the packages.
   console.log('\n==> Remove what Git ignores, except node_modules');
-  const ignored = read(
+  const ignored = await read(
     'git',
     [
       'ls-files',
@@ -62,7 +62,7 @@ try {
     await rm(join(root, file));
     await removeEmptyFolders(root, dirname(file));
   }
-  step(
+  await step(
     'Lint, type check, build and test every project',
     'npx',
     [

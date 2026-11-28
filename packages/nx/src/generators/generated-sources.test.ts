@@ -131,7 +131,7 @@ async function generatedFiles() {
  * task, and the names of every target of its projects. It owns the folder of
  * the workspace.
  */
-async function generatedWorkspace() {
+async function generatedWorkspace(signal: AbortSignal) {
   const files = await generatedFiles();
   const nxJsonText = files['nx.json'];
   assert.ok(nxJsonText !== undefined, 'init writes nx.json');
@@ -164,10 +164,11 @@ async function generatedWorkspace() {
         '@types/node',
       ],
       packages: {},
+      signal,
     }),
   );
   const shown = await probe.nx('graph', '--file=stdout');
-  assert.equal(shown.code, 0, shown.output);
+  assert.equal(shown.exitCode, 0, shown.output);
   const { graph }: ProjectGraph = JSON.parse(shown.stdout);
   // Nx hashes a task only when the lockfile has a node for each of its
   // externalDependencies; the generated manifests give their versions.
@@ -221,8 +222,8 @@ async function generatedWorkspace() {
   };
 }
 
-test('each task that reads generated code runs its generator first', async () => {
-  await using generated = await generatedWorkspace();
+test('each task that reads generated code runs its generator first', async (t) => {
+  await using generated = await generatedWorkspace(t.signal);
   const { probe, graph, targets } = generated;
 
   const run = await probe.nx(
@@ -233,7 +234,7 @@ test('each task that reads generated code runs its generator first', async () =>
     '--skip-sync',
   );
 
-  assert.equal(run.code, 0, run.output);
+  assert.equal(run.exitCode, 0, run.output);
   const { tasks }: TaskGraph = JSON.parse(run.stdout);
   const projectDependencies = (project: string, seen = new Set([project])) => {
     for (const { target } of graph.dependencies[project] ?? []) {
@@ -293,8 +294,8 @@ test('each task that reads generated code runs its generator first', async () =>
   }
 });
 
-test('the sdk-it client runs after the db generator and hashes its output', async () => {
-  await using generated = await generatedWorkspace();
+test('the sdk-it client runs after the db generator and hashes its output', async (t) => {
+  await using generated = await generatedWorkspace(t.signal);
   const { probe } = generated;
 
   const run = await probe.nx(
@@ -304,7 +305,7 @@ test('the sdk-it client runs after the db generator and hashes its output', asyn
     '--skip-sync',
   );
 
-  assert.equal(run.code, 0, run.output);
+  assert.equal(run.exitCode, 0, run.output);
   const {
     tasks,
     taskPlans,
@@ -333,8 +334,8 @@ test('the sdk-it client runs after the db generator and hashes its output', asyn
 void test.each(
   ['apps/backend/src/server.ts', 'packages/db/schema.prisma'],
   (file) =>
-    test(`a change of ${file} affects the client and the web`, async () => {
-      await using generated = await generatedWorkspace();
+    test(`a change of ${file} affects the client and the web`, async (t) => {
+      await using generated = await generatedWorkspace(t.signal);
       const { probe } = generated;
       // Nx reads the affected files against git, so the folder is a repository
       // with one commit, out of reach of the user's git config and hooks.
@@ -363,7 +364,7 @@ void test.each(
         '--json',
       );
 
-      assert.equal(shown.code, 0, shown.output);
+      assert.equal(shown.exitCode, 0, shown.output);
       const affected: string[] = JSON.parse(shown.stdout);
       for (const project of ['@acme/backend-client', '@acme/web']) {
         assert.ok(
@@ -382,8 +383,8 @@ const configFiles = [
 ];
 
 void test.each(configFiles, ({ project, file }) =>
-  test(`the typecheck of ${project} hashes its config file ${file} and fails on a type error in it`, async () => {
-    await using generated = await generatedWorkspace();
+  test(`the typecheck of ${project} hashes its config file ${file} and fails on a type error in it`, async (t) => {
+    await using generated = await generatedWorkspace(t.signal);
     const { probe } = generated;
     await probe.write(
       file,
@@ -404,7 +405,7 @@ void test.each(configFiles, ({ project, file }) =>
       '--skip-nx-cache',
     );
 
-    assert.equal(planned.code, 0, planned.output);
+    assert.equal(planned.exitCode, 0, planned.output);
     const { taskPlans }: { taskPlans: Record<string, string[]> } = JSON.parse(
       planned.stdout,
     );
@@ -419,7 +420,7 @@ void test.each(configFiles, ({ project, file }) =>
       globs.some((glob) => matchesGlob(file, glob)),
       `${project}:typecheck does not hash ${file}:\n${plan.join('\n')}`,
     );
-    assert.notEqual(run.code, 0, run.output);
+    assert.notEqual(run.exitCode, 0, run.output);
     assert.match(
       stripVTControlCharacters(run.output),
       new RegExp(
@@ -430,8 +431,8 @@ void test.each(configFiles, ({ project, file }) =>
 );
 
 void test.each(configFiles, ({ file }) =>
-  test(`typed lint finds the config file ${file} in a tsconfig of its project, with no default project`, async () => {
-    await using generated = await generatedWorkspace();
+  test(`typed lint finds the config file ${file} in a tsconfig of its project, with no default project`, async (t) => {
+    await using generated = await generatedWorkspace(t.signal);
     const run = spawnSync(
       process.execPath,
       [

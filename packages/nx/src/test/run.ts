@@ -6,8 +6,7 @@
 // after every other word, because Node reads a flag after a file as a file
 // pattern and drops it with exit code 0 when another pattern matches (ADR
 // 0004). The other words keep their order, so a value stays after its flag.
-import { spawn } from 'node:child_process';
-import { once } from 'node:events';
+import { Command } from '@zukhruf/process';
 
 import { testFile } from './test-file.ts';
 
@@ -22,20 +21,21 @@ const namesTestFile = (word: string) =>
 const named = forwarded.filter(namesTestFile);
 const others = forwarded.filter((word) => !namesTestFile(word));
 
-const node = spawn(
+// node --test reads no stdin. The test process starts in its own session
+// (process ADR 0004), so the Ctrl-C of a terminal reaches only this process,
+// which passes it on, as it passes on SIGTERM and SIGHUP (process ADR 0011).
+const node = await new Command(
   process.execPath,
   [...others, ...(named.length > 0 ? named : selection)],
-  { stdio: 'inherit' },
-);
+  { env: process.env, clock: globalThis },
+).start({ stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' });
 const signals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
-const forward = (signal: NodeJS.Signals) => node.kill(signal);
+const forward = (signal: NodeJS.Signals) => node.signal(signal);
 for (const signal of signals) process.on(signal, forward);
-const [code, exitSignal] = await once(node, 'exit');
+const end = await node.ended;
 for (const signal of signals) process.off(signal, forward);
-// Node gives the code null when a signal ended the child: this process then
-// ends by the same signal.
-if (exitSignal === null) {
-  process.exitCode = code;
+if (end.signal === undefined) {
+  process.exitCode = end.exitCode;
 } else {
-  process.kill(process.pid, exitSignal);
+  process.kill(process.pid, end.signal);
 }

@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process';
 import type { Stats } from 'node:fs';
 import {
   chmod,
@@ -10,9 +9,9 @@ import {
   symlink,
 } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
-import { text } from 'node:stream/consumers';
 
 import { TemporaryFiles } from '@zukhruf/fs';
+import { ExitError } from '@zukhruf/process';
 
 import { type Git, gitIn } from './git.ts';
 import { PackagedSnapshot, Snapshot } from './snapshot/snapshot.ts';
@@ -205,12 +204,11 @@ export class Commit {
     }
     if (stats.isSymbolicLink())
       return (
-        await gitWithInput(
+        await gitIn(
           this.#root,
           this.#environment,
           await readlink(file),
-          ['hash-object', '--stdin'],
-        )
+        )('hash-object', '--stdin')
       ).trim();
     return (
       await this.#git('hash-object', `--path=${path}`, '--', file)
@@ -228,11 +226,10 @@ export class Commit {
       return {
         mode: '120000',
         object: (
-          await gitWithInput(
-            this.#root,
-            this.#environment,
-            await readlink(source),
-            ['hash-object', '-w', '--stdin'],
+          await gitIn(this.#root, this.#environment, await readlink(source))(
+            'hash-object',
+            '-w',
+            '--stdin',
           )
         ).trim(),
       };
@@ -260,10 +257,11 @@ export class Commit {
   // it fails while a peer's git command holds it.
   async #updateIndex(info: string): Promise<void> {
     try {
-      await gitWithInput(this.#root, this.#environment, info, [
-        'update-index',
-        '--index-info',
-      ]);
+      await gitIn(
+        this.#root,
+        this.#environment,
+        info,
+      )('update-index', '--index-info');
     } catch (error) {
       if (Error.isError(error) && /index\.lock/.test(error.message))
         throw new Error(
@@ -331,7 +329,7 @@ export class Commit {
     } catch (error) {
       // With --quiet, rev-parse exits with 1 and says nothing when HEAD names
       // no commit yet.
-      if (Error.isError(error) && 'code' in error && error.code === 1)
+      if (error instanceof ExitError && error.end.exitCode === 1)
         return undefined;
       throw error;
     }
@@ -396,31 +394,4 @@ async function place(source: string, destination: string): Promise<void> {
 // apart.
 function isPartialCommit(environment: NodeJS.ProcessEnv): boolean {
   return basename(environment.GIT_INDEX_FILE ?? '').startsWith('next-index-');
-}
-
-async function gitWithInput(
-  cwd: string,
-  environment: NodeJS.ProcessEnv,
-  input: string,
-  args: readonly string[],
-): Promise<string> {
-  const child = spawn('git', args, {
-    cwd,
-    env: environment,
-    stdio: ['pipe', 'pipe', 'pipe'],
-  });
-  child.stdin.end(input);
-  const [stdout, stderr, code] = await Promise.all([
-    text(child.stdout),
-    text(child.stderr),
-    new Promise<number | null>((resolve, reject) => {
-      child.once('error', reject);
-      child.once('close', resolve);
-    }),
-  ]);
-  if (code !== 0)
-    throw new Error(
-      `git ${args.join(' ')} exited with ${code}: ${stderr.trim()}`,
-    );
-  return stdout;
 }

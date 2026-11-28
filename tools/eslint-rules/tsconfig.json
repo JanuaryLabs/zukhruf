@@ -8,7 +8,10 @@
   "include": ["src/**/*.ts"],
   "references": [
     {
-      "path": "../../packages/fs/tsconfig.json"
+      "path": "../../packages/process"
+    },
+    {
+      "path": "../../packages/fs"
     }
   ]
 }

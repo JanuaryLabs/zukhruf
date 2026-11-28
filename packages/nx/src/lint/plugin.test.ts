@@ -43,6 +43,7 @@ const installedManifest = `${JSON.stringify({
 // Nx, `@nx/eslint` and ESLint linked from zukhruf, the plugin entries in
 // `nx.json`, and the lockfile entries in `packages`.
 const workspace = (
+  signal: AbortSignal,
   files: Record<string, string>,
   plugins: (string | object)[],
   packages: Record<string, object>,
@@ -52,6 +53,7 @@ const workspace = (
     plugins,
     links: ['nx', 'eslint', '@nx/eslint'],
     packages,
+    signal,
   });
 
 const externalInputs = async (
@@ -59,7 +61,7 @@ const externalInputs = async (
   task: string,
 ) => {
   const shown = await probe.nx('show', 'target', 'inputs', task, '--json');
-  assert.equal(shown.code, 0, shown.output);
+  assert.equal(shown.exitCode, 0, shown.output);
   const inputs: { external: string[] } = JSON.parse(shown.stdout);
   return inputs.external;
 };
@@ -74,8 +76,9 @@ const linted = {
   'node_modules/@zukhruf/eslint/package.json': installedManifest,
 };
 
-test('lint hashes the peers and dependencies of an installed @zukhruf/eslint and keeps the inputs of @nx/eslint/plugin', async () => {
+test('lint hashes the peers and dependencies of an installed @zukhruf/eslint and keeps the inputs of @nx/eslint/plugin', async (t) => {
   await using probe = await workspace(
+    t.signal,
     linted,
     [eslintEntry, '@zukhruf/nx/lint'],
     installed,
@@ -95,8 +98,9 @@ test('lint hashes the peers and dependencies of an installed @zukhruf/eslint and
   ]);
 });
 
-test('lint runs again when a peer of @zukhruf/eslint changes its version', async () => {
+test('lint runs again when a peer of @zukhruf/eslint changes its version', async (t) => {
   await using probe = await workspace(
+    t.signal,
     linted,
     [eslintEntry, pluginEntry],
     installed,
@@ -110,19 +114,21 @@ test('lint runs again when a peer of @zukhruf/eslint changes its version', async
   });
   const bumped = await probe.nx('run', 'a:lint');
 
-  assert.equal(first.code, 0, first.output);
+  assert.equal(first.exitCode, 0, first.output);
   assert.match(cached.output, /Nx read the output from the cache/);
-  assert.equal(bumped.code, 0, bumped.output);
+  assert.equal(bumped.exitCode, 0, bumped.output);
   assert.doesNotMatch(bumped.output, /Nx read the output from the cache/);
 });
 
-test('the plugin stops the graph when it comes before @nx/eslint/plugin, when a second @nx/eslint/plugin entry comes after it, or when no @nx/eslint/plugin entry exists', async () => {
+test('the plugin stops the graph when it comes before @nx/eslint/plugin, when a second @nx/eslint/plugin entry comes after it, or when no @nx/eslint/plugin entry exists', async (t) => {
   await using first = await workspace(
+    t.signal,
     linted,
     [pluginEntry, eslintEntry],
     installed,
   );
   await using second = await workspace(
+    t.signal,
     linted,
     [
       { ...eslintEntry, include: ['packages/a/**'] },
@@ -131,7 +137,12 @@ test('the plugin stops the graph when it comes before @nx/eslint/plugin, when a 
     ],
     installed,
   );
-  await using third = await workspace(linted, [pluginEntry], installed);
+  await using third = await workspace(
+    t.signal,
+    linted,
+    [pluginEntry],
+    installed,
+  );
 
   const shown = await Promise.all(
     [first, second, third].map((probe) =>
@@ -140,7 +151,7 @@ test('the plugin stops the graph when it comes before @nx/eslint/plugin, when a 
   );
 
   for (const result of shown) {
-    assert.notEqual(result.code, 0, result.output);
+    assert.notEqual(result.exitCode, 0, result.output);
     assert.match(
       result.output,
       /List @zukhruf\/nx\/lint after each @nx\/eslint\/plugin entry/,
@@ -148,33 +159,44 @@ test('the plugin stops the graph when it comes before @nx/eslint/plugin, when a 
   }
 });
 
-test('the plugin stops the graph when @zukhruf/eslint does not resolve', async () => {
+test('the plugin stops the graph when @zukhruf/eslint does not resolve', async (t) => {
   const { 'node_modules/@zukhruf/eslint/package.json': _, ...files } = linted;
-  await using probe = await workspace(files, [eslintEntry, pluginEntry], {});
+  await using probe = await workspace(
+    t.signal,
+    files,
+    [eslintEntry, pluginEntry],
+    {},
+  );
 
   const shown = await probe.nx('show', 'project', 'a', '--json');
 
-  assert.notEqual(shown.code, 0, shown.output);
+  assert.notEqual(shown.exitCode, 0, shown.output);
   assert.match(shown.output, /cannot resolve @zukhruf\/eslint/);
 });
 
-test('the plugin stops the graph when @zukhruf/eslint is linked from outside the workspace', async () => {
+test('the plugin stops the graph when @zukhruf/eslint is linked from outside the workspace', async (t) => {
   await using outside = await new TemporaryFiles().directory('zukhruf-nx-');
   const { 'node_modules/@zukhruf/eslint/package.json': _, ...files } = linted;
-  await using probe = await workspace(files, [eslintEntry, pluginEntry], {});
+  await using probe = await workspace(
+    t.signal,
+    files,
+    [eslintEntry, pluginEntry],
+    {},
+  );
   await writeFile(join(outside.path, 'package.json'), installedManifest);
   await mkdir(join(probe.path, 'node_modules/@zukhruf'));
   await symlink(outside.path, join(probe.path, 'node_modules/@zukhruf/eslint'));
 
   const shown = await probe.nx('show', 'project', 'a', '--json');
 
-  assert.notEqual(shown.code, 0, shown.output);
+  assert.notEqual(shown.exitCode, 0, shown.output);
   assert.match(shown.output, /outside the workspace and outside node_modules/);
 });
 
-test('a workspace package @zukhruf/eslint gives its src files and the names of its dependencies and peers', async () => {
+test('a workspace package @zukhruf/eslint gives its src files and the names of its dependencies and peers', async (t) => {
   const { 'node_modules/@zukhruf/eslint/package.json': _, ...files } = linted;
   await using probe = await workspace(
+    t.signal,
     { ...files, 'packages/lint-rules/package.json': installedManifest },
     [eslintEntry, pluginEntry],
     {
@@ -209,8 +231,9 @@ test('a workspace package @zukhruf/eslint gives its src files and the names of i
   ]);
 });
 
-test('a project that @nx/eslint/plugin gives no lint gets no lint, and a custom target name gets the inputs', async () => {
+test('a project that @nx/eslint/plugin gives no lint gets no lint, and a custom target name gets the inputs', async (t) => {
   await using probe = await workspace(
+    t.signal,
     {
       'packages/a/package.json': packageJson('a'),
       'packages/a/index.js': 'export const value = 1;\n',
@@ -235,14 +258,19 @@ test('a project that @nx/eslint/plugin gives no lint gets no lint, and a custom 
   );
 });
 
-test('targetDefaults with "..." adds a lint package to the inputs of both plugins', async () => {
-  await using probe = await workspace(linted, [eslintEntry, pluginEntry], {
-    ...installed,
-    'node_modules/eslint-plugin-no-barrel-files': {
-      version: '1.2.2',
-      license: 'MIT',
+test('targetDefaults with "..." adds a lint package to the inputs of both plugins', async (t) => {
+  await using probe = await workspace(
+    t.signal,
+    linted,
+    [eslintEntry, pluginEntry],
+    {
+      ...installed,
+      'node_modules/eslint-plugin-no-barrel-files': {
+        version: '1.2.2',
+        license: 'MIT',
+      },
     },
-  });
+  );
   const nxJson = JSON.parse(await probe.read('nx.json'));
   await writeFile(
     join(probe.path, 'nx.json'),

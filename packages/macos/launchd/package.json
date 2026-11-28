@@ -44,6 +44,7 @@
   "dependencies": {
     "@zukhruf/async": "^0.8.70",
     "@zukhruf/fs": "^0.8.70",
+    "@zukhruf/process": "^0.8.70",
     "plist": "^5.1.2"
   },
   "devDependencies": {

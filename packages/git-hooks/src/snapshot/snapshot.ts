@@ -1,6 +1,6 @@
-import { spawn } from 'node:child_process';
 import { join } from 'node:path';
-import { text } from 'node:stream/consumers';
+
+import { Command } from '@zukhruf/process';
 
 import type { Clone } from './snapshots.ts';
 
@@ -31,32 +31,23 @@ export class Snapshot {
 
   // Runs a command from the PATH, or a file at an absolute path, in the
   // snapshot. An exit code other than 0 is a result, not an error. A command
-  // that cannot start throws the error of Node. No shell runs, except on
-  // Windows for a .cmd file and for a command from the PATH, which can be a
-  // .cmd file such as npm: Node starts a .cmd file only through a shell. The
-  // arguments then get no quotes.
+  // that cannot start throws the StartError of @zukhruf/process, whose cause
+  // is the error of Node. No shell runs.
   async run(
     command: string,
     args: readonly string[],
     options: RunOptions = {},
   ): Promise<ProcessResult> {
-    const child = spawn(command, args, {
-      cwd: this.folder,
+    const run = await new Command(command, args, {
       env: { ...this.#environment, ...options.env },
-      stdio: ['ignore', 'pipe', 'pipe'],
-      shell:
-        process.platform === 'win32' &&
-        (command.endsWith('.cmd') || !/[\\/]/.test(command)),
-    });
-    const [stdout, stderr, status] = await Promise.all([
-      text(child.stdout),
-      text(child.stderr),
-      new Promise<number | null>((resolve, reject) => {
-        child.once('error', reject);
-        child.once('close', resolve);
-      }),
-    ]);
-    return { status, stdout, stderr };
+      clock: globalThis,
+      cwd: this.folder,
+    }).run();
+    return {
+      status: run.signal === undefined ? run.exitCode : null,
+      stdout: run.stdout,
+      stderr: run.stderr,
+    };
   }
 }
 

@@ -22,6 +22,7 @@ interface TestTarget {
 
 // Nx and Vite linked from zukhruf, and the plugin entry in `nx.json`.
 const workspace = (
+  signal: AbortSignal,
   files: Record<string, string>,
   plugin: string | object = pluginEntry,
 ) =>
@@ -30,6 +31,7 @@ const workspace = (
     plugins: [plugin],
     links: ['nx', 'vite'],
     packages: {},
+    signal,
   });
 
 const packageJson = (name: string, tags: string[] = []) =>
@@ -48,8 +50,8 @@ const runner = (workspaceRoot: string, root: string) =>
 const testCases = (report: string) =>
   [...report.matchAll(/<testcase name="([^"]+)"/g)].map(([, name]) => name);
 
-test('a project that owns test files gets the test target with one glob for each top-level folder', async () => {
-  await using probe = await workspace({
+test('a project that owns test files gets the test target with one glob for each top-level folder', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/a/package.json': packageJson('a'),
     'packages/a/src/deep/x.test.ts': passing('x'),
     'packages/a/src/y.test.mts': passing('y'),
@@ -84,8 +86,27 @@ test('a project that owns test files gets the test target with one glob for each
   );
 });
 
-test('test files directly in the project root get a glob with no **', async () => {
-  await using probe = await workspace({
+test('the source plugin runs its source script with the source condition of zukhruf', async (t) => {
+  const sourcePlugin = join(import.meta.dirname, 'plugin.ts');
+  await using probe = await workspace(
+    t.signal,
+    {
+      'packages/a/package.json': packageJson('a'),
+      'packages/a/src/x.test.ts': passing('x'),
+    },
+    sourcePlugin,
+  );
+
+  const targets = await probe.targets('a');
+
+  assert.equal(
+    targets['test']?.options.command,
+    `node --conditions=@zukhruf/source "${relative(join(probe.path, 'packages/a'), join(import.meta.dirname, 'run.ts'))}" --test --no-warnings --test-timeout=300000 ${reporters} --selection="src/**/*.test.ts" {args}`,
+  );
+});
+
+test('test files directly in the project root get a glob with no **', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/a/project.json': '{ "name": "a" }\n',
     'packages/a/root.test.ts': passing('root'),
     'packages/a/src/x.test.ts': passing('x'),
@@ -99,8 +120,8 @@ test('test files directly in the project root get a glob with no **', async () =
   );
 });
 
-test('a Vitest project gets no test target, and a Vite project without test does', async () => {
-  await using probe = await workspace({
+test('a Vitest project gets no test target, and a Vite project without test does', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/vitest/package.json': packageJson('vitest'),
     'packages/vitest/vitest.config.ts': 'export default {};\n',
     'packages/vitest/src/x.test.ts': passing('x'),
@@ -126,8 +147,8 @@ test('a Vitest project gets no test target, and a Vite project without test does
   );
 });
 
-test('the workspace root and a folder outside the workspaces get no test target', async () => {
-  await using probe = await workspace({
+test('the workspace root and a folder outside the workspaces get no test target', async (t) => {
+  await using probe = await workspace(t.signal, {
     'project.json': '{ "name": "probe" }\n',
     'tools/x.test.ts': passing('x'),
     'tools/outside/package.json': packageJson('outside'),
@@ -138,12 +159,13 @@ test('the workspace root and a folder outside the workspaces get no test target'
 
   const listed = await probe.nx('show', 'projects', '--withTarget', 'test');
 
-  assert.equal(listed.code, 0, listed.output);
+  assert.equal(listed.exitCode, 0, listed.output);
   assert.equal(listed.stdout.trim(), 'a');
 });
 
-test('the timeout and flags options change the command, and a Docker flag in flags comes once', async () => {
+test('the timeout and flags options change the command, and a Docker flag in flags comes once', async (t) => {
   await using probe = await workspace(
+    t.signal,
     {
       'packages/a/package.json': packageJson('a'),
       'packages/a/src/x.test.ts': passing('x'),
@@ -172,9 +194,9 @@ test('the timeout and flags options change the command, and a Docker flag in fla
   );
 });
 
-test('a test:docker project gets its own global setup, else the one of @zukhruf/testing, with force-exit and no cache', async () => {
+test('a test:docker project gets its own global setup, else the one of @zukhruf/testing, with force-exit and no cache', async (t) => {
   const testing = join(zukhrufModules, '@zukhruf/testing');
-  await using probe = await workspace({
+  await using probe = await workspace(t.signal, {
     'packages/own/package.json': packageJson('own', ['test:docker']),
     'packages/own/src/testing/docker-global-setup.ts':
       'export const globalSetup = () => {};\n',
@@ -210,7 +232,7 @@ test('a test:docker project gets its own global setup, else the one of @zukhruf/
   );
 });
 
-test('a test:docker project gets the global setup of @zukhruf/testing before that package is built', async () => {
+test('a test:docker project gets the global setup of @zukhruf/testing before that package is built', async (t) => {
   // Arrange: a fresh checkout, where @zukhruf/testing has its exports but no dist yet.
   const { exports } = JSON.parse(
     await readFile(
@@ -218,7 +240,7 @@ test('a test:docker project gets the global setup of @zukhruf/testing before tha
       'utf8',
     ),
   );
-  await using probe = await workspace({
+  await using probe = await workspace(t.signal, {
     'packages/shared/project.json':
       '{ "name": "shared", "tags": ["test:docker"] }\n',
     'packages/shared/src/x.test.ts': passing('x'),
@@ -239,20 +261,20 @@ test('a test:docker project gets the global setup of @zukhruf/testing before tha
   );
 });
 
-test('a test:docker project fails the graph when @zukhruf/testing does not resolve', async () => {
-  await using probe = await workspace({
+test('a test:docker project fails the graph when @zukhruf/testing does not resolve', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/a/package.json': packageJson('a', ['test:docker']),
     'packages/a/src/x.test.ts': passing('x'),
   });
 
   const shown = await probe.nx('show', 'project', 'a', '--json');
 
-  assert.notEqual(shown.code, 0, shown.output);
+  assert.notEqual(shown.exitCode, 0, shown.output);
   assert.match(shown.output, /@zukhruf\/testing\/docker-global-setup/);
 });
 
-test('a run narrows with --args, selects by name with a CLI flag, and writes the junit report', async () => {
-  await using probe = await workspace({
+test('a run narrows with --args, selects by name with a CLI flag, and writes the junit report', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/a/package.json': packageJson('a'),
     'packages/a/src/ok.test.ts': passing('ok'),
     'packages/a/src/login.test.ts': passing('login'),
@@ -267,17 +289,17 @@ test('a run narrows with --args, selects by name with a CLI flag, and writes the
   const named = await probe.nx('run', 'a:test', '--test-name-pattern=login');
   const namedReport = await probe.read('packages/a/test-results.xml');
 
-  assert.equal(narrowed.code, 0, narrowed.output);
+  assert.equal(narrowed.exitCode, 0, narrowed.output);
   assert.deepEqual(testCases(narrowedReport), ['ok']);
   // A file with no test of that name stays in the report as its own
   // test case, so the report lists the files of the selection too.
-  assert.equal(named.code, 0, named.output);
+  assert.equal(named.exitCode, 0, named.output);
   assert.deepEqual(testCases(namedReport), ['login', 'src/ok.test.ts']);
   assert.doesNotMatch(namedReport, /<failure/);
 });
 
-test('a test file or a glob after -- narrows the run', async () => {
-  await using probe = await workspace({
+test('a test file or a glob after -- narrows the run', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/a/package.json': packageJson('a'),
     'packages/a/src/ok.test.ts': passing('ok'),
     'packages/a/src/module.test.mjs': passing('module'),
@@ -295,16 +317,16 @@ test('a test file or a glob after -- narrows the run', async () => {
   const module = await probe.nx('run', 'a:test', '--', 'src/module.test.mjs');
   const moduleReport = await probe.read('packages/a/test-results.xml');
 
-  assert.equal(file.code, 0, file.output);
+  assert.equal(file.exitCode, 0, file.output);
   assert.deepEqual(testCases(fileReport), ['ok']);
-  assert.equal(glob.code, 0, glob.output);
+  assert.equal(glob.exitCode, 0, glob.output);
   assert.deepEqual(testCases(globReport), ['login']);
-  assert.equal(module.code, 0, module.output);
+  assert.equal(module.exitCode, 0, module.output);
   assert.deepEqual(testCases(moduleReport), ['module']);
 });
 
-test('a flag before a file after -- selects by name in that file only', async () => {
-  await using probe = await workspace({
+test('a flag before a file after -- selects by name in that file only', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/a/package.json': packageJson('a'),
     'packages/a/src/ok.test.ts': passing('ok'),
     'packages/a/src/login.test.ts': passing('login'),
@@ -323,7 +345,7 @@ test('a flag before a file after -- selects by name in that file only', async ()
   );
   const report = await probe.read('packages/a/test-results.xml');
 
-  assert.equal(run.code, 0, run.output);
+  assert.equal(run.exitCode, 0, run.output);
   assert.deepEqual(testCases(report), ['login']);
 });
 
@@ -361,8 +383,8 @@ void test.each(
     ],
   ] as const,
   ([where, words, names]) =>
-    test(`a flag after -- applies to the files after -- wherever it stands: ${where}`, async () => {
-      await using probe = await workspace({
+    test(`a flag after -- applies to the files after -- wherever it stands: ${where}`, async (t) => {
+      await using probe = await workspace(t.signal, {
         'packages/a/package.json': packageJson('a'),
         'packages/a/src/ok.test.ts': passing('ok'),
         'packages/a/src/auth.test.ts':
@@ -376,13 +398,13 @@ void test.each(
       const run = await probe.nx('run', 'a:test', '--', ...words);
       const report = await probe.read('packages/a/test-results.xml');
 
-      assert.equal(run.code, 0, run.output);
+      assert.equal(run.exitCode, 0, run.output);
       assert.deepEqual(testCases(report), names);
     }),
 );
 
-test('a flag alone keeps the selection: in --args, after -- with its value as a separate word, or with a value that ends like a test file', async () => {
-  await using probe = await workspace({
+test('a flag alone keeps the selection: in --args, after -- with its value as a separate word, or with a value that ends like a test file', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/a/package.json': packageJson('a'),
     'packages/a/src/ok.test.ts': passing('ok'),
     'packages/a/src/login.test.ts': passing('login'),
@@ -414,19 +436,19 @@ test('a flag alone keeps the selection: in --args, after -- with its value as a 
   );
   const fileLikeReport = await probe.read('packages/a/test-results.xml');
 
-  assert.equal(inArgs.code, 0, inArgs.output);
+  assert.equal(inArgs.exitCode, 0, inArgs.output);
   assert.deepEqual(testCases(inArgsReport), ['login', 'src/ok.test.ts']);
   assert.doesNotMatch(inArgsReport, /<failure/);
-  assert.equal(separate.code, 0, separate.output);
+  assert.equal(separate.exitCode, 0, separate.output);
   assert.deepEqual(testCases(separateReport), ['login', 'src/ok.test.ts']);
   assert.doesNotMatch(separateReport, /<failure/);
-  assert.equal(fileLike.code, 0, fileLike.output);
+  assert.equal(fileLike.exitCode, 0, fileLike.output);
   assert.deepEqual(testCases(fileLikeReport), ['login', 'ok']);
   assert.doesNotMatch(fileLikeReport, /<failure/);
 });
 
-test('the args of a project with a flag and a glob narrow its run', async () => {
-  await using probe = await workspace({
+test('the args of a project with a flag and a glob narrow its run', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/a/package.json': `${JSON.stringify(
       {
         name: 'a',
@@ -449,12 +471,12 @@ test('the args of a project with a flag and a glob narrow its run', async () => 
   const run = await probe.nx('run', 'a:test');
   const report = await probe.read('packages/a/test-results.xml');
 
-  assert.equal(run.code, 0, run.output);
+  assert.equal(run.exitCode, 0, run.output);
   assert.deepEqual(testCases(report), ['login']);
 });
 
-test('a failing test fails the run', async () => {
-  await using probe = await workspace({
+test('a failing test fails the run', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/a/package.json': packageJson('a'),
     'packages/a/src/ok.test.ts': passing('ok'),
     'packages/a/src/bad.test.ts':
@@ -464,12 +486,12 @@ test('a failing test fails the run', async () => {
   const run = await probe.nx('run', 'a:test');
   const report = await probe.read('packages/a/test-results.xml');
 
-  assert.notEqual(run.code, 0, run.output);
+  assert.notEqual(run.exitCode, 0, run.output);
   assert.match(report, /<failure/);
 });
 
-test('a test:docker run loads its own global setup from the project root', async () => {
-  await using probe = await workspace({
+test('a test:docker run loads its own global setup from the project root', async (t) => {
+  await using probe = await workspace(t.signal, {
     'packages/d/package.json': packageJson('d', ['test:docker']),
     'packages/d/src/testing/docker-global-setup.ts':
       "import { writeFileSync } from 'node:fs';\nexport const globalSetup = () => writeFileSync('setup-ran', 'yes');\n",
@@ -478,6 +500,6 @@ test('a test:docker run loads its own global setup from the project root', async
 
   const run = await probe.nx('run', 'd:test');
 
-  assert.equal(run.code, 0, run.output);
+  assert.equal(run.exitCode, 0, run.output);
   assert.equal(await probe.read('packages/d/setup-ran'), 'yes');
 });
