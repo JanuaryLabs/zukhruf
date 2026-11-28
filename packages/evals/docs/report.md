@@ -223,7 +223,7 @@ Ezz, 2026-11-27: the gaps of the statistics come first, so no page ever shows a 
 4. Done: `PromptfooSamples` in `./promptfoo` (#6110).
 5. The primitives in the core (done: 036f7232, its message fixed forward by d570241a), then `./report`: `Page` and the renderers (done), the building blocks (#6108): `Summary` (done), `Slices` (done), `RepeatSpread` (done), `ValidityGap` (done) and `CostAndLatency` (done), on `Run#total` of the core, the value whose interval `Bootstrap` gives; then the building blocks of a run pair: `Verdicts` (done), on `PairedBootstrap` and `Holm`, and `TestsMoved` (done), on the mean of each test's epochs; then the building block of many runs: `Trend` (done), on `Run#total` and `Bootstrap` of each run.
 6. `FieldErrors` (done) and `FieldDiff` in `./structured` (#6108): `FieldDiff` of one run and of a `RunPair` (done).
-7. offers-evals moves onto them: offers' pages, and SOB's reader (#4593, #6115).
+7. Done: offers-evals moves onto them. SOB reads its runs through `PromptfooSamples` (offers-evals #6115, 3b1213d) and has a page of one run (#6347, 777b971); the climb builds its rows from `PromptfooSamples` (#4593, b454d32); offers has the page of one run, of a run pair and of many runs, `nx run offers:report` (#6390, a6b926a, fea29fa, 61eb34f).
 
 ## The gaps this design depends on
 
