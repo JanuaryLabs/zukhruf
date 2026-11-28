@@ -666,13 +666,13 @@ export class ServiceNotFoundError extends LaunchctlError {
 /** EACCES or EPERM on the job file, or launchctl exit code 1. `cause` is the error of Node.js or the LaunchctlError. */
 export class PermissionDeniedError extends LaunchdError {}
 
-/** /bin/launchctl did not start (ENOENT): this system is not macOS. `cause` is the error of Node.js. */
+/** /bin/launchctl did not start (ENOENT): this system is not macOS. `cause` is the StartError of @zukhruf/process, whose own cause is the error of Node.js. */
 export class LaunchdUnavailableError extends LaunchdError {}
 ```
 
 ### Each call and what it runs
 
-Each `launchctl` below is `/bin/launchctl`, started with `execFile` and no shell. `<target>` is `<domain>/<label>`, and `<file>` is `<folder>/<label>.plist`.
+Each `launchctl` below is `/bin/launchctl`, started with `Command` of `@zukhruf/process`, with an empty environment and no shell. `<target>` is `<domain>/<label>`, and `<file>` is `<folder>/<label>.plist`.
 
 | Call                     | What it runs                                                                                                                                                                                                                                                                                                                                                                                                         |
 | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -1,5 +1,7 @@
 # The endpoint listens, the address connects, and the server owns its file
 
+Superseded in part on 2026-11-28 (#6078) for the members of a `PipeServer`. It also has `address`, the address of its endpoint, as Go's `Listener.Addr()`, so a `PipeEndpoint` serves as an `Endpoint` of `@zukhruf/net` ([net ADR 0003](../../../net/docs/adr/0003-an-endpoint-listens-and-gives-a-listener-that-never-ends-an-accepted-socket.md)).
+
 The first paper (commit abfa1508) gave two lone functions: `listenPipe(endpoint, listener)` and `connectPipe(path, options)`. They took their names from go-winio's `ListenPipe` and `DialPipe`, and their style from Go's `net.Listen` and Node's `net.createServer`. Ezz objected on 2026-11-14: no lone functions here.
 
 The reason is in the domain. A server that listens owns a resource for a lifetime: the socket file. That resource has a rule. The close removes the file. Node removes the file at the path, also when another server's file is there now ([ADR 0003](./0003-listen-removes-the-file-at-the-path-and-close-removes-it-again.md)). So a server that lost its right to the path must close before a new owner listens. A lone function gives a `net.Server`, and each consumer then keeps that rule for itself.

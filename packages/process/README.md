@@ -2,7 +2,7 @@
 
 > **In build (backlog #6077).** `Command#run`, `Command#start`, `NodeCommand` and `Coprocess` are built. The consumers move from `@zukhruf/coprocess` and `@zukhruf/testing` next.
 
-Start a process of this machine and know how it ends. A `Command` says what to run: the file, its arguments, the environment, the folder. `command.run()` runs it to its end and gives its exit code or signal and its output, with no throw at a non-zero exit. `command.start()` gives a started process: it resolves when the process is ready, it stops the process group with SIGTERM and then SIGKILL, and the process ends with its parent, also when the parent is killed. A `Coprocess` talks to a started process in JSON lines, and a `NodeCommand` runs JavaScript source in its own Node.js with messages.
+Start a process of this machine and know how it ends. A `Command` says what to run: the file, its arguments, the environment, the folder. `command.run()` runs it to its end and gives its exit code or signal and its output, with no throw at a non-zero exit. `command.start()` gives a started process: it resolves when the process is ready, it stops the process group with SIGTERM, SIGCONT and then SIGKILL, and the process ends with its parent, also when the parent is killed. A `Coprocess` talks to a started process in JSON lines, and a `NodeCommand` runs JavaScript source in its own Node.js with messages.
 
 The package replaces `@zukhruf/coprocess` and the `process` area of `@zukhruf/testing`, which move here ([ADR 0001](./docs/adr/0001-one-package-starts-a-process-for-a-run-and-for-a-started-process-and-coprocess-and-the-test-worker-move-into-it.md)).
 
@@ -160,13 +160,13 @@ A non-zero exit code of a run is not an error.
 
 ## Who uses it
 
-| Consumer                                                                                                                       | How                                                               | Record             |
-| ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- | ------------------ |
-| `@zukhruf/pool` workers, elt `VisionWorker` and `TranscriptionWorker`                                                          | `Coprocess`, today from `@zukhruf/coprocess`                      | coprocess ADR 0001 |
-| the tests of mutex, single-flight and election                                                                                 | `NodeCommand`, today `startWorker` of `@zukhruf/testing/process`  | testing ADR 0021   |
-| shipped code of git-hooks, nx, ssh, tcc, mteb, sqlite-open, the tools                                                          | `Command#run` and `Command#start`, today `node:child_process`     | backlog #6077      |
-| the `sshd.ts` copies of docker, ssh and testing                                                                                | `Command#start` with a socket as stdio, and the stop of the group | backlog #6077      |
-| `runNode` of sdk-it, `cli` and `started` of context-compiler, `run` of text2sql, `collectOutput` of deepagents, `shell` of elt | `Command#run`, `Command#start`, `NodeCommand#run`                 | backlog #6077      |
+| Consumer                                                                                                                       | How                                                                               | Record             |
+| ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- | ------------------ |
+| `@zukhruf/pool` workers, elt `VisionWorker` and `TranscriptionWorker`                                                          | `Coprocess`, today from `@zukhruf/coprocess`                                      | coprocess ADR 0001 |
+| the tests of mutex, single-flight, election and rpc                                                                            | `NodeCommand` and `signal()`                                                      | backlog #6155      |
+| shipped code of git-hooks, nx (the test runner too), ssh, launchd, tcc, mteb, the tools                                        | `Command#run`, `Command#start` with `'inherit'`, `ExitError`                      | backlog #6155      |
+| the `sshd.ts` copies of docker, ssh and testing, and the tests of `@zukhruf/testing`                                           | `Command#start` with a socket as stdio, `signal(name, { to: 'group' })`, `stop()` | backlog #6155      |
+| `runNode` of sdk-it, `cli` and `started` of context-compiler, `run` of text2sql, `collectOutput` of deepagents, `shell` of elt | `Command#run`, `Command#start`, `NodeCommand#run`                                 | backlog #6077      |
 
 ## The same concepts in other systems
 

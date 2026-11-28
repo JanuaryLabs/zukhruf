@@ -1,5 +1,7 @@
 # launchctl is the interface, and only its current subcommands
 
+Superseded in part on 2026-11-28 (zukhruf #6155) for how launchctl starts. `/bin/launchctl` runs by its absolute path, with no shell, through `Command` of `@zukhruf/process` and with an empty environment, so it ends with its parent ([process ADR 0004](../../../../process/docs/adr/0004-a-started-process-ends-with-its-parent-also-when-the-parent-is-killed.md)).
+
 A Node.js program has three ways to give a job to launchd. It can run `launchctl`. It can call SMAppService of the ServiceManagement framework. Or it can write the files that launchd keeps. The package uses `launchctl`, and only the subcommands that launchctl(1) does not call legacy.
 
 launchctl(1) puts `load`, `unload`, `start`, `stop`, `list`, `submit` and `remove` under "LEGACY SUBCOMMANDS" (launchctl(1), lines 353-472). For `load` and `unload` it says "Recommended alternative subcommands: bootstrap | bootout | enable | disable" (lines 358-360). For `list` it says "Recommended alternative subcommand: print" (lines 459-460). Two facts make the legacy subcommands wrong for a library:

@@ -15,7 +15,7 @@ A server must listen on a TCP port of the loopback address in most tests, and on
 | Go x/net nettest | `NewLocalListener(network)`: "a loopback IP address or local file system path" ([docs](https://pkg.go.dev/golang.org/x/net/nettest#NewLocalListener))          | `net.Listener`                                                                                                                                                                               | `Listener.Addr()`              |
 | Go httptest      | `newLocalListener`: `127.0.0.1:0`, then `[::1]:0` ([server.go, about lines 61-76](https://github.com/golang/go/blob/go1.24.0/src/net/http/httptest/server.go)) | `httptest.Server.Listener`                                                                                                                                                                   | `Server.URL`                   |
 | Node.js          | the arguments of `server.listen(port, host)` or `server.listen(path)`                                                                                          | `net.Server` ([docs](https://nodejs.org/api/net.html#serverlisten))                                                                                                                          | `server.address()`             |
-| `@zukhruf/pipes` | `PipeEndpoint`                                                                                                                                                 | `PipeEndpoint#listen(connectionListener)` gives a `PipeServer`                                                                                                                               | `PipeServer.endpoint.address`  |
+| `@zukhruf/pipes` | `PipeEndpoint`                                                                                                                                                 | `PipeEndpoint#listen(connectionListener)` gives a `PipeServer`                                                                                                                               | `PipeServer.address`           |
 
 Each listener of the table leaves an accepted connection open at its close.
 
@@ -38,7 +38,7 @@ Each listener of the table leaves an accepted connection open at its close.
 
 ## Consequences
 
-- `PipeServer` has no `address` today: it has `endpoint.address`. Go's `Listener` has `Addr()`. The proposal is that pipes adds `readonly address: PipeAddress` to `PipeServer`, as a change of pipes in its own commit. This is a gap of pipes, named here as the user's rules ask, and it waits for Ezz's ruling.
+- `PipeServer` has `address`, the address of its endpoint, as Go's `Listener` has `Addr()` (Ezz: "Add address"; pipes 663e84b0).
 - `PipeServer` has `unref()`. `Listener` does not ask for it, because no test needs it. The shipped servers of mutex and single-flight need it when they move ([ADR 0007](./0007-the-tests-move-first-and-each-shipped-server-moves-when-close-or-shutdown-is-its-kind-of-end.md)).
 - A host can write its own endpoint, for example a TLS endpoint, with no change to this package.
 
