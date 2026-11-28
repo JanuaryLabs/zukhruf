@@ -245,7 +245,7 @@ Each item is a detail that a caller sees. Ezz approved each proposal on 2026-11-
 10. **`origin` only on TCP.** Proposal: `HttpServing<A>` has `origin` only when `A` is a `net.SocketAddress`, so a serving on a pipe has no URL to misuse (httptest's `URL`).
 11. **`HttpServer` options.** Proposal: the options of `http.createServer` and `upgrade`. Go's `http.Server` has its fields; Node's `http.createServer(options)` has these.
 12. **The call of the 106 importers changes.** The record of 2026-11-27 says "change one import, no alias"; the composable shape of 2026-11-28 changes the call too (see the table in [Serve HTTP](#serve-http)). Proposal: the later ruling, with no `start()` kept.
-13. **npm candidates.** Probed on 2026-11-28: `stoppable` and `http-terminator` do part of the job and fail at the rest (see [The same concepts in other systems](#the-same-concepts-in-other-systems) above), so the package tracks its sockets itself.
+13. **npm candidates.** Probed on 2026-11-28: `stoppable` and `http-terminator` do part of the job and fail at the rest (see [Why not a package of npm](#why-not-a-package-of-npm) above), so the package tracks its sockets itself.
 
 ## Documentation
 
