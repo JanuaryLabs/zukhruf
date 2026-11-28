@@ -4,8 +4,10 @@ import type { AttachableClock, Clock, Db } from 'pg-boss';
 
 // pg-boss counts the statements it has in flight so an attached TestClock
 // lets them finish before it moves time on (node_modules/pg-boss/dist/
-// activity.js:14-96). node:sqlite answers at once, so what this counts are
-// the event-loop turns standing in for pg-boss's I/O.
+// activity.js:14-96). node:sqlite answers at once, so for a statement what
+// this counts are the event-loop turns standing in for pg-boss's I/O; the
+// engine's real I/O that is no statement, such as the close of its listener
+// on a file, it counts through track().
 export class Activity {
   // The queue binds clock.now() into its own statements, so the Postgres
   // clock table an attachment writes (clock.js:140-145, 189) has no receiver.

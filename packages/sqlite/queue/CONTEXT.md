@@ -14,7 +14,7 @@ _Avoid_: Channel, topic, table
 
 **Engine**:
 What keeps the jobs: Postgres for pg-boss, SQLite for this package. The API does not change with the engine.
-_Avoid_: Backend (the parity suite says backend only for the two engines that it runs), driver, adapter
+_Avoid_: Backend (the parity suite says backend only for the three forms that it runs: pg-boss, this package on the main thread, and its thread form), driver, adapter
 
 **Subset**:
 The 19 methods of `PgBoss` that this package gives, which `JobQueue` declares. A method outside the subset does not exist here.
@@ -25,7 +25,7 @@ A difference between what pg-boss and this package give for the same calls: a re
 _Avoid_: Bug, incompatibility, drift (drift is a word of `@zukhruf/sqlite-drift`)
 
 **Parity suite**:
-The tests in `src/parity`. Each scenario runs on real pg-boss over PGlite, then on this package, with one test clock. The test passes only when the two observations are deep-equal.
+The tests in `src/parity`. Each scenario runs on real pg-boss over PGlite, then on this package on the main thread, then on `SqliteJobQueueThread`, each with one test clock. The test passes only when each observation is deep-equal to pg-boss's (one scenario runs without the thread form, ADR 0008).
 _Avoid_: Conformance tests, compatibility tests, golden tests
 
 **Oracle**:
