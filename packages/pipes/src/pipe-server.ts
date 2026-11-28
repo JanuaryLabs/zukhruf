@@ -1,5 +1,6 @@
 import type { Server } from 'node:net';
 
+import type { PipeAddress } from './pipe-address.ts';
 import type { PipeEndpoint } from './pipe-endpoint.ts';
 
 /** The key of the one call that makes a `PipeServer`. `PipeEndpoint#listen` calls it; the package index does not export it. */
@@ -18,6 +19,11 @@ export class PipeServer implements AsyncDisposable {
   /** Owns a `net.Server` that listens on the path of `endpoint`. */
   static [ownServer](endpoint: PipeEndpoint, server: Server): PipeServer {
     return new PipeServer(endpoint, server);
+  }
+
+  /** Where clients connect, as Go's `Listener.Addr()`: the address of its endpoint. */
+  get address(): PipeAddress {
+    return this.endpoint.address;
   }
 
   /** Lets the program exit while the server listens, as net.Server#unref. */

@@ -82,17 +82,18 @@ Check the code of the error of Node.js with `isErrno` of [`@zukhruf/fs`](../fs/R
 
 ## What each call does
 
-| Call                                          | macOS and Linux                                                                                                   | Windows                                                                                   |
-| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `new PipeEndpoint(plain name)`                | The path `/tmp/<prefix>-<uid>/<name>`. Checks its length.                                                         | The path `\\.\pipe\<prefix>-<name>`.                                                      |
-| `new PipeEndpoint(rooted name)`               | The name is the path. Checks its length.                                                                          | The path `\\.\pipe\<prefix>-<32 hex digits of the hash of the lowercased resolved path>`. |
-| `new PipeAddress(path)`                       | The path as it is. Checks nothing.                                                                                | The path as it is. Checks nothing.                                                        |
-| `endpoint.listen`, plain name                 | Makes the default folder with mode `0700` if it is missing, and checks it. Removes the file at the path. Listens. | Listens.                                                                                  |
-| `endpoint.listen`, rooted name                | Removes the file at the path. Listens.                                                                            | Listens.                                                                                  |
-| `server.close()`, or the end of `await using` | Stops listening. Node removes the file at the path. Open connections stay open.                                   | Windows removes the pipe. Open connections stay open.                                     |
-| The server's program crashes                  | The file stays. A connect rejects with `NoServerError`, cause `ECONNREFUSED`.                                     | Windows removes the pipe. A connect rejects with `NoServerError`, cause `ENOENT`.         |
-| `address.connect()`, nothing listens          | `NoServerError`: cause `ENOENT` when there is no file, `ECONNREFUSED` when a leftover file is there.              | `NoServerError`, cause `ENOENT`.                                                          |
-| Another user's program connects               | `EACCES`: the socket has mode `0755`, and the default folder has mode `0700` (research 20a P5).                   | The default security of a pipe gives every user read access [inference, not run; #4340].  |
+| Call                                          | macOS and Linux                                                                                                                                              | Windows                                                                                   |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `new PipeEndpoint(plain name)`                | The path `/tmp/<prefix>-<uid>/<name>`. Checks its length.                                                                                                    | The path `\\.\pipe\<prefix>-<name>`.                                                      |
+| `new PipeEndpoint(rooted name)`               | The name is the path. Checks its length.                                                                                                                     | The path `\\.\pipe\<prefix>-<32 hex digits of the hash of the lowercased resolved path>`. |
+| `new PipeAddress(path)`                       | The path as it is. Checks nothing.                                                                                                                           | The path as it is. Checks nothing.                                                        |
+| `endpoint.listen`, plain name                 | Makes the default folder with mode `0700` if it is missing, and checks it. Removes the file at the path. Listens.                                            | Listens.                                                                                  |
+| `endpoint.listen`, rooted name                | Removes the file at the path. Listens.                                                                                                                       | Listens.                                                                                  |
+| `server.address`                              | The address of its endpoint, where clients connect, as Go's `Listener.Addr()`; so a `PipeEndpoint` serves as an `Endpoint` of `@zukhruf/net` (its ADR 0003). | The same.                                                                                 |
+| `server.close()`, or the end of `await using` | Stops listening. Node removes the file at the path. Open connections stay open.                                                                              | Windows removes the pipe. Open connections stay open.                                     |
+| The server's program crashes                  | The file stays. A connect rejects with `NoServerError`, cause `ECONNREFUSED`.                                                                                | Windows removes the pipe. A connect rejects with `NoServerError`, cause `ENOENT`.         |
+| `address.connect()`, nothing listens          | `NoServerError`: cause `ENOENT` when there is no file, `ECONNREFUSED` when a leftover file is there.                                                         | `NoServerError`, cause `ENOENT`.                                                          |
+| Another user's program connects               | `EACCES`: the socket has mode `0755`, and the default folder has mode `0700` (research 20a P5).                                                              | The default security of a pipe gives every user read access [inference, not run; #4340].  |
 
 ## Who uses it
 
@@ -244,6 +245,8 @@ export interface PipeEndpointOptions {
 /** The owner of the socket file while it listens on the path of one endpoint. */
 export class PipeServer implements AsyncDisposable {
   readonly endpoint: PipeEndpoint;
+  /** Where clients connect: the address of its endpoint, as Go's Listener.Addr(). */
+  readonly address: PipeAddress;
   /** Lets the program exit while the server listens, as net.Server#unref. */
   unref(): this;
   /** Stops listening; Node removes the socket file at the path. Resolves when closed. Connections that are open stay open (Node's rule); the caller ends them. A call after the first closes nothing more, as .NET's Dispose ignores the calls after the first: it waits for the same close and resolves. */

@@ -163,6 +163,29 @@ console.log(text);`);
   });
 });
 
+describe('the address of a server', { skip: posixOnly }, () => {
+  test('is where a client connects, as the address of its endpoint', async () => {
+    // Arrange
+    await using folder = defaultFolder();
+    const endpoint = new PipeEndpoint('greeter', { prefix: folder.prefix });
+    await using server = await endpoint.listen((socket) =>
+      socket.end('hello from the server'),
+    );
+
+    // Act
+    const socket = await server.address.connect();
+    socket.setEncoding('utf8');
+    let text = '';
+    for await (const chunk of socket) text += chunk;
+
+    // Assert
+    assert.deepEqual(
+      { path: server.address.path, text },
+      { path: endpoint.address.path, text: 'hello from the server' },
+    );
+  });
+});
+
 describe('the default folder of a plain name', { skip: posixOnly }, () => {
   test('is /tmp/<prefix>-<uid>, made by listen with mode 0700 for this user, not by the constructor', async () => {
     // Arrange
