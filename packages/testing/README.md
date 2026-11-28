@@ -11,7 +11,6 @@ Each area has its own import path, so a test loads only the drivers it uses. The
 | Import                                 | Gives                                                               | Needs                      |
 | -------------------------------------- | ------------------------------------------------------------------- | -------------------------- |
 | `@zukhruf/testing/async`               | `waitFor`, `retryUntilReady`                                        |                            |
-| `@zukhruf/testing/process`             | `startWorker`                                                       |                            |
 | `@zukhruf/testing/docker`              | `DockerTestbed`, `ServiceContainer`, `DockerDirectory`              | a Docker engine            |
 | `@zukhruf/testing/postgres`            | `Postgres`, `postgresPool`                                          | a Docker engine, `pg`      |
 | `@zukhruf/testing/mysql`               | `Mysql`, `mysqlPool`                                                | a Docker engine, `mysql2`  |
@@ -404,32 +403,6 @@ A wait for an event in a test is `untilAborted(promise, t.signal)` of `@zukhruf/
 
 `retryUntilReady(fn, options)` retries `fn` until it stops throwing, every 250 ms for at most 30 seconds by default. It takes every p-retry option. It is for readiness where no test context exists, such as the wait strategy of a server that writes no ready line. A test that polls an assertion uses `waitFor(check, { signal: t.signal })`, and `zukhruf/no-assert-in-retry-until-ready` of `@zukhruf/eslint` reports a `retryUntilReady` call that polls one.
 
-## Worker processes
-
-`startWorker(source, name, { admit, nodeOptions })` runs `source` as an ES module in its own Node process, with `name` as `argv[1]` and an IPC channel back to the test. Disposal kills the worker. The worker also exits when the test process ends, even by SIGKILL, because it reads the end of its stdin. `admit` runs with the child before it can send anything, for example to join it to a coordinator.
-
-The handle records each message whose `type` is a string, in `messages`, and the worker's stderr, in `stderr`. `exit` is how the worker exited, `closed` resolves when it closed. `has(type)` and `find(type)` read the messages so far.
-
-`next(match, { signal })` resolves with the first message that `match` selects, sent before or after the call. It rejects with the worker's stderr when the worker closes first, and with `signal.reason` when the signal aborts. `match` is a type, or a predicate over the message. The predicate sees each message once, in the order the worker sent it, and none after it selected one, so it can count:
-
-```ts
-await worker.next('ready', { signal: t.signal });
-await worker.next(
-  (message) => message.type === 'leader' || message.type === 'follower',
-  { signal: t.signal },
-);
-await worker.next(
-  (message) => message.type === 'answer' && message.call === 2,
-  { signal: t.signal },
-);
-let roles = 0;
-await worker.next((message) => message.type === 'role' && ++roles === 2, {
-  signal: t.signal,
-});
-```
-
-Precedent: Playwright's `waitForEvent(event, predicate)` and Node's `events.once(emitter, name, { signal })`.
-
 ## Temporary directories
 
 A test makes its temporary directory with `TemporaryFiles` of [`@zukhruf/fs`](../fs/README.md#make-a-temporary-directory), the same class that production code uses.
@@ -587,35 +560,6 @@ function retryUntilReady<T>(
   fn: (attemptNumber: number) => PromiseLike<T> | T,
   options?: RetryUntilReadyOptions,
 ): Promise<T>;
-
-// @zukhruf/testing/process
-interface WorkerMessage {
-  type: string;
-  [field: string]: unknown;
-}
-type MessageMatch = string | ((message: WorkerMessage) => boolean);
-interface WorkerOptions {
-  admit?: (child: ChildProcess) => void;
-  nodeOptions?: string[];
-}
-interface WorkerProcess extends AsyncDisposable {
-  readonly child: ChildProcess;
-  readonly closed: Promise<void>;
-  readonly messages: WorkerMessage[];
-  stderr: string;
-  exit: { code: number | null; signal: NodeJS.Signals | null } | null;
-  has(type: string): boolean;
-  find(type: string): WorkerMessage | undefined;
-  next(
-    match: MessageMatch,
-    options: { signal: AbortSignal },
-  ): Promise<WorkerMessage>;
-}
-function startWorker(
-  source: string,
-  name: string,
-  options?: WorkerOptions,
-): WorkerProcess;
 
 // @zukhruf/testing/docker
 // Container, OwnedContainer, OwnedVolume, ExecResult, Docker, EngineApi and
@@ -910,7 +854,7 @@ function globalTeardown(): void;
 - [ADR 0018](./docs/adr/0018-a-preload-is-a-file-of-the-package-and-its-url-gives-its-settings.md): a preload is a file of the package, and its URL gives its settings.
 - [ADR 0019](./docs/adr/0019-a-shared-servers-name-comes-from-its-request-and-the-global-teardown-removes-it-after-a-ttl.md): a shared server's name comes from its request, and the global teardown removes it after a TTL.
 - [ADR 0020](./docs/adr/0020-a-reaper-container-removes-a-runs-engine-objects-when-the-attach-that-holds-it-closes-and-recovery-keeps-the-local-records.md): a reaper container removes a run's engine objects when the attach that holds it closes, and recovery keeps the local records.
-- [ADR 0021](./docs/adr/0021-a-test-helper-in-the-test-support-of-three-packages-goes-into-an-area-when-no-public-package-does-its-work.md): a test helper in the test support of three packages goes into an area when no public package does its work.
+- [ADR 0021](./docs/adr/0021-a-test-helper-in-the-test-support-of-three-packages-goes-into-an-area-when-no-public-package-does-its-work.md): a test helper in the test support of three packages goes into an area when no public package does its work (superseded in part by process ADR 0001).
 - [ADR 0022](./docs/adr/0022-a-reaper-starts-again-after-a-restart-of-its-engine-and-removes-itself-at-its-end.md): a reaper starts again after a restart of its engine and removes itself at its end.
 - [ADR 0023](./docs/adr/0023-the-reaper-removes-the-runs-host-directories.md): the reaper removes the run's host directories.
 - [ADR 0024](./docs/adr/0024-a-run-holds-one-ssh-connection-to-an-ssh-engine-and-its-test-processes-reach-the-engine-host-through-it.md): a run holds one SSH connection to an SSH engine, and its test processes reach the engine host through it.

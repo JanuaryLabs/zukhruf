@@ -6,7 +6,7 @@ Decision-makers: Ezz, on 2026-11-27. Asked where the process primitive lives, he
 
 In zukhruf, three places start processes, and each does a part of the work:
 
-- `@zukhruf/coprocess` keeps a long-lived process, talks to it in JSON lines, gives its exit as an event, and stops it with SIGTERM and then SIGKILL (its [ADR 0001](../../../coprocess/docs/adr/0001-the-exit-is-an-event-and-the-package-uses-execa.md)).
+- `@zukhruf/coprocess` keeps a long-lived process, talks to it in JSON lines, gives its exit as an event, and stops it with SIGTERM and then SIGKILL (its [ADR 0001](https://github.com/JanuaryLabs/zukhruf/blob/aeff1050/packages/coprocess/docs/adr/0001-the-exit-is-an-event-and-the-package-uses-execa.md)).
 - `startWorker` of `@zukhruf/testing/process` runs Node.js source with an IPC channel, waits for a message, and ends the child when the test process ends, also by SIGKILL ([testing ADR 0021](../../../testing/docs/adr/0021-a-test-helper-in-the-test-support-of-three-packages-goes-into-an-area-when-no-public-package-does-its-work.md)). It runs only Node.js source, it ignores stdout, and it takes no `cwd` and no `env`. 20 test files use it.
 - About 25 places of shipped code call `node:child_process` themselves (git-hooks 6, nx 5, ssh 2, tcc 2, mteb, sqlite-open, the tools).
 

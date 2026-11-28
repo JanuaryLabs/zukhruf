@@ -47,7 +47,7 @@ export class PermissionDeniedError extends LaunchdError {
   }
 }
 
-/** /bin/launchctl did not start (ENOENT): this system is not macOS. `cause` is the error of Node.js. */
+/** /bin/launchctl did not start (ENOENT): this system is not macOS. `cause` is the StartError of @zukhruf/process, whose own cause is the error of Node.js. */
 export class LaunchdUnavailableError extends LaunchdError {
   constructor(cause: Error) {
     super(`/bin/launchctl did not start: ${cause.message}`, { cause });

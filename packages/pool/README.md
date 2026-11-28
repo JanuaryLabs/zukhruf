@@ -130,7 +130,7 @@ const { text } = await ocr.run({ path: '/tmp/receipt.png' }, { signal });
 
 Each host on the computer that builds a `PoolWorkers` of the kind offers its workers, and the election picks one of them as the owner. The others are standbys: they start no workers until they own. A host that cannot run the worker program builds only the `Pool`.
 
-A worker gives `run(input)`, `exited()`, `kill()`, `close()`, and optionally `ready()`. `run` does one job and resolves with its output ([ADR 0012](./docs/adr/0012-a-job-is-data-and-the-worker-kind-runs-it.md)). A `Coprocess` of `@zukhruf/coprocess` has all of them except `run`, so a worker class keeps the `Coprocess` and gives its `request` as `run`.
+A worker gives `run(input)`, `exited()`, `kill()`, `close()`, and optionally `ready()`. `run` does one job and resolves with its output ([ADR 0012](./docs/adr/0012-a-job-is-data-and-the-worker-kind-runs-it.md)). A `Coprocess` of `@zukhruf/process` (`new Coprocess(await command.start())`) has `exited()` and `close()`, and its `process` has `signal('SIGKILL')` for `kill()`. Its start is async and `create` is not, so a worker class keeps the promise of its `Coprocess`, gives it as `ready()`, and gives its `request` as `run`.
 
 A test gives a store of its own, so it never joins the user's pool:
 
@@ -509,7 +509,7 @@ class IdleTimeout implements Eviction {
 
 - [ADR 0001](./docs/adr/0001-startups-and-sizings-are-classes-that-a-caller-chooses.md): startups and sizings are classes that a caller chooses.
 - [ADR 0002](./docs/adr/0002-a-sizing-that-learns-compares-one-more-worker-between-two-windows.md): a sizing that learns compares one more worker between two windows.
-- [ADR 0003](./docs/adr/0003-the-pool-learns-that-a-worker-ended-from-its-exit.md): the pool learns that a worker ended from its exit.
+- [ADR 0003](./docs/adr/0003-the-pool-learns-that-a-worker-ended-from-its-exit.md): the pool learns that a worker ended from its exit (superseded in part by process ADR 0007).
 - [ADR 0004](./docs/adr/0004-a-pool-reports-its-stats-as-one-snapshot-of-counts.md): a pool reports its stats as one snapshot of counts.
 - [ADR 0005](./docs/adr/0005-an-eager-pool-backs-off-before-it-replaces-a-worker-that-exited-early.md): an eager pool backs off before it replaces a worker that exited early.
 - [ADR 0006](./docs/adr/0006-the-pool-evicts-an-idle-worker-that-its-eviction-lets-go-and-lends-an-idle-worker-first.md): the pool evicts an idle worker that its eviction lets go, and lends an idle worker first.

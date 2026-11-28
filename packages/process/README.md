@@ -1,10 +1,10 @@
 # @zukhruf/process
 
-> **In build (backlog #6077).** `Command#run`, `Command#start`, `NodeCommand` and `Coprocess` are built. The consumers move from `@zukhruf/coprocess` and `@zukhruf/testing` next.
+> **In build (backlog #6077).** `Command#run`, `Command#start`, `NodeCommand` and `Coprocess` are built. The consumers in this repository moved from `@zukhruf/coprocess` and the `process` area of `@zukhruf/testing`, and both were deleted (backlog #6155). The consumers in other repositories move next.
 
 Start a process of this machine and know how it ends. A `Command` says what to run: the file, its arguments, the environment, the folder. `command.run()` runs it to its end and gives its exit code or signal and its output, with no throw at a non-zero exit. `command.start()` gives a started process: it resolves when the process is ready, it stops the process group with SIGTERM, SIGCONT and then SIGKILL, and the process ends with its parent, also when the parent is killed. A `Coprocess` talks to a started process in JSON lines, and a `NodeCommand` runs JavaScript source in its own Node.js with messages.
 
-The package replaces `@zukhruf/coprocess` and the `process` area of `@zukhruf/testing`, which move here ([ADR 0001](./docs/adr/0001-one-package-starts-a-process-for-a-run-and-for-a-started-process-and-coprocess-and-the-test-worker-move-into-it.md)).
+The package replaces `@zukhruf/coprocess` and the `process` area of `@zukhruf/testing`, which moved here and were deleted ([ADR 0001](./docs/adr/0001-one-package-starts-a-process-for-a-run-and-for-a-started-process-and-coprocess-and-the-test-worker-move-into-it.md)).
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -87,7 +87,7 @@ await using holding = await owner.start({
 
 ## The end of a started process
 
-`ended` settles once, with the end, when the process has ended. A pool or a supervisor awaits it; there is no property to read, because a read and an end can race ([coprocess ADR 0001](../coprocess/docs/adr/0001-the-exit-is-an-event-and-the-package-uses-execa.md)).
+`ended` settles once, with the end, when the process has ended. A pool or a supervisor awaits it; there is no property to read, because a read and an end can race ([coprocess ADR 0001](https://github.com/JanuaryLabs/zukhruf/blob/aeff1050/packages/coprocess/docs/adr/0001-the-exit-is-an-event-and-the-package-uses-execa.md), deleted with the package in #6155).
 
 A started process ends when this program ends, also when this program is killed with SIGKILL ([ADR 0004](./docs/adr/0004-a-started-process-ends-with-its-parent-also-when-the-parent-is-killed.md)). On macOS and Linux, each process starts under a keeper in POSIX `sh`: the keeper starts a watcher, which stops the group when the pipe from this program closes, and then becomes the process, which leads the group. It costs about 5 ms at the start and 2 to 4 MB while the process runs. The keeper becomes the program, so `pid` is the pid of the program and `started.signal('SIGSTOP')` reaches it; `stop()` signals the whole group. A process that must outlive this program is not a started process of this package.
 
@@ -160,13 +160,13 @@ A non-zero exit code of a run is not an error.
 
 ## Who uses it
 
-| Consumer                                                                                                                       | How                                                                               | Record             |
-| ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- | ------------------ |
-| `@zukhruf/pool` workers, elt `VisionWorker` and `TranscriptionWorker`                                                          | `Coprocess`, today from `@zukhruf/coprocess`                                      | coprocess ADR 0001 |
-| the tests of mutex, single-flight, election and rpc                                                                            | `NodeCommand` and `signal()`                                                      | backlog #6155      |
-| shipped code of git-hooks, nx (the test runner too), ssh, launchd, tcc, mteb, the tools                                        | `Command#run`, `Command#start` with `'inherit'`, `ExitError`                      | backlog #6155      |
-| the `sshd.ts` copies of docker, ssh and testing, and the tests of `@zukhruf/testing`                                           | `Command#start` with a socket as stdio, `signal(name, { to: 'group' })`, `stop()` | backlog #6155      |
-| `runNode` of sdk-it, `cli` and `started` of context-compiler, `run` of text2sql, `collectOutput` of deepagents, `shell` of elt | `Command#run`, `Command#start`, `NodeCommand#run`                                 | backlog #6077      |
+| Consumer                                                                                                                       | How                                                                               | Record        |
+| ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- | ------------- |
+| `@zukhruf/pool` workers, elt `VisionWorker` and `TranscriptionWorker`                                                          | `Coprocess`; elt imports it from the last release of `@zukhruf/coprocess` today   | backlog #6155 |
+| the tests of mutex, single-flight, election and rpc                                                                            | `NodeCommand` and `signal()`                                                      | backlog #6155 |
+| shipped code of git-hooks, nx (the test runner too), ssh, launchd, tcc, mteb, the tools                                        | `Command#run`, `Command#start` with `'inherit'`, `ExitError`                      | backlog #6155 |
+| the `sshd.ts` copies of docker, ssh and testing, and the tests of `@zukhruf/testing`                                           | `Command#start` with a socket as stdio, `signal(name, { to: 'group' })`, `stop()` | backlog #6155 |
+| `runNode` of sdk-it, `cli` and `started` of context-compiler, `run` of text2sql, `collectOutput` of deepagents, `shell` of elt | `Command#run`, `Command#start`, `NodeCommand#run`                                 | backlog #6077 |
 
 ## The same concepts in other systems
 

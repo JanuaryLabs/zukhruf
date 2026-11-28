@@ -118,12 +118,8 @@ A later run on the same engine removing what an earlier run left on this machine
 _Avoid_: Garbage collection, prune
 
 **Wait**:
-A call that resolves when a fact is true, and that the test's signal limits. `waitFor` calls a check until it passes; `next` resolves with a message of a worker process.
+A call that resolves when a fact is true, and that the test's signal limits. `waitFor` calls a check until it passes.
 _Avoid_: Poll loop, sleep
-
-**Worker process**:
-A Node process that a test starts with `startWorker`, with an IPC channel back to the test. Its handle records the messages it sends. It exits when its handle is disposed or the test process ends.
-_Avoid_: Child, subprocess (for the handle)
 
 **Area**:
 A part of the package with its own import path, such as `docker` or `postgres`.

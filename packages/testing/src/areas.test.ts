@@ -40,16 +40,7 @@ const drivers: [string, ...string[]] = [
 ];
 
 void test.each(
-  [
-    'async',
-    'process',
-    'docker',
-    'clickhouse',
-    'sqlite',
-    'http',
-    'streams',
-    'preload',
-  ],
+  ['async', 'docker', 'clickhouse', 'sqlite', 'http', 'streams', 'preload'],
   (area) =>
     test(`the ${area} area, which has no driver, imports when no driver is installed`, async () => {
       await importArea(area, drivers);

@@ -1,5 +1,7 @@
 # A test helper in the test support of three packages goes into an area when no public package does its work
 
+Superseded in part on 2026-11-28 (#6155) for the process area. A test starts a Node.js process with `NodeCommand` of `@zukhruf/process`, and `next(match, { signal })` of its `NodeProcess` is the wait for a message; the `process` area and `startWorker` are deleted ([process ADR 0001](../../../process/docs/adr/0001-one-package-starts-a-process-for-a-run-and-for-a-started-process-and-coprocess-and-the-test-worker-move-into-it.md)).
+
 [ADR 0016](./0016-a-test-helper-goes-into-an-area-when-three-repositories-have-its-knowledge-and-it-does-not-use-mock.md) keeps a helper that only this repository has out of the areas. Its example is the worker process of the mutex tests. On 2026-11-17 the mutex, the single flight and the election each had a copy of `worker-process.ts` and of `fact-timeout.ts` in `src/testing/`. Each test waited for a fact with `t.waitFor` and `factTimeout`, a limit of 10 s of its own. In backlog #4205, a wait of the mutex tests ended at `factTimeout` on CI before the work that it waited for: the limits of a test and of its waits no longer nested.
 
 The maintainer ruled for #4205: "Delete factTimeout, waits on t.signal". Asked on 2026-11-17 which test-support pattern he does not want, he said:

@@ -130,7 +130,7 @@ Node.js keeps a connection that becomes idle after the call to `close()` until `
 - Run cleanup hooks. `using`, `await using` and `AsyncDisposableStack` run the cleanup, in reverse order.
 - Stop the work for other causes. `AbortSignal.any([shutdown.signal, failed.signal])` gives a signal that also aborts when the program stops itself.
 - Set a deadline. The supervisor sets it.
-- Stop child processes. `@zukhruf/coprocess` stops them.
+- Stop child processes. `@zukhruf/process` stops them.
 - A choice of termination signals. A program that must live on after its terminal closes runs under a supervisor or in tmux, not under `nohup`: a listener for SIGHUP replaces the ignore of `nohup`.
 - Windows. Windows has no POSIX signals.
 

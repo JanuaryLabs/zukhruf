@@ -23,7 +23,6 @@ import { createInterface } from 'node:readline';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { untilAborted } from '@zukhruf/async';
-import { Coprocess } from '@zukhruf/coprocess';
 import {
   Fixed,
   IdleTimeout,
@@ -34,6 +33,7 @@ import {
   type Worker,
   WorkerKind,
 } from '@zukhruf/pool';
+import { Command, Coprocess } from '@zukhruf/process';
 
 const model = new WorkerKind<string, unknown>({
   name: 'model',
@@ -65,41 +65,49 @@ if (role === 'helper') {
 } else {
   let started = 0;
 
+  async function startHelper(folder: string): Promise<Coprocess> {
+    const helper = new Command(
+      process.execPath,
+      [import.meta.filename, 'helper', folder],
+      { name: 'model helper', env: process.env, clock: globalThis },
+    );
+    return new Coprocess(await helper.start());
+  }
+
   class ModelWorker implements Worker<string, unknown> {
-    readonly #helper: Coprocess;
+    readonly #helper: Promise<Coprocess>;
 
     constructor(folder: string) {
       started++;
-      this.#helper = new Coprocess(
-        process.execPath,
-        [import.meta.filename, 'helper', folder],
-        { name: 'model helper' },
-      );
+      this.#helper = startHelper(folder);
     }
 
     // The owner waits for ready() with no time limit, so the worker sets its
     // own: a warm-up takes 300 ms, and one that takes a second has hung.
     async ready(): Promise<void> {
-      await untilAborted(
-        this.#helper.request('warm-up'),
-        AbortSignal.timeout(1_000),
-      );
+      const helper = await this.#helper;
+      await untilAborted(helper.request('warm-up'), AbortSignal.timeout(1_000));
     }
 
-    run(file: string): Promise<unknown> {
-      return this.#helper.request(file);
+    async run(file: string): Promise<unknown> {
+      return (await this.#helper).request(file);
     }
 
-    exited(): Promise<unknown> {
-      return this.#helper.exited();
+    async exited(): Promise<unknown> {
+      return (await this.#helper).exited();
     }
 
     kill(): void {
-      this.#helper.kill();
+      // A helper that did not start has nothing to kill: ready() rejected
+      // with its StartError.
+      void this.#helper.then(
+        (helper) => helper.process.signal('SIGKILL'),
+        () => false,
+      );
     }
 
-    close(): Promise<void> {
-      return this.#helper.close();
+    async close(): Promise<void> {
+      await (await this.#helper).close();
     }
   }
 

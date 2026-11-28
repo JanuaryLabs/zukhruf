@@ -32,12 +32,6 @@
       "import": "./dist/async/index.js",
       "default": "./dist/async/index.js"
     },
-    "./process": {
-      "@zukhruf/source": "./src/process/index.ts",
-      "types": "./dist/process/index.d.ts",
-      "import": "./dist/process/index.js",
-      "default": "./dist/process/index.js"
-    },
     "./docker": {
       "@zukhruf/source": "./src/docker/index.ts",
       "types": "./dist/docker/index.d.ts",

@@ -74,7 +74,6 @@
       "@zukhruf/async",
       "@zukhruf/authentication",
       "@zukhruf/checkpoint",
-      "@zukhruf/coprocess",
       "@zukhruf/diagram",
       "@zukhruf/docker",
       "@zukhruf/election",

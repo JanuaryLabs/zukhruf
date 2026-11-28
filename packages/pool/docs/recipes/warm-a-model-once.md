@@ -28,7 +28,6 @@ import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { Coprocess } from '@zukhruf/coprocess';
 import {
   Fixed,
   LeaderFirst,
@@ -39,6 +38,7 @@ import {
   type Worker,
   WorkerKind,
 } from '@zukhruf/pool';
+import { Command, Coprocess } from '@zukhruf/process';
 
 const model = new WorkerKind<unknown, unknown>({
   name: 'model',
@@ -64,36 +64,46 @@ if (role === 'helper') {
     process.stdout.write(`${line}\n`);
   }
 } else {
+  async function startHelper(cache: string): Promise<Coprocess> {
+    const helper = new Command(
+      process.execPath,
+      [import.meta.filename, 'helper', cache],
+      { name: 'model helper', env: process.env, clock: globalThis },
+    );
+    return new Coprocess(await helper.start());
+  }
+
   // A worker is ready when its helper has the model in memory.
   class ModelWorker implements Worker<unknown, unknown> {
-    readonly #helper: Coprocess;
+    readonly #helper: Promise<Coprocess>;
 
     constructor(cache: string) {
-      this.#helper = new Coprocess(
-        process.execPath,
-        [import.meta.filename, 'helper', cache],
-        { name: 'model helper' },
-      );
+      this.#helper = startHelper(cache);
     }
 
     async ready(): Promise<void> {
-      await this.#helper.request({ warm: true });
+      await (await this.#helper).request({ warm: true });
     }
 
-    run(input: unknown): Promise<unknown> {
-      return this.#helper.request(input);
+    async run(input: unknown): Promise<unknown> {
+      return (await this.#helper).request(input);
     }
 
-    exited(): Promise<unknown> {
-      return this.#helper.exited();
+    async exited(): Promise<unknown> {
+      return (await this.#helper).exited();
     }
 
     kill(): void {
-      this.#helper.kill();
+      // A helper that did not start has nothing to kill: ready() rejected
+      // with its StartError.
+      void this.#helper.then(
+        (helper) => helper.process.signal('SIGKILL'),
+        () => false,
+      );
     }
 
-    close(): Promise<void> {
-      return this.#helper.close();
+    async close(): Promise<void> {
+      await (await this.#helper).close();
     }
   }
 

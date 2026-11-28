@@ -22,7 +22,6 @@ import { availableParallelism, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 
-import { Coprocess } from '@zukhruf/coprocess';
 import {
   HillClimbing,
   IdleTimeout,
@@ -32,6 +31,7 @@ import {
   type Worker,
   WorkerKind,
 } from '@zukhruf/pool';
+import { Command, Coprocess } from '@zukhruf/process';
 
 const helper = new WorkerKind<{ id: number }, unknown>({
   name: 'helper',
@@ -50,28 +50,42 @@ if (process.argv[2] === 'helper') {
     process.stdout.write(`${JSON.stringify({ done: JSON.parse(line).id })}\n`);
   }
 } else {
-  // A worker runs each job on its helper.
-  class HelperWorker implements Worker<{ id: number }, unknown> {
-    readonly #helper = new Coprocess(
+  async function startHelper(): Promise<Coprocess> {
+    const helper = new Command(
       process.execPath,
       [import.meta.filename, 'helper'],
-      { name: 'helper' },
+      { name: 'helper', env: process.env, clock: globalThis },
     );
+    return new Coprocess(await helper.start());
+  }
 
-    run(input: { id: number }): Promise<unknown> {
-      return this.#helper.request(input);
+  // A worker runs each job on its helper.
+  class HelperWorker implements Worker<{ id: number }, unknown> {
+    readonly #helper = startHelper();
+
+    ready(): Promise<unknown> {
+      return this.#helper;
     }
 
-    exited(): Promise<unknown> {
-      return this.#helper.exited();
+    async run(input: { id: number }): Promise<unknown> {
+      return (await this.#helper).request(input);
+    }
+
+    async exited(): Promise<unknown> {
+      return (await this.#helper).exited();
     }
 
     kill(): void {
-      this.#helper.kill();
+      // A helper that did not start has nothing to kill: ready() rejected
+      // with its StartError.
+      void this.#helper.then(
+        (helper) => helper.process.signal('SIGKILL'),
+        () => false,
+      );
     }
 
-    close(): Promise<void> {
-      return this.#helper.close();
+    async close(): Promise<void> {
+      await (await this.#helper).close();
     }
   }
 

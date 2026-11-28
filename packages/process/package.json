@@ -1,7 +1,7 @@
 {
   "name": "@zukhruf/process",
   "version": "0.8.70",
-  "description": "Start a process and know how it ends: a run gives its exit code or signal and its output with no throw; a started process is ready at a line or a message, stops its group with SIGTERM then SIGKILL, and ends with its parent.",
+  "description": "Start a process and know how it ends: a run gives its exit code or signal and its output with no throw; a started process is ready at a line or a message, stops its group with SIGTERM, SIGCONT and then SIGKILL, and ends with its parent.",
   "license": "MIT",
   "repository": {
     "type": "git",

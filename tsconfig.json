@@ -75,9 +75,6 @@
       "path": "./packages/git-hooks"
     },
     {
-      "path": "./packages/coprocess"
-    },
-    {
       "path": "./packages/process"
     },
     {

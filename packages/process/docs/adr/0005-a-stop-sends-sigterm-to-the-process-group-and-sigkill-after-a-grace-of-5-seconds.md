@@ -6,7 +6,7 @@ Status: Accepted 2026-11-27 (backlog #6077).
 
 Changed in part on 2026-11-27 (backlog #6161): CI has no Windows runner, so no Windows run probes the stop before the build, and by the ruling of 2026-10-20 no step waits for one. On Windows execa stops the process tree with `forceKillAfterDelay` and `killDescendants` on its own timers, not on the clock of the command. Its proof is backlog #6161.
 
-Decision-makers: the zukhruf session of backlog #6077 proposes this from the leaders and from [coprocess ADR 0001](../../../coprocess/docs/adr/0001-the-exit-is-an-event-and-the-package-uses-execa.md). Ezz rules on it in the review of the paper.
+Decision-makers: the zukhruf session of backlog #6077 proposes this from the leaders and from [coprocess ADR 0001](https://github.com/JanuaryLabs/zukhruf/blob/aeff1050/packages/coprocess/docs/adr/0001-the-exit-is-an-event-and-the-package-uses-execa.md), deleted with the package in #6155. Ezz rules on it in the review of the paper.
 
 A process can need time to stop. On 2026-10-26 a probe of coprocess ADR 0001 sent SIGTERM to three helpers: the Vision helper (Swift) and the transcription helper (Rust) stopped in 4 to 7 ms, and the Claude command-line program saved its state and stopped in about 900 ms. A process can also start its own children: `sshd` starts one `sshd` for each connection, and a shell starts its commands. SIGKILL to the first process leaves them running. In the other repositories, the wrappers stop with SIGKILL (sdk-it `runNode`, deepagents `AppleContainer`), with SIGINT (context-compiler `running` and `ambient`), or with SIGTERM and then SIGKILL after 2 s (text2sql `killGracefully`). Three files of zukhruf kill a process group by hand (`signalGroup` in the three copies of `sshd.ts`).
 

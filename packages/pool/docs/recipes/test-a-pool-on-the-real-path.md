@@ -33,7 +33,6 @@ import { createClock } from '@sinonjs/fake-timers';
 import PQueue from 'p-queue';
 
 import { delay } from '@zukhruf/async';
-import { Coprocess } from '@zukhruf/coprocess';
 import {
   HillClimbing,
   NoEviction,
@@ -43,6 +42,7 @@ import {
   type Worker,
   WorkerKind,
 } from '@zukhruf/pool';
+import { Command, Coprocess } from '@zukhruf/process';
 
 type FakeClock = ReturnType<typeof createClock>;
 
@@ -54,17 +54,27 @@ const job = new WorkerKind<null, null>({
   expireInSeconds: 60,
 });
 
-/** A worker of a real helper process, whose run waits its time on the test's clock. */
-class HelperWorker implements Worker<null, null> {
-  readonly #helper = new Coprocess(
+/** The helper runs on real time: only the jobs wait on the test's clock. */
+async function startHelper(): Promise<Coprocess> {
+  const helper = new Command(
     process.execPath,
     [import.meta.filename, 'helper'],
-    { name: 'helper' },
+    { name: 'helper', env: process.env, clock: globalThis },
   );
+  return new Coprocess(await helper.start());
+}
+
+/** A worker of a real helper process, whose run waits its time on the test's clock. */
+class HelperWorker implements Worker<null, null> {
+  readonly #helper = startHelper();
   readonly #work: () => Promise<void>;
 
   constructor(work: () => Promise<void>) {
     this.#work = work;
+  }
+
+  ready(): Promise<unknown> {
+    return this.#helper;
   }
 
   async run(): Promise<null> {
@@ -72,16 +82,21 @@ class HelperWorker implements Worker<null, null> {
     return null;
   }
 
-  exited(): Promise<unknown> {
-    return this.#helper.exited();
+  async exited(): Promise<unknown> {
+    return (await this.#helper).exited();
   }
 
   kill(): void {
-    this.#helper.kill();
+    // A helper that did not start has nothing to kill: ready() rejected
+    // with its StartError.
+    void this.#helper.then(
+      (helper) => helper.process.signal('SIGKILL'),
+      () => false,
+    );
   }
 
-  close(): Promise<void> {
-    return this.#helper.close();
+  async close(): Promise<void> {
+    await (await this.#helper).close();
   }
 }
 

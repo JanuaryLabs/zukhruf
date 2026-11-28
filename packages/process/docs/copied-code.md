@@ -4,12 +4,6 @@ The Rule of Three counts places, not packages. Code that a second place needs is
 
 ## In two places
 
-**The guard of a message (an object with a string `type`).**
-
-- Places: `isMessage` of `src/node-process.ts` and `isWorkerMessage` of `packages/testing/src/process/worker-process.ts`.
-- Same: an object, not null, whose `type` is a string.
-- The copy ends without a third place: the move of the `startWorker` users onto `NodeCommand` (backlog #6155) deletes `worker-process.ts`.
-
 **A Perl program that reaps all its children (tests).**
 
 - Places: `REAPS_ALL_ITS_CHILDREN` of `src/run.test.ts` and of `src/start.test.ts`.
