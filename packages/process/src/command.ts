@@ -28,7 +28,8 @@ export interface RunOptions {
 export interface Starting {
   /** An abort stops the process; before ready, the start rejects with the reason. */
   readonly signal?: AbortSignal;
-  readonly stderr?: 'pipe' | 'ignore';
+  /** 'inherit' writes to the stderr of this program (ADR 0011). */
+  readonly stderr?: 'pipe' | 'ignore' | 'inherit';
 }
 
 /** The default: stdin and stdout piped. Only this start gives a piped process. */
@@ -48,7 +49,8 @@ export type StartOptions =
     })
   | (Starting & {
       readonly stdin?: 'pipe' | 'ignore' | Socket;
-      readonly stdout: 'ignore' | Socket;
+      /** 'inherit' writes to the stdout of this program; stdin has no 'inherit' (ADR 0011). */
+      readonly stdout: 'ignore' | 'inherit' | Socket;
       readonly ready?: never;
     });
 

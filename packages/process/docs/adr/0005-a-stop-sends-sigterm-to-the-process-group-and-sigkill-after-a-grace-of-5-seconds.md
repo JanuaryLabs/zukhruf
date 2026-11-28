@@ -1,5 +1,7 @@
 # A stop sends SIGTERM to the process group, and SIGKILL after a grace of 5 seconds
 
+Superseded in part on 2026-11-28 (#6155) for the signals of a stop. SIGCONT follows the SIGTERM, so a frozen member handles it in the grace ([ADR 0014](./0014-a-stop-sends-sigcont-after-its-sigterm-so-a-frozen-member-ends-in-the-grace.md)).
+
 Status: Accepted 2026-11-27 (backlog #6077).
 
 Changed in part on 2026-11-27 (backlog #6161): CI has no Windows runner, so no Windows run probes the stop before the build, and by the ruling of 2026-10-20 no step waits for one. On Windows execa stops the process tree with `forceKillAfterDelay` and `killDescendants` on its own timers, not on the clock of the command. Its proof is backlog #6161.

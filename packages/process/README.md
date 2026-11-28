@@ -50,6 +50,18 @@ const run = await status.run();
 - `env` is required, and it is the whole environment of the process. Write `env: process.env` to pass your own ([ADR 0003](./docs/adr/0003-the-environment-is-a-required-input-and-the-process-gets-only-what-the-caller-names.md)).
 - An abort of `signal` stops the process and rejects with the reason of the signal.
 
+### Throw at an end that you do not accept
+
+The caller says which ends it accepts, and throws `ExitError` for any other end ([ADR 0013](./docs/adr/0013-a-caller-throws-exiterror-for-an-end-that-it-does-not-accept.md)):
+
+```ts
+const run = await status.run();
+if (run.exitCode !== 0) throw new ExitError('git status', run);
+// git status ended (exit code 128): fatal: not a git repository
+```
+
+`new ExitError(name, run)` names the process and the end and has the stderr tail, never the arguments, because they can hold prompts or secrets. It holds `end` and `stderr`, so a caller that catches it can read the exit code. `git diff --no-index` exits with 1 when the files differ, so its caller accepts 0 and 1 and throws only for the rest.
+
 ## Start a process and wait until it is ready
 
 `command.start({ ready, signal, stdin, stdout, stderr })` starts the process and resolves when it is ready: at the first line of stdout that `ready.line` names ([ADR 0006](./docs/adr/0006-a-started-process-is-ready-at-a-line-or-a-message-that-the-caller-names-and-an-end-before-it-rejects.md)). Without `ready`, it resolves after the start.
@@ -71,12 +83,13 @@ await using holding = await owner.start({
 - The wait has no time limit of its own. The `signal` is its limit; in a test, give `t.signal`.
 - `lines()` of the started process gives the lines of stdout from the first one, also those that came before the call. After the ready line, the package reads stdout only while a caller iterates `lines()`. A process that writes much to stdout that nobody reads waits at its write, as with a pipe in a shell; give `stdout: 'ignore'` for such a process.
 - `stdin` and `stdout` can also be a `net.Socket` that the process gets as its own, as `sshd -i` needs for each connection. A ready line needs `stdout: 'pipe'`, the default, and the type allows `ready` only then.
+- `stdout` and `stderr` of a `Command` can be `'inherit'` (a `NodeCommand` keeps its stdout piped, so only its `stderr`): the process writes to those of this program, so a person at the terminal sees a compiler or an installer while it runs. Run it to its end with `await (await command.start({ stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' })).ended`. stdin has no `'inherit'`: the process is in its own session, so it would read the terminal beside the shell. Ctrl-C reaches this program, not the process; send it on with `started.signal('SIGINT')` ([ADR 0011](./docs/adr/0011-a-started-process-can-write-to-the-stdout-and-stderr-of-this-program-and-never-reads-its-stdin.md)).
 
 ## The end of a started process
 
 `ended` settles once, with the end, when the process has ended. A pool or a supervisor awaits it; there is no property to read, because a read and an end can race ([coprocess ADR 0001](../coprocess/docs/adr/0001-the-exit-is-an-event-and-the-package-uses-execa.md)).
 
-A started process ends when this program ends, also when this program is killed with SIGKILL ([ADR 0004](./docs/adr/0004-a-started-process-ends-with-its-parent-also-when-the-parent-is-killed.md)). On macOS and Linux, each process starts under a keeper in POSIX `sh`: the keeper starts a watcher, which stops the group when the pipe from this program closes, and then becomes the process, which leads the group. It costs about 5 ms at the start and 2 to 4 MB while the process runs. The keeper becomes the program, so `pid` is the pid of the program and `process.kill(started.pid, 'SIGSTOP')` reaches it; `stop()` signals the whole group. A process that must outlive this program is not a started process of this package.
+A started process ends when this program ends, also when this program is killed with SIGKILL ([ADR 0004](./docs/adr/0004-a-started-process-ends-with-its-parent-also-when-the-parent-is-killed.md)). On macOS and Linux, each process starts under a keeper in POSIX `sh`: the keeper starts a watcher, which stops the group when the pipe from this program closes, and then becomes the process, which leads the group. It costs about 5 ms at the start and 2 to 4 MB while the process runs. The keeper becomes the program, so `pid` is the pid of the program and `started.signal('SIGSTOP')` reaches it; `stop()` signals the whole group. A process that must outlive this program is not a started process of this package.
 
 - On Windows there is no keeper: execa starts the file, and a process does not end yet with a parent that is killed. A job object, as .NET 11 uses, is on the map as later, with the proof of the Windows path (backlog #6161).
 - A child of the process that leaves the group (`setsid`, `detached: true`) does not end with it.
@@ -84,7 +97,9 @@ A started process ends when this program ends, also when this program is killed 
 
 ## Stop a started process
 
-`stop()` sends SIGTERM to the process group. When the group is still alive after the grace, 5 seconds unless the caller gives `grace`, it sends SIGKILL to the group. It resolves with the end when no member of the group is left ([ADR 0005](./docs/adr/0005-a-stop-sends-sigterm-to-the-process-group-and-sigkill-after-a-grace-of-5-seconds.md)). A member that has ended but that its parent has not reaped yet (a zombie) is still in the group, so a zombie that no parent reaps holds the stop until the grace. An abort of `signal` is a stop. The disposal (`await using`) is a stop that also waits until the streams have closed.
+`stop()` sends SIGTERM to the process group, and then SIGCONT, so a frozen member gets the SIGTERM ([ADR 0014](./docs/adr/0014-a-stop-sends-sigcont-after-its-sigterm-so-a-frozen-member-ends-in-the-grace.md)). When the group is still alive after the grace, 5 seconds unless the caller gives `grace`, it sends SIGKILL to the group. It resolves with the end when no member of the group is left ([ADR 0005](./docs/adr/0005-a-stop-sends-sigterm-to-the-process-group-and-sigkill-after-a-grace-of-5-seconds.md)). A member that has ended but that its parent has not reaped yet (a zombie) is still in the group, so a zombie that no parent reaps holds the stop until the grace. An abort of `signal` is a stop. The disposal (`await using`) is a stop that also waits until the streams have closed.
+
+`signal(name)` sends one signal to the program alone, not to its group, as SIGSTOP and SIGCONT need, or a SIGINT that a caller passes on. It gives `true` when it sent the signal, and `false` when the program has ended, so a pid that the system gave to another process gets nothing ([ADR 0012](./docs/adr/0012-signal-sends-a-signal-to-the-program-alone-and-gives-false-when-the-program-has-ended.md)). `signal(name, { to: 'group' })` sends it to each member of the group, as `systemctl kill --kill-whom=all` does, and gives `false` when no member is left ([ADR 0015](./docs/adr/0015-signal-can-reach-each-member-of-the-process-group.md)). Signal a group when its members run: a SIGSTOP that reaches a member still between its fork and its exec can be lost (probed on macOS).
 
 ## Talk to a coprocess in JSON lines
 
@@ -121,7 +136,7 @@ await using held = await holder.start({
 });
 ```
 
-Only a `NodeProcess` has messages, because only a Node.js child can use the channel.
+Only a `NodeProcess` has messages, because only a Node.js child can use the channel. The messages go through the structured clone of Node.js (the `'advanced'` serialization of execa), so a `Date`, a `Map` or a field whose value is `undefined` arrives as it was sent.
 
 ## Errors
 
@@ -129,6 +144,7 @@ Only a `NodeProcess` has messages, because only a Node.js child can use the chan
 | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `StartError`                          | The process could not start, for example because the file does not exist. Its `cause` is the error of the start (`ENOENT`, `EACCES`). `run()` and `start()` reject with it.                                                                                                                                                                                                                                                                                                  |
 | `ProcessEndedError`                   | A started process ended before what its caller waited for: the ready line or message of a start (`before it was ready`), the message that `next()` waits for (`before it sent 'held'`), or the next line of a coprocess (`before it sent a line`), which `exited()` of the coprocess resolves with. It has `end` and `stderr` (the stderr tail). Its message names the process, the end and the wait, never the command line, because arguments can hold prompts or secrets. |
+| `ExitError`                           | A run ended with an end that its caller does not accept. The caller makes it: `throw new ExitError(name, run)`. It has `end` and `stderr` (the stderr tail), and its message names the process and the end, never the arguments.                                                                                                                                                                                                                                             |
 | the reason of `signal`                | The signal aborted. The process is stopped first.                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `<name> gave a line that is not JSON` | A coprocess wrote a line that `JSON.parse` refuses. Only the `receive` of that line fails, and its `cause` is the error of `JSON.parse`.                                                                                                                                                                                                                                                                                                                                     |
 
@@ -215,7 +231,7 @@ export interface RunOptions {
 
 interface Starting {
   readonly signal?: AbortSignal;
-  readonly stderr?: 'pipe' | 'ignore';
+  readonly stderr?: 'pipe' | 'ignore' | 'inherit';
 }
 
 /** The default: stdin and stdout piped. Only this start gives a piped process. */
@@ -234,7 +250,7 @@ export type StartOptions =
     })
   | (Starting & {
       readonly stdin?: 'pipe' | 'ignore' | Socket;
-      readonly stdout: 'ignore' | Socket;
+      readonly stdout: 'ignore' | 'inherit' | Socket;
       readonly ready?: never;
     });
 
@@ -261,8 +277,15 @@ export interface Process extends AsyncDisposable {
   lines(): AsyncIterable<string>;
   /** The last 16 384 characters of stderr. */
   stderrTail(): string;
-  /** SIGTERM to the group, SIGKILL to the group after the grace. */
+  /** SIGTERM and SIGCONT to the group, SIGKILL to the group after the grace. */
+  /** Sends name to the program, or with to: 'group' to each member. False when none is left. */
+  signal(name: NodeJS.Signals, options?: SignalOptions): boolean;
   stop(): Promise<End>;
+}
+
+export interface SignalOptions {
+  /** The program, the default, or each member of its group. */
+  readonly to?: 'program' | 'group';
 }
 
 /** A started process with its stdin and stdout piped. */
@@ -326,6 +349,15 @@ export class Coprocess implements AsyncDisposable {
 export class StartError extends Error {}
 
 export class ProcessEndedError extends Error {
+  readonly end: End;
+  /** The stderr tail. */
+  readonly stderr: string;
+}
+
+/** A run ended with an end that its caller does not accept; the caller throws it. */
+export class ExitError extends Error {
+  /** A run gives its stderr; a start whose stderr was not piped gives only its end. */
+  constructor(process: string, ended: End & { readonly stderr?: string });
   readonly end: End;
   /** The stderr tail. */
   readonly stderr: string;

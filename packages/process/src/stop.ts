@@ -4,9 +4,9 @@ import { errorCode } from './error-code.ts';
 
 /**
  * Stops the process group of a program under the keeper (ADR 0005): SIGTERM
- * to the group, and SIGKILL to the group when it still runs after `grace` on
- * `clock`. Resolves when the program has ended and no member of the group is
- * left.
+ * and then SIGCONT to the group, and SIGKILL to the group when it still runs
+ * after `grace` on `clock`. Resolves when the program has ended and no member
+ * of the group is left.
  *
  * After the program ends, a member that SIGTERM ended, or the watcher of the
  * keeper, can still be in the group for a moment, until it exits and its new
@@ -19,6 +19,9 @@ export async function stopGroup(
   { grace, clock }: { grace: number; clock: Clock },
 ): Promise<void> {
   signalGroup(pgid, 'SIGTERM');
+  // A frozen member gets the SIGTERM only when it runs again, so it would wait
+  // out the grace; systemd's kill_and_sigcont sends SIGCONT for the same reason.
+  signalGroup(pgid, 'SIGCONT');
   const killed = Promise.withResolvers<void>();
   const timer = clock.setTimeout(() => {
     signalGroup(pgid, 'SIGKILL');
@@ -49,14 +52,16 @@ export async function stopGroup(
  * macOS answers EPERM, not ESRCH, for a group whose members are all zombies
  * that wait for their parent to reap them: the program between the end of its
  * stdout and its reaping (probed 2026-11-27). Nothing in such a group runs, so
- * neither answer leaves anything to signal.
+ * neither answer leaves anything to signal, and the signal gives false.
  */
-function signalGroup(pgid: number, signal: NodeJS.Signals): void {
+export function signalGroup(pgid: number, signal: NodeJS.Signals): boolean {
   try {
     process.kill(-pgid, signal);
+    return true;
   } catch (error) {
     const code = errorCode(error);
     if (code !== 'ESRCH' && code !== 'EPERM') throw error;
+    return false;
   }
 }
 

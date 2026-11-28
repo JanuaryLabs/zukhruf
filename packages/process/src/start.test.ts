@@ -16,6 +16,7 @@ import {
   type CommandOptions,
   ProcessEndedError,
   StartError,
+  type StartOptions,
 } from './index.ts';
 import {
   groupExists,
@@ -224,6 +225,169 @@ test('a start whose signal aborts while the start looks up its file rejects with
   } finally {
     unsubscribe('child_process', onSpawn);
   }
+});
+
+test("a process started with stdout and stderr 'inherit' writes to those of this program, and ended gives its end", async () => {
+  // Arrange: this program is the parent, run with its stdout and stderr piped.
+  const parent = new Command(
+    process.execPath,
+    [
+      '--input-type=module',
+      '-e',
+      `import { Command } from ${JSON.stringify(index)};
+      const child = await new Command(process.execPath, ['-e', "console.log('out'); console.error('err'); process.exit(4);"], { env: {}, clock: globalThis })
+        .start({ stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' });
+      process.exit((await child.ended).exitCode);`,
+    ],
+    { clock: globalThis, env: process.env },
+  );
+
+  // Act
+  const run = await parent.run();
+
+  // Assert
+  assert.deepEqual(
+    { exitCode: run.exitCode, stdout: run.stdout, stderr: run.stderr },
+    { exitCode: 4, stdout: 'out\n', stderr: 'err\n' },
+  );
+});
+
+test("stdout 'inherit' has no ready line, and stdin has no 'inherit'", () => {
+  // Assert: the process is in its own session, so its stdin would read the
+  // terminal beside the shell, and nothing reads an inherited stdout (ADR 0011).
+  const inherited: StartOptions = { stdout: 'inherit', stderr: 'inherit' };
+  // @ts-expect-error a ready line needs stdout 'pipe'
+  const readyLine: StartOptions = { stdout: 'inherit', ready: { line: 'x' } };
+  // @ts-expect-error stdin has no 'inherit'
+  const stdin: StartOptions = { stdin: 'inherit' };
+  // @ts-expect-error stdin has no 'inherit', also beside an inherited stdout
+  const both: StartOptions = { stdin: 'inherit', stdout: 'inherit' };
+  assert.ok([inherited, readyLine, stdin, both]);
+});
+
+test('a stop of a frozen process wakes it, so its SIGTERM handler ends it before the grace', async (t) => {
+  // Arrange: the program ends with exit code 0 at SIGTERM, and is frozen.
+  await using started = await new Command(
+    process.execPath,
+    [
+      '-e',
+      "process.on('SIGTERM', () => process.exit(0)); setInterval(() => {}, 1000); console.log('ready');",
+    ],
+    { clock: globalThis, env: {}, grace: 2000 },
+  ).start({ ready: { line: 'ready' }, signal: t.signal });
+  started.signal('SIGSTOP');
+
+  // Act
+  const end = await started.stop();
+
+  // Assert: a SIGKILL at the end of the grace would give { signal: 'SIGKILL' }.
+  assert.deepEqual(end, { exitCode: 0 });
+});
+
+test('signal() sends a signal to the program alone and gives true, so a child in its group keeps running', async (t) => {
+  // Arrange: the program starts a sleep in its own group, writes its pid, and becomes a sleep.
+  await using started = await new Command(
+    '/bin/sh',
+    ['-c', 'sleep 30 </dev/null >/dev/null 2>&1 & echo $!; exec sleep 30'],
+    { clock: globalThis, env: {} },
+  ).start({ signal: t.signal });
+  let child = 0;
+  for await (const line of started.lines()) {
+    child = Number(line);
+    break;
+  }
+  try {
+    // Act
+    const sent = started.signal('SIGUSR1');
+    const end = await started.ended;
+
+    // Assert
+    assert.deepEqual(
+      { sent, end, childRunning: running(child) },
+      { sent: true, end: { signal: 'SIGUSR1' }, childRunning: true },
+    );
+  } finally {
+    killGroup(started.pid);
+  }
+});
+
+test('signal() after the end of the program gives false, and throws nothing', async (t) => {
+  // Arrange
+  const started = await new Command('/usr/bin/true', [], {
+    clock: globalThis,
+    env: {},
+  }).start({ signal: t.signal });
+  await started.ended;
+
+  // Act
+  const sent = started.signal('SIGTERM');
+
+  // Assert
+  assert.equal(sent, false);
+});
+
+test('signal() to the group reaches each member, so the program and its child are both frozen', async (t) => {
+  // Arrange: the program starts a sleep in its own group, writes its pid, and becomes a sleep.
+  await using started = await new Command(
+    '/bin/sh',
+    ['-c', 'sleep 30 </dev/null >/dev/null 2>&1 & echo $!; exec sleep 30'],
+    { clock: globalThis, env: {} },
+  ).start({ signal: t.signal });
+  let child = 0;
+  for await (const line of started.lines()) {
+    child = Number(line);
+    break;
+  }
+  const ps = (pid: number, field: 'stat' | 'comm') =>
+    execFileSync('/bin/ps', ['-o', `${field}=`, '-p', String(pid)], {
+      encoding: 'utf8',
+    }).trim();
+  const state = (pid: number) => ps(pid, 'stat')[0];
+  try {
+    // A SIGSTOP to a member that is still between its fork and its exec can
+    // be lost (probed 2026-11-28 on macOS), so both run sleep first.
+    await poll(
+      async () =>
+        ps(started.pid, 'comm').endsWith('sleep') &&
+        ps(child, 'comm').endsWith('sleep')
+          ? true
+          : undefined,
+      { interval: 5, clock: globalThis, signal: t.signal },
+    );
+
+    // Act
+    const sent = started.signal('SIGSTOP', { to: 'group' });
+
+    // Assert: T is the state of a stopped process.
+    const frozen = await poll(
+      async () =>
+        state(started.pid) === 'T' && state(child) === 'T' ? true : undefined,
+      { interval: 5, clock: globalThis, signal: t.signal },
+    );
+    assert.deepEqual({ sent, frozen }, { sent: true, frozen: true });
+  } finally {
+    killGroup(started.pid);
+  }
+});
+
+test('signal() to a group with no member left gives false, and throws nothing', async (t) => {
+  // Arrange
+  const started = await new Command('/usr/bin/true', [], {
+    clock: globalThis,
+    env: {},
+  }).start({ signal: t.signal });
+  await started.ended;
+  await poll(async () => (groupExists(started.pid) ? undefined : true), {
+    interval: 5,
+    clock: globalThis,
+    signal: t.signal,
+  });
+
+  // Act
+  const sent = started.signal('SIGTERM', { to: 'group' });
+
+  // Assert
+  assert.equal(sent, false);
 });
 
 test('the pid of a started process is the pid of the program that it started, so a signal to it reaches the program', async () => {

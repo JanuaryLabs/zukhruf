@@ -1,5 +1,7 @@
 # A run gives its end as a value, an exit code or a signal, and rejects only when the process cannot start or its signal aborts
 
+Superseded in part on 2026-11-28 (#6077) for the consequence that a caller writes its own throw at a non-zero exit. A caller throws `ExitError` for an end that it does not accept ([ADR 0013](./0013-a-caller-throws-exiterror-for-an-end-that-it-does-not-accept.md)).
+
 Status: Accepted 2026-11-27 (backlog #6077).
 
 Changed in part on 2026-11-27 (backlog #6161): on Windows there is no keeper, so a start that fails is a spawn error of execa, which the trial tells apart, and execa finds the file (`.cmd`, `PATHEXT`). The check that predicts runs only on macOS and Linux. The Windows path is not proven yet; CI has no Windows runner, and by the ruling of 2026-10-20 no step waits for a Windows run.

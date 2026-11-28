@@ -24,11 +24,18 @@ _Avoid_: Exit status, result (for the end alone)
 What a run printed: its stdout, its stderr, and both in the order that the process wrote them.
 
 **Stop**:
-SIGTERM to the process group of a started process, and SIGKILL to the group after the grace.
+SIGTERM and then SIGCONT to the process group of a started process, and SIGKILL to the group after the grace.
 _Avoid_: Kill (for the two steps together)
 
 **Grace**:
 The time from SIGTERM to SIGKILL in a stop. 5 seconds unless the caller gives one.
+
+**Signal** (of a started process):
+One signal sent to the program alone, not to its group. It reaches only a program that has not ended.
+_Avoid_: Kill (for a signal that does not end the program)
+
+**Inherited stream**:
+A stdout or stderr of a started process that is the stdout or stderr of this program, so a person at the terminal sees it. A started process has no inherited stdin.
 
 **Parent**:
 The program that started the process. A started process ends when its parent ends, also when the parent is killed.
@@ -47,4 +54,7 @@ A value that a Node process sends to its parent over the IPC channel, or that th
 A started process that its parent talks to over its stdin and stdout, one JSON value on each line, as with `coproc` in bash. `Coprocess` is the JSON-lines view of a started process.
 
 **Stderr tail**:
-The last 16 384 characters of the stderr of a started process. The errors of a started process carry it. A run keeps all of its stderr.
+The last 16 384 characters of the stderr of a started process, or of a run in an `ExitError`. The errors of a started process carry it. A run keeps all of its stderr.
+
+**Accepted end**:
+An end that the caller of a run accepts, such as exit code 0. For any other end, the caller throws an `ExitError`.

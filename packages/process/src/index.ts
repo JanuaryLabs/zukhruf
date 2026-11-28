@@ -13,6 +13,11 @@ export {
   type NodeStartOptions,
 } from './node-command.ts';
 export type { Message, MessageMatch, NodeProcess } from './node-process.ts';
+export { ExitError } from './exit-error.ts';
 export { ProcessEndedError } from './process-ended-error.ts';
 export { StartError } from './start-error.ts';
-export type { PipedProcess, Process } from './started-process.ts';
+export type {
+  PipedProcess,
+  Process,
+  SignalOptions,
+} from './started-process.ts';

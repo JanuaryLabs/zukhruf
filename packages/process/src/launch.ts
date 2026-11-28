@@ -13,7 +13,7 @@ import { findFile } from './file.ts';
 import { KEEPER, environmentFixes } from './keeper.ts';
 import { StartError } from './start-error.ts';
 import { Output, StartedProcess } from './started-process.ts';
-import { stopGroup } from './stop.ts';
+import { signalGroup, stopGroup } from './stop.ts';
 
 /** What `run()` and `start()` of a command read: the command with its defaults. */
 export interface Target {
@@ -37,8 +37,8 @@ export interface Run {
 
 export interface Launch {
   readonly stdin: 'pipe' | 'ignore' | Socket;
-  readonly stdout: 'pipe' | 'ignore' | Socket;
-  readonly stderr: 'pipe' | 'ignore';
+  readonly stdout: 'pipe' | 'ignore' | 'inherit' | Socket;
+  readonly stderr: 'pipe' | 'ignore' | 'inherit';
   readonly signal: AbortSignal | undefined;
   /** Resolves when the process is ready; undefined: ready at the start. */
   readonly ready: ((started: StartedProcess) => Promise<void>) | undefined;
@@ -119,6 +119,12 @@ export async function startUnderKeeper(
       pid,
       stdin: subprocess.stdin instanceof Writable ? subprocess.stdin : null,
       output,
+      // Node's own kill: false once Node reaped the program, and no SIGKILL
+      // timer, which execa's kill adds after a SIGTERM.
+      signal: (name, to) =>
+        to === 'group'
+          ? signalGroup(pid, name)
+          : subprocess.nodeChildProcess.kill(name),
     },
     subprocess.then(endFrom),
     { name: target.name, stop },

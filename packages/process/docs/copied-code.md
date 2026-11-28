@@ -16,6 +16,12 @@ The Rule of Three counts places, not packages. Code that a second place needs is
 - Same: the program forks a child that exits at once, then calls `wait()` until it finds no child, and exits with 0.
 - A third place moves it into `src/testing/`.
 
+**The text of an end in an error message.**
+
+- Places: the constructor of `ProcessEndedError` in `src/process-ended-error.ts` and that of `ExitError` in `src/exit-error.ts`.
+- Same: `exit code N` for an exit code, the name of the signal for a signal.
+- A third place moves it into `src/end.ts`, beside `End`.
+
 ## Extracted
 
 - **The start of a process under the keeper** (backlog #6166). Its third place was `NodeCommand`. `spawnUnderKeeper` of `src/launch.ts` holds what the copies shared: the environment without its `undefined` values, the folder, the file found before the start or a `StartError` that names the command, and the arguments to the keeper of [ADR 0004](./adr/0004-a-started-process-ends-with-its-parent-also-when-the-parent-is-killed.md) with the fixes of the environment, started detached, and the close of the lifeline at the exit of the program. Since the keeper of 2026-11-27 (one `KEEPER` for a run and a start), the execa options are the only difference and its only parameter: the stdio up to fd 3, the buffer, `input`, `ipc`. `runUnderKeeper` and `startUnderKeeper` call it, and `Command` and `NodeCommand` call them.

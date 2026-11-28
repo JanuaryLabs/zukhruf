@@ -19,8 +19,19 @@ export interface Process extends AsyncDisposable {
   lines(): AsyncIterable<string>;
   /** The last 16 384 characters of stderr. */
   stderrTail(): string;
-  /** SIGTERM to the group, SIGKILL to the group after the grace. */
+  /**
+   * Sends `name` to the program alone (ADR 0012), or with `to: 'group'` to
+   * each member of its process group (ADR 0015). True when it was sent; false
+   * when the program had ended, or the group had no member left.
+   */
+  signal(name: NodeJS.Signals, options?: SignalOptions): boolean;
+  /** SIGTERM and SIGCONT to the group, SIGKILL to the group after the grace. */
   stop(): Promise<End>;
+}
+
+export interface SignalOptions {
+  /** Who gets the signal: the program, the default, or each member of its group. */
+  readonly to?: 'program' | 'group';
 }
 
 /** A started process with its stdin and stdout piped. */
@@ -29,7 +40,7 @@ export interface PipedProcess extends Process {
 }
 
 /** The size of the stderr tail (ADR 0006). */
-const TAIL = 16 * 1024;
+export const TAIL = 16 * 1024;
 
 /**
  * The stdout lines and the stderr tail of a child. Build it in the tick of the
@@ -92,6 +103,7 @@ interface Child<Stdin> {
   readonly pid: number;
   readonly stdin: Stdin;
   readonly output: Output;
+  readonly signal: (name: NodeJS.Signals, to: 'program' | 'group') => boolean;
 }
 
 /** The process behind `Process`; with a `Writable` stdin, it is a `PipedProcess`. */
@@ -104,6 +116,7 @@ export class StartedProcess<
   readonly #end = new Latch<End>();
   readonly #stop: () => Promise<void>;
   readonly #output: Output;
+  readonly #signal: (name: NodeJS.Signals, to: 'program' | 'group') => boolean;
 
   constructor(
     child: Child<Stdin>,
@@ -114,6 +127,7 @@ export class StartedProcess<
     this.pid = child.pid;
     this.stdin = child.stdin;
     this.#output = child.output;
+    this.#signal = child.signal;
     void ended.then((end) => this.#end.open(end));
     this.#stop = stop;
   }
@@ -143,6 +157,13 @@ export class StartedProcess<
 
   stderrTail(): string {
     return this.#output.stderrTail();
+  }
+
+  signal(
+    name: NodeJS.Signals,
+    { to = 'program' }: SignalOptions = {},
+  ): boolean {
+    return this.#signal(name, to);
   }
 
   async stop(): Promise<End> {
