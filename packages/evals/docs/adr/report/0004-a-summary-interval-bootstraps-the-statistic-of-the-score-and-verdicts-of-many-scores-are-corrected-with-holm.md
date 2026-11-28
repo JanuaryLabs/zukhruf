@@ -6,6 +6,8 @@ Status, 2026-11-27 (#6108): `Summary` is built. Its value is `Run#total` and its
 
 Status, 2026-11-28 (#6108): `Verdicts` is built. Each score's verdict is `PairedBootstrap.verdict` on the two runs, in the order of the scores; the primary score is decided by its own p and the others by their Holm-adjusted p, below 0.05, as mteb's report does (point 3; the copy is in docs/copied-code.md, backlog #6288).
 
+Status, 2026-11-28 (#6267, 75c239dc): a bootstrap resample whose statistic has no value is left out (Ezz's rule B, core ADR 0010), so an interval comes from the resamples that have a value and its table says "from K of N resamples" when K < N, and a p of `PairedBootstrap` is a share of the kept resamples. A score that no resample of the pair tests has the verdict untested, with no difference and no p: `Verdicts` shows it as untested and leaves it out of the Holm family, which corrects only the scores that have a p (core ADR 0004).
+
 ## Context
 
 A score of a run is a ratio of sums over its answers: `Totals`. For a score per item (offers' `values_recall` and `values_precision`), each expected value counts once, so a page with 65 offers weighs 65 times a page with one. For a score per row (`values_f1`), each answer counts once. `Bootstrap` resamples the value of each scorecard, the samples average, so its interval is the interval of a score per item only when each whole is 1 (#4234; found on ipay: 44/45 exact precision gave [12.3%, 21.1%]).

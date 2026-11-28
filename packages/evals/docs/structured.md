@@ -606,7 +606,7 @@ const bootstrap = new Bootstrap({
     method: new Linear(),
   }),
 });
-bootstrap.interval(run, 'truth'); // { low, high }
+bootstrap.interval(run, 'truth'); // { low, high, resamples, nResamples }, or undefined when no resample has a value
 ```
 
 ## Documentation
