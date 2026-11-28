@@ -68,6 +68,7 @@
     "@types/pg": "^8.23.1",
     "@zukhruf/docker": "^0.8.70",
     "@zukhruf/parameterized-test": "^0.8.70",
+    "@zukhruf/process": "^0.8.70",
     "@zukhruf/testing": "^0.8.70",
     "esbuild": "0.28.2",
     "hono": "^4.13.20",

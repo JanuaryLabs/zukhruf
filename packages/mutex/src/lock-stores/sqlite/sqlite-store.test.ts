@@ -7,7 +7,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { TemporaryFiles } from '@zukhruf/fs';
 import { test } from '@zukhruf/parameterized-test';
-import { startWorker } from '@zukhruf/testing/process';
+import { NodeCommand } from '@zukhruf/process';
 
 import { Modes } from '../../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../../mutex/mutex.ts';
@@ -131,7 +131,8 @@ describe('SqliteStore holder record', () => {
   test('a holder that was killed leaves no file once the next holder took the key and let it go', async (t) => {
     // Arrange: a holder process dies while it holds the key.
     await using directory = await new TemporaryFiles().directory('mutex-test-');
-    await using holder = startWorker(
+    // The holder must enter its task.
+    await using holder = await new NodeCommand(
       `
 				import { Mutex } from ${JSON.stringify(mutexUrl.href)};
 				import { SqliteStore } from ${JSON.stringify(storeUrl.href)};
@@ -142,12 +143,10 @@ describe('SqliteStore holder record', () => {
 					await new Promise(() => {});
 				});
 			`,
-      'holder',
-    );
-    // The holder must enter its task.
-    await holder.next('entered', { signal: t.signal });
-    holder.child.kill('SIGKILL');
-    await holder.closed;
+      { name: 'holder', env: process.env, clock: globalThis },
+    ).start({ ready: { message: 'entered' }, signal: t.signal });
+    holder.process.signal('SIGKILL');
+    await holder.process.ended;
     const mutex = new Mutex(
       new SqliteStore(directory.path, { clock: globalThis }),
     );

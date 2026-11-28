@@ -6,7 +6,7 @@ import { describe, test } from 'node:test';
 
 import { untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
-import { startWorker } from '@zukhruf/testing/process';
+import { NodeCommand } from '@zukhruf/process';
 
 import { standInServer } from '../../testing/stand-in-server.ts';
 
@@ -26,7 +26,7 @@ describe('A process whose supervisor connects over a socket', () => {
     await using directory = await new TemporaryFiles().directory('mutex-test-');
     const socketPath = socketPathIn(directory.path);
     await using _server = await standInServer(socketPath, () => {});
-    await using idle = startWorker(
+    await using idle = await new NodeCommand(
       `
 				import { connect } from 'node:net';
 				import { ConnectionSupervisor } from ${JSON.stringify(supervisorUrl)};
@@ -42,17 +42,15 @@ describe('A process whose supervisor connects over a socket', () => {
 				supervisor.on('connected', () => process.send({ type: 'connected' }));
 				supervisor.open();
 			`,
-      'idle',
-    );
-    await idle.next('connected', { signal: t.signal });
+      { name: 'idle', env: process.env, clock: globalThis },
+    ).start({ ready: { message: 'connected' }, signal: t.signal });
 
     // Act: the process has nothing else to do.
-    // A process that exited first gets no message.
-    idle.child.send('done', () => undefined);
+    idle.send({ type: 'done' });
 
     // Assert: the first connection is not ref'd, because nobody holds the supervisor.
-    await untilAborted(idle.closed, t.signal);
-    assert.deepEqual(idle.exit, { code: 0, signal: null }, idle.stderr);
+    const end = await untilAborted(idle.process.ended, t.signal);
+    assert.deepEqual(end, { exitCode: 0 }, idle.process.stderrTail());
   });
 
   test('after its last hold is released, the process exits by itself once its lost socket connection was replaced', async (t) => {
@@ -63,7 +61,7 @@ describe('A process whose supervisor connects over a socket', () => {
     await using _server = await standInServer(socketPath, (peer) =>
       firstPeer.resolve(peer),
     );
-    await using idle = startWorker(
+    await using idle = await new NodeCommand(
       `
 				import { connect } from 'node:net';
 				import { ConnectionSupervisor } from ${JSON.stringify(supervisorUrl)};
@@ -84,19 +82,17 @@ describe('A process whose supervisor connects over a socket', () => {
 				});
 				supervisor.open();
 			`,
-      'idle',
-    );
-    await idle.next('released', { signal: t.signal });
+      { name: 'idle', env: process.env, clock: globalThis },
+    ).start({ ready: { message: 'released' }, signal: t.signal });
 
     // Act: the server drops the connection, the supervisor replaces it, and the process has nothing else to do.
     (await untilAborted(firstPeer.promise, t.signal)).destroy();
     await idle.next('replaced', { signal: t.signal });
-    // A process that exited first gets no message.
-    idle.child.send('done', () => undefined);
+    idle.send({ type: 'done' });
 
     // Assert: nobody holds the supervisor, so the replacement does not keep the process alive.
-    await untilAborted(idle.closed, t.signal);
-    assert.deepEqual(idle.exit, { code: 0, signal: null }, idle.stderr);
+    const end = await untilAborted(idle.process.ended, t.signal);
+    assert.deepEqual(end, { exitCode: 0 }, idle.process.stderrTail());
   });
 
   test('a hold released while the supervisor reconnects reaches the replacement, so the process exits by itself', async (t) => {
@@ -107,7 +103,7 @@ describe('A process whose supervisor connects over a socket', () => {
     await using _server = await standInServer(socketPath, (peer) =>
       firstPeer.resolve(peer),
     );
-    await using idle = startWorker(
+    await using idle = await new NodeCommand(
       `
 				import { connect } from 'node:net';
 				import { ConnectionSupervisor } from ${JSON.stringify(supervisorUrl)};
@@ -129,18 +125,16 @@ describe('A process whose supervisor connects over a socket', () => {
 				supervisor.once('disconnected', () => held[Symbol.dispose]());
 				supervisor.open();
 			`,
-      'idle',
-    );
-    await idle.next('connected', { signal: t.signal });
+      { name: 'idle', env: process.env, clock: globalThis },
+    ).start({ ready: { message: 'connected' }, signal: t.signal });
 
     // Act: the server drops the connection, the supervisor replaces it, and the process has nothing else to do.
     (await untilAborted(firstPeer.promise, t.signal)).destroy();
     await idle.next('replaced', { signal: t.signal });
-    // A process that exited first gets no message.
-    idle.child.send('done', () => undefined);
+    idle.send({ type: 'done' });
 
     // Assert: the replacement keeps the release made while there was no connection.
-    await untilAborted(idle.closed, t.signal);
-    assert.deepEqual(idle.exit, { code: 0, signal: null }, idle.stderr);
+    const end = await untilAborted(idle.process.ended, t.signal);
+    assert.deepEqual(end, { exitCode: 0 }, idle.process.stderrTail());
   });
 });

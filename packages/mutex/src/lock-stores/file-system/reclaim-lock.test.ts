@@ -9,7 +9,7 @@ import { type TestContext, describe } from 'node:test';
 import { untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
 import { test } from '@zukhruf/parameterized-test';
-import { startWorker } from '@zukhruf/testing/process';
+import { NodeCommand } from '@zukhruf/process';
 
 import { type Settlement, watch } from '../../testing/watch.ts';
 import { LockFileStore } from './lock-file-store.ts';
@@ -112,23 +112,21 @@ describe('A waiter that dies while it evicts a dead holder', () => {
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
       );
-      await using holder = startWorker(
+      await using holder = await new NodeCommand(
         holderSource(store.url, store.name, directory.path),
-        'holder',
-      );
-      await holder.next('holding', { signal: t.signal });
-      holder.child.kill('SIGKILL');
-      await holder.closed;
-      await using evicter = startWorker(
+        { name: 'holder', env: process.env, clock: globalThis },
+      ).start({ ready: { message: 'holding' }, signal: t.signal });
+      holder.process.signal('SIGKILL');
+      await holder.process.ended;
+      await using evicter = await new NodeCommand(
         evicterSource(
           store.url,
           store.name,
           directory.path,
           store.evictionStep,
         ),
-        'evicter',
-      );
-      await evicter.next('evicting', { signal: t.signal });
+        { name: 'evicter', env: process.env, clock: globalThis },
+      ).start({ ready: { message: 'evicting' }, signal: t.signal });
       const first = store.create(directory.path);
       const second = store.create(directory.path);
 
@@ -144,8 +142,8 @@ describe('A waiter that dies while it evicts a dead holder', () => {
       }
 
       // Act: the frozen evicter dies too.
-      evicter.child.kill('SIGKILL');
-      await evicter.closed;
+      evicter.process.signal('SIGKILL');
+      await evicter.process.ended;
       assert.deepEqual(
         await journals(directory.path),
         [],
@@ -194,13 +192,12 @@ describe('A waiter that dies while it evicts a dead holder', () => {
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
       );
-      await using holder = startWorker(
+      await using holder = await new NodeCommand(
         holderSource(store.url, store.name, directory.path),
-        'holder',
-      );
-      await holder.next('holding', { signal: t.signal });
-      holder.child.kill('SIGKILL');
-      await holder.closed;
+        { name: 'holder', env: process.env, clock: globalThis },
+      ).start({ ready: { message: 'holding' }, signal: t.signal });
+      holder.process.signal('SIGKILL');
+      await holder.process.ended;
       const [lockFile] = (await readdir(directory.path)).filter((file) =>
         file.endsWith('.lock'),
       );

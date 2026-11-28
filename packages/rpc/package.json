@@ -45,6 +45,7 @@
     "@zukhruf/async": "^0.8.70"
   },
   "devDependencies": {
+    "@zukhruf/process": "^0.8.70",
     "@zukhruf/testing": "^0.8.70"
   }
 }

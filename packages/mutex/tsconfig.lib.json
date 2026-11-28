@@ -9,6 +9,15 @@
   "exclude": ["src/**/*.test.ts", "src/testing/**"],
   "references": [
     {
+      "path": "../sqlite/open/tsconfig.lib.json"
+    },
+    {
+      "path": "../rpc/tsconfig.lib.json"
+    },
+    {
+      "path": "../pipes/tsconfig.lib.json"
+    },
+    {
       "path": "../lease/tsconfig.lib.json"
     },
     {
@@ -27,19 +36,13 @@
       "path": "../testing/tsconfig.lib.json"
     },
     {
-      "path": "../sqlite/open/tsconfig.lib.json"
-    },
-    {
-      "path": "../docker/tsconfig.lib.json"
-    },
-    {
-      "path": "../pipes/tsconfig.lib.json"
-    },
-    {
-      "path": "../rpc/tsconfig.lib.json"
+      "path": "../process/tsconfig.lib.json"
     },
     {
       "path": "../parameterized-test/tsconfig.lib.json"
+    },
+    {
+      "path": "../docker/tsconfig.lib.json"
     }
   ]
 }

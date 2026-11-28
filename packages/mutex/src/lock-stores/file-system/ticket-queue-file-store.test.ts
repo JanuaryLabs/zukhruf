@@ -9,10 +9,11 @@ import { describe } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/fs';
 import { test } from '@zukhruf/parameterized-test';
+import { NodeCommand } from '@zukhruf/process';
 import { waitFor } from '@zukhruf/testing/async';
-import { startWorker } from '@zukhruf/testing/process';
 
 import { Mutex } from '../../mutex/mutex.ts';
+import { watch } from '../../testing/watch.ts';
 import { TicketQueueFileStore } from './ticket-queue-file-store.ts';
 
 const storeUrl = new URL('./ticket-queue-file-store.ts', import.meta.url);
@@ -85,16 +86,24 @@ describe('TicketQueueFileStore holder check', () => {
 				await store.acquire('report:daily');
 				process.send({ type: 'entered' });
 			`;
-    await using holder = startWorker(caller(10), 'holder');
     // The holder must enter.
-    await holder.next('entered', { signal: t.signal });
-    await using waiter = startWorker(caller(60_000), 'waiter');
+    await using holder = await new NodeCommand(caller(10), {
+      name: 'holder',
+      env: process.env,
+      clock: globalThis,
+    }).start({ ready: { message: 'entered' }, signal: t.signal });
+    await using waiter = await new NodeCommand(caller(60_000), {
+      name: 'waiter',
+      env: process.env,
+      clock: globalThis,
+    }).start({ signal: t.signal });
+    const waiterEnd = watch(waiter.process.ended);
     // No operation says that a waiter is in line, so the wait reads the queue.
     await waitFor(
       () =>
         assert.ok(
           ticketsIn(queue) === 2,
-          `The waiter must join the line.\n${waiter.stderr}`,
+          `The waiter must join the line.\n${waiter.process.stderrTail()}`,
         ),
       { signal: t.signal },
     );
@@ -103,8 +112,8 @@ describe('TicketQueueFileStore holder check', () => {
     );
 
     // Act
-    holder.child.kill('SIGKILL');
-    await holder.closed;
+    holder.process.signal('SIGKILL');
+    await holder.process.ended;
     const held = await mutex.isHeld('report:daily');
 
     // Assert
@@ -114,8 +123,8 @@ describe('TicketQueueFileStore holder check', () => {
       'A waiter behind a gone caller holds nothing yet',
     );
     assert.equal(
-      waiter.exit,
-      null,
+      waiterEnd.now.status,
+      'pending',
       'The waiter must still be alive and in line',
     );
   });

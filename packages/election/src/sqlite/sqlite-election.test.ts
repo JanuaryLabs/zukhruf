@@ -15,8 +15,8 @@ import {
   TemporaryFiles,
 } from '@zukhruf/fs';
 import { test } from '@zukhruf/parameterized-test';
+import { NodeCommand } from '@zukhruf/process';
 import { waitFor } from '@zukhruf/testing/async';
-import { startWorker } from '@zukhruf/testing/process';
 
 import { NetworkDirectoryError, SqliteElection, type Term } from '../index.ts';
 
@@ -103,8 +103,16 @@ describe('A SQLite election across processes', () => {
 
     // Act: four processes campaign at the same time and keep whatever they win.
     const candidates = new AsyncDisposableStack();
-    const workers = ['a', 'b', 'c', 'd'].map((name) =>
-      candidates.use(startWorker(candidateSource(directory.path, 300), name)),
+    const workers = await Promise.all(
+      ['a', 'b', 'c', 'd'].map(async (name) =>
+        candidates.use(
+          await new NodeCommand(candidateSource(directory.path, 300), {
+            name,
+            env: process.env,
+            clock: globalThis,
+          }).start({ signal: t.signal }),
+        ),
+      ),
     );
     try {
       await Promise.all(
@@ -119,7 +127,9 @@ describe('A SQLite election across processes', () => {
 
       // Assert
       assert.equal(
-        workers.filter((worker) => worker.has('leader')).length,
+        workers.filter((worker) =>
+          worker.messages.some((message) => message.type === 'leader'),
+        ).length,
         1,
         'Exactly one candidate of the same time may win the election',
       );
@@ -135,10 +145,10 @@ describe('A SQLite election across processes', () => {
       'election-test-',
     );
     const election = electionIn(directory.path);
-    await using leader = startWorker(
+    await using leader = await new NodeCommand(
       candidateSource(directory.path, 1000),
-      'leader',
-    );
+      { name: 'leader', env: process.env, clock: globalThis },
+    ).start({ signal: t.signal });
     const { epoch } = await leader.next('leader', { signal: t.signal });
     assert.ok(typeof epoch === 'string', 'The leader must report its epoch');
     assert.equal(
@@ -148,8 +158,8 @@ describe('A SQLite election across processes', () => {
     );
 
     // Act: the leader dies without resigning.
-    leader.child.kill('SIGKILL');
-    await leader.closed;
+    leader.process.signal('SIGKILL');
+    await leader.process.ended;
     await using successor = await election.campaign({
       timeout: Infinity,
       signal: t.signal,
@@ -672,15 +682,14 @@ describe('A clean shutdown in a SQLite election', () => {
     const clean = await election.campaign();
     assert.ok(clean, 'The first campaign in an empty directory must win');
     await clean.resign({ clean: true });
-    await using leader = startWorker(
+    await using leader = await new NodeCommand(
       candidateSource(directory.path, 1000),
-      'leader',
-    );
-    await leader.next('leader', { signal: t.signal });
+      { name: 'leader', env: process.env, clock: globalThis },
+    ).start({ ready: { message: 'leader' }, signal: t.signal });
 
     // Act: the second leader dies without resigning.
-    leader.child.kill('SIGKILL');
-    await leader.closed;
+    leader.process.signal('SIGKILL');
+    await leader.process.ended;
     await using next = await election.campaign({
       timeout: Infinity,
       signal: t.signal,

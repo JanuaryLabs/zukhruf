@@ -11,8 +11,8 @@ import { Latch, untilAborted } from '@zukhruf/async';
 import type { FencedLease } from '@zukhruf/fencing';
 import { TemporaryFiles } from '@zukhruf/fs';
 import { test } from '@zukhruf/parameterized-test';
+import { NodeCommand } from '@zukhruf/process';
 import { waitFor } from '@zukhruf/testing/async';
-import { startWorker } from '@zukhruf/testing/process';
 
 import { LeaseLostError, type LockHandle, Mutex } from '../../index.ts';
 import { isRecord } from '../../shared/is-record.ts';
@@ -756,7 +756,7 @@ describe('A follower process through a reconnect', () => {
       globalThis,
     ).campaign();
     await using leader = await standInLeader(directory.path);
-    await using waiter = startWorker(
+    await using waiter = await new NodeCommand(
       `
 					import { SocketStore } from ${JSON.stringify(socketUrl.href)};
 					const store = new SocketStore(${JSON.stringify(directory.path)}, { clock: globalThis });
@@ -764,16 +764,17 @@ describe('A follower process through a reconnect', () => {
 					process.send({ type: 'granted' });
 					await lease[Symbol.asyncDispose]();
 				`,
-      'waiter',
-    );
+      { name: 'waiter', env: process.env, clock: globalThis },
+    ).start({ signal: t.signal });
+    const waiterEnd = watch(waiter.process.ended);
     const first = await connection(t, leader, 0);
     first.welcome();
     await request(t, first, 0);
     await delay(settle);
     assert.equal(
-      waiter.exit,
-      null,
-      `A follower that waits must keep its process alive.\n${waiter.stderr}`,
+      waiterEnd.now.status,
+      'pending',
+      `A follower that waits must keep its process alive.\n${waiter.process.stderrTail()}`,
     );
 
     // Act: the connection drops, and the next leader reads the acquire again.
@@ -785,15 +786,15 @@ describe('A follower process through a reconnect', () => {
 
     // Assert: still alive while it waits, then ends by itself once granted and released.
     assert.equal(
-      waiter.exit,
-      null,
-      `A follower that waits must keep its process alive through a reconnect.\n${waiter.stderr}`,
+      waiterEnd.now.status,
+      'pending',
+      `A follower that waits must keep its process alive through a reconnect.\n${waiter.process.stderrTail()}`,
     );
     second.answer({ op: 'granted', id: resent.id, token: '1' });
     // A follower with nothing left to wait for must exit.
-    await untilAborted(waiter.closed, t.signal);
-    assert.deepEqual(waiter.exit, { code: 0, signal: null }, waiter.stderr);
-    assert.ok(waiter.has('granted'));
+    const end = await untilAborted(waiter.process.ended, t.signal);
+    assert.deepEqual(end, { exitCode: 0 }, waiter.process.stderrTail());
+    assert.ok(waiter.messages.some((message) => message.type === 'granted'));
     assert.deepEqual(
       second.requests.map(({ op }) => op),
       ['acquire', 'release'],
@@ -808,7 +809,7 @@ describe('A follower process through a reconnect', () => {
       globalThis,
     ).campaign();
     await using leader = await standInLeader(directory.path);
-    await using looker = startWorker(
+    await using looker = await new NodeCommand(
       `
 					import { SocketStore } from ${JSON.stringify(socketUrl.href)};
 					process.once('message', () => {});
@@ -816,8 +817,8 @@ describe('A follower process through a reconnect', () => {
 					const held = await store.isHeld('product:42');
 					process.send({ type: 'answered', held });
 				`,
-      'looker',
-    );
+      { name: 'looker', env: process.env, clock: globalThis },
+    ).start({ signal: t.signal });
     const first = await connection(t, leader, 0);
     first.welcome();
     const asked = await request(t, first, 0);
@@ -825,12 +826,12 @@ describe('A follower process through a reconnect', () => {
     // Act: the leader answers the look, and the process has nothing else to do.
     first.answer({ op: 'held', id: asked.id, held: false });
     await looker.next('answered', { signal: t.signal });
-    looker.child.send('done');
+    looker.send({ type: 'done' });
 
     // Assert: an answered look does not keep the process alive.
     assert.equal(asked.op, 'isHeld');
-    await untilAborted(looker.closed, t.signal);
-    assert.deepEqual(looker.exit, { code: 0, signal: null }, looker.stderr);
+    const end = await untilAborted(looker.process.ended, t.signal);
+    assert.deepEqual(end, { exitCode: 0 }, looker.process.stderrTail());
   });
 
   test('a follower process that only holds keys lets its process exit after a reconnect', async (t) => {
@@ -841,7 +842,7 @@ describe('A follower process through a reconnect', () => {
       globalThis,
     ).campaign();
     await using leader = await standInLeader(directory.path);
-    await using holder = startWorker(
+    await using holder = await new NodeCommand(
       `
 					import { SocketStore } from ${JSON.stringify(socketUrl.href)};
 					process.once('message', () => {});
@@ -849,8 +850,8 @@ describe('A follower process through a reconnect', () => {
 					await store.acquire('product:42');
 					process.send({ type: 'holding' });
 				`,
-      'holder',
-    );
+      { name: 'holder', env: process.env, clock: globalThis },
+    ).start({ signal: t.signal });
     const first = await connection(t, leader, 0);
     first.welcome();
     first.answer({
@@ -866,12 +867,12 @@ describe('A follower process through a reconnect', () => {
     const second = await connection(t, leader, 1);
     second.welcome();
     const reassert = await request(t, second, 0);
-    holder.child.send('done');
+    holder.send({ type: 'done' });
 
     // Assert: holding a key alone does not keep the process alive.
     assert.equal(reassert.op, 'reassert');
     // A follower that only holds keys must let its process exit.
-    await untilAborted(holder.closed, t.signal);
-    assert.deepEqual(holder.exit, { code: 0, signal: null }, holder.stderr);
+    const end = await untilAborted(holder.process.ended, t.signal);
+    assert.deepEqual(end, { exitCode: 0 }, holder.process.stderrTail());
   });
 });

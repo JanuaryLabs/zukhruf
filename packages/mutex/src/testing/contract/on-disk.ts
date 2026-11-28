@@ -4,7 +4,7 @@ import { join, relative } from 'node:path';
 
 import { TemporaryFiles } from '@zukhruf/fs';
 import { describe, test } from '@zukhruf/parameterized-test';
-import { startWorker } from '@zukhruf/testing/process';
+import { NodeCommand } from '@zukhruf/process';
 
 import { NetworkDirectoryError } from '../../lock-stores/file-system/index.ts';
 import { Mutex } from '../../mutex/mutex.ts';
@@ -203,15 +203,17 @@ export function passiveLooks<H extends Host>(
       // Arrange: a holder process dies while it holds the key, and leaves its files.
       await using fixture = await store.fixture(process.env);
       await using host = store.open(fixture.location);
-      await using holder = startWorker(
-        holderSource(sharing.module, fixture.location),
-        'holder',
-        { admit: (child) => sharing.admit(host, child) },
-      );
       // The holder process must enter its task.
-      await holder.next('entered', { signal: t.signal });
-      holder.child.kill('SIGKILL');
-      await holder.closed;
+      await using holder = await new NodeCommand(
+        holderSource(sharing.module, fixture.location),
+        { name: 'holder', env: process.env, clock: globalThis },
+      ).start({
+        ready: { message: 'entered' },
+        admit: (child) => sharing.admit(host, child),
+        signal: t.signal,
+      });
+      holder.process.signal('SIGKILL');
+      await holder.process.ended;
       const mutex = new Mutex(host.store);
       const files = await filesIn(fixture.location);
 

@@ -2,7 +2,11 @@ import { addAbortListener, once } from 'node:events';
 import { Worker } from 'node:worker_threads';
 
 import { untilAborted } from '@zukhruf/async';
-import { startWorker } from '@zukhruf/testing/process';
+import {
+  NodeCommand,
+  type NodeProcess,
+  type NodeStartOptions,
+} from '@zukhruf/process';
 
 import { WorkerConnection } from '../channel/worker-connection.ts';
 import { ConnectionSupervisor } from '../connection/connection-supervisor.ts';
@@ -112,8 +116,12 @@ export async function report(
  * A child process that runs `body` with `client` in scope: a `Client` over
  * the IPC channel to this process, whose answers `answers` checks.
  */
-export function startAsker(body: string, answers: string) {
-  return startWorker(
+export function startAsker(
+  body: string,
+  answers: string,
+  options: NodeStartOptions,
+): Promise<NodeProcess> {
+  return new NodeCommand(
     `
 		import { promisify } from 'node:util';
 		import * as rpc from ${JSON.stringify(rpcUrl.href)};
@@ -124,6 +132,6 @@ export function startAsker(body: string, answers: string) {
 		});
 		${body}
 	`,
-    'asker',
-  );
+    { name: 'asker', env: process.env, clock: globalThis },
+  ).start(options);
 }

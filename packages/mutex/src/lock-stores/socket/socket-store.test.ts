@@ -11,8 +11,8 @@ import { createClock } from '@sinonjs/fake-timers';
 
 import { Latch, untilAborted } from '@zukhruf/async';
 import { FileLock, Presence, TemporaryFiles, isErrno } from '@zukhruf/fs';
+import { type Message, NodeCommand } from '@zukhruf/process';
 import { waitFor } from '@zukhruf/testing/async';
-import { type WorkerMessage, startWorker } from '@zukhruf/testing/process';
 
 import { Mutex } from '../../mutex/mutex.ts';
 import { isRecord } from '../../shared/is-record.ts';
@@ -62,7 +62,7 @@ const participant = (
 	store.on('role', (role) => process.send({ type: 'role', role }));
 	const mutex = new Mutex(store);
 	const commands = new Map();
-	process.on('message', (command) => commands.get(command)?.resolve());
+	process.on('message', (command) => commands.get(command.type)?.resolve());
 	const command = (name) => {
 		const received = Promise.withResolvers();
 		commands.set(name, received);
@@ -111,49 +111,48 @@ describe('Socket lock server failover', () => {
     // Arrange: a leader, a holder inside its callback, and a waiter behind it.
     await using directory = await new TemporaryFiles().directory('mutex-test-');
     await using _successor = succeedLastLeader(directory.path);
-    await using leader = startWorker(
-      participant(directory.path, leaderBody),
-      'leader',
-    );
     // The leader must start.
-    await leader.next('ready', { signal: t.signal });
+    await using leader = await new NodeCommand(
+      participant(directory.path, leaderBody),
+      { name: 'leader', env: process.env, clock: globalThis },
+    ).start({ ready: { message: 'ready' }, signal: t.signal });
     assert.equal(
-      leader.find('role')?.role,
+      leader.messages.find((message) => message.type === 'role')?.role,
       'leader',
       'The first process to need a lock must lead',
     );
 
-    await using holder = startWorker(
-      participant(directory.path, holderBody),
-      'holder',
-    );
     // The holder must enter.
-    await holder.next('entered', { signal: t.signal });
-    await using waiter = startWorker(
-      participant(directory.path, waiterBody),
-      'waiter',
-    );
+    await using holder = await new NodeCommand(
+      participant(directory.path, holderBody),
+      { name: 'holder', env: process.env, clock: globalThis },
+    ).start({ ready: { message: 'entered' }, signal: t.signal });
     // The waiter must start.
-    await waiter.next('attempted', { signal: t.signal });
+    await using waiter = await new NodeCommand(
+      participant(directory.path, waiterBody),
+      { name: 'waiter', env: process.env, clock: globalThis },
+    ).start({ ready: { message: 'attempted' }, signal: t.signal });
     const journal = async () =>
       (await readFile(join(directory.path, 'journal.log'), 'utf8'))
         .trim()
         .split('\n');
 
     // Act: the leader dies while the holder is inside its callback.
-    leader.child.kill('SIGKILL');
-    await leader.closed;
-    waiter.child.send('check');
+    leader.process.signal('SIGKILL');
+    await leader.process.ended;
+    waiter.send({ type: 'check' });
     // The waiter must hear from the next leader, after its recovery.
     await waiter.next('checked', { signal: t.signal });
     const duringFailover = await journal();
-    holder.child.send('finish');
+    holder.send({ type: 'finish' });
 
     // Assert: the holder reasserted its key, so the waiter waited for the release.
     assert.deepEqual(
       {
-        held: waiter.find('checked')?.held,
-        acquired: waiter.find('checked')?.acquired,
+        held: waiter.messages.find((message) => message.type === 'checked')
+          ?.held,
+        acquired: waiter.messages.find((message) => message.type === 'checked')
+          ?.acquired,
       },
       { held: true, acquired: false },
       'The next leader must see the key of the holder, and refuse a try of it',
@@ -169,7 +168,7 @@ describe('Socket lock server failover', () => {
       waiter.next('done', { signal: t.signal }),
     ]);
     assert.equal(
-      holder.find('done')?.outcome,
+      holder.messages.find((message) => message.type === 'done')?.outcome,
       'ok',
       'The holder must keep its lease through the failover',
     );
@@ -198,7 +197,8 @@ describe('Socket lock server failover', () => {
     leaderStore.on('role', (role) => leaderRoles.push(role));
     await new Mutex(leaderStore).acquire('warm-up', async () => {});
     assert.deepEqual(leaderRoles, ['leader']);
-    await using follower = startWorker(
+    // The follower must enter.
+    await using follower = await new NodeCommand(
       participant(
         directory.path,
         `const outcome = await mutex.acquire('product:42', async () => {
@@ -207,20 +207,18 @@ describe('Socket lock server failover', () => {
 					}).then(() => 'ok', (error) => error.name);
 					process.send({ type: 'done', outcome });`,
       ),
-      'follower',
-    );
-    // The follower must enter.
-    await follower.next('entered', { signal: t.signal });
+      { name: 'follower', env: process.env, clock: globalThis },
+    ).start({ ready: { message: 'entered' }, signal: t.signal });
 
     // Act: the leader shuts down while the follower still holds its key.
     await leaderStore[Symbol.asyncDispose]();
-    follower.child.send('finish');
+    follower.send({ type: 'finish' });
 
     // Assert: shutdown did not wait on followers, and the holder keeps its key.
     // The follower must finish.
     await follower.next('done', { signal: t.signal });
     assert.equal(
-      follower.find('done')?.outcome,
+      follower.messages.find((message) => message.type === 'done')?.outcome,
       'ok',
       'A follower holding a key must keep it through the handover',
     );
@@ -230,7 +228,8 @@ describe('Socket lock server failover', () => {
     // Arrange: a leader, a holder inside its callback, and a waiter behind it.
     await using directory = await new TemporaryFiles().directory('mutex-test-');
     await using _successor = succeedLastLeader(directory.path);
-    await using leader = startWorker(
+    // The leader must start.
+    await using leader = await new NodeCommand(
       participant(
         directory.path,
         `${leaderBody}
@@ -238,22 +237,18 @@ describe('Socket lock server failover', () => {
 					await store[Symbol.asyncDispose]();
 					process.send({ type: 'disposed' });`,
       ),
-      'leader',
-    );
-    // The leader must start.
-    await leader.next('ready', { signal: t.signal });
-    await using holder = startWorker(
-      participant(directory.path, holderBody),
-      'holder',
-    );
+      { name: 'leader', env: process.env, clock: globalThis },
+    ).start({ ready: { message: 'ready' }, signal: t.signal });
     // The holder must enter.
-    await holder.next('entered', { signal: t.signal });
-    await using waiter = startWorker(
-      participant(directory.path, waiterBody),
-      'waiter',
-    );
+    await using holder = await new NodeCommand(
+      participant(directory.path, holderBody),
+      { name: 'holder', env: process.env, clock: globalThis },
+    ).start({ ready: { message: 'entered' }, signal: t.signal });
     // The waiter must reach the leader.
-    await waiter.next('role', { signal: t.signal });
+    await using waiter = await new NodeCommand(
+      participant(directory.path, waiterBody),
+      { name: 'waiter', env: process.env, clock: globalThis },
+    ).start({ ready: { message: 'role' }, signal: t.signal });
     const journal = async () =>
       (await readFile(join(directory.path, 'journal.log'), 'utf8'))
         .trim()
@@ -261,11 +256,11 @@ describe('Socket lock server failover', () => {
     /** Selects the second role message a worker sends. */
     const secondRole = () => {
       let roles = 0;
-      return ({ type }: WorkerMessage) => type === 'role' && ++roles === 2;
+      return ({ type }: Message) => type === 'role' && ++roles === 2;
     };
 
     // Act: the leader shuts down while the holder is inside its callback.
-    leader.child.send('dispose');
+    leader.send({ type: 'dispose' });
     // The leader must shut down.
     await leader.next('disposed', { signal: t.signal });
     // The holder and the waiter must reach the next leader.
@@ -273,17 +268,19 @@ describe('Socket lock server failover', () => {
       holder.next(secondRole(), { signal: t.signal }),
       waiter.next(secondRole(), { signal: t.signal }),
     ]);
-    waiter.child.send('check');
+    waiter.send({ type: 'check' });
     // The waiter must hear from the next leader, after its recovery.
     await waiter.next('checked', { signal: t.signal });
     const duringFailover = await journal();
-    holder.child.send('finish');
+    holder.send({ type: 'finish' });
 
     // Assert: the holder reasserted its key, so the waiter waited for the release.
     assert.deepEqual(
       {
-        held: waiter.find('checked')?.held,
-        acquired: waiter.find('checked')?.acquired,
+        held: waiter.messages.find((message) => message.type === 'checked')
+          ?.held,
+        acquired: waiter.messages.find((message) => message.type === 'checked')
+          ?.acquired,
       },
       { held: true, acquired: false },
       'The next leader must see the key of the holder, and refuse a try of it',
@@ -299,7 +296,7 @@ describe('Socket lock server failover', () => {
       waiter.next('done', { signal: t.signal }),
     ]);
     assert.equal(
-      holder.find('done')?.outcome,
+      holder.messages.find((message) => message.type === 'done')?.outcome,
       'ok',
       'The holder must keep its lease through the failover',
     );
@@ -335,14 +332,14 @@ describe('Socket lock server failover', () => {
 				}).then(() => 'ok', (error) => error.name);
 				process.send({ type: 'done', outcome });
 			`;
-      await using leader = startWorker(
-        participant(directory.path, leaderBody),
-        'leader',
-      );
       // The leader must start.
-      await leader.next('ready', { signal: t.signal });
+      await using leader = await new NodeCommand(
+        participant(directory.path, leaderBody),
+        { name: 'leader', env: process.env, clock: globalThis },
+      ).start({ ready: { message: 'ready' }, signal: t.signal });
       // After it thaws, the holder waits until it learns that its lease was lost, and then writes.
-      await using frozen = startWorker(
+      // The holder must enter.
+      await using frozen = await new NodeCommand(
         participant(
           directory.path,
           writeBody(
@@ -350,44 +347,45 @@ describe('Socket lock server failover', () => {
           ),
           { leaseDuration: 500 },
         ),
-        'frozen',
-      );
-      // The holder must enter.
-      await frozen.next('entered', { signal: t.signal });
+        { name: 'frozen', env: process.env, clock: globalThis },
+      ).start({ ready: { message: 'entered' }, signal: t.signal });
 
       // Act: the holder freezes, the leader dies, and a newer holder takes the key.
       // The successor keeps leading while the frozen holder thaws.
-      frozen.child.kill('SIGSTOP');
-      leader.child.kill('SIGKILL');
-      await leader.closed;
-      await using successor = startWorker(
+      frozen.process.signal('SIGSTOP');
+      leader.process.signal('SIGKILL');
+      await leader.process.ended;
+      await using successor = await new NodeCommand(
         participant(directory.path, writeBody('')),
-        'successor',
-      );
+        { name: 'successor', env: process.env, clock: globalThis },
+      ).start({ signal: t.signal });
       try {
         // The successor must get the key once the lease duration of the frozen holder passes.
         await successor.next('done', { signal: t.signal });
-        assert.equal(successor.find('wrote')?.write, 'written');
+        assert.equal(
+          successor.messages.find((message) => message.type === 'wrote')?.write,
+          'written',
+        );
       } finally {
-        frozen.child.kill('SIGCONT');
+        frozen.process.signal('SIGCONT');
       }
-      frozen.child.send('write');
+      frozen.send({ type: 'write' });
 
       // Assert: the register refused the stale holder, and the holder was told it lost the lock.
       // The frozen holder must finish.
       await frozen.next('done', { signal: t.signal });
       assert.equal(
-        frozen.find('wrote')?.told,
+        frozen.messages.find((message) => message.type === 'wrote')?.told,
         true,
         'The thawed holder must be told it lost the key before it writes',
       );
       assert.equal(
-        frozen.find('wrote')?.write,
+        frozen.messages.find((message) => message.type === 'wrote')?.write,
         'stale',
         'A holder superseded while frozen must be fenced off by the register',
       );
       assert.equal(
-        frozen.find('done')?.outcome,
+        frozen.messages.find((message) => message.type === 'done')?.outcome,
         'LeaseLostError',
         'A holder whose reassertion was refused must learn that it lost the lock',
       );
@@ -411,17 +409,16 @@ describe('Socket lock server failover', () => {
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
       );
-      await using leader = startWorker(
+      // The leader must win the term.
+      await using leader = await new NodeCommand(
         `import { socketElection } from ${JSON.stringify(socketElectionUrl.href)};
 				const term = await socketElection(${JSON.stringify(directory.path)}, globalThis, 1500).campaign();
 				// A listener keeps the channel to the test, and so this process, alive.
 				process.on('message', () => {});
 				process.send({ type: term ? 'leading' : 'lost' });`,
-        'leader',
-      );
-      // The leader must win the term.
-      await leader.next('leading', { signal: t.signal });
-      leader.child.kill('SIGSTOP');
+        { name: 'leader', env: process.env, clock: globalThis },
+      ).start({ ready: { message: 'leading' }, signal: t.signal });
+      leader.process.signal('SIGSTOP');
       await using store = new SocketStore(directory.path, {
         clock: globalThis,
       });
@@ -437,11 +434,11 @@ describe('Socket lock server failover', () => {
 
       // Assert
       assert.equal(entered, 'entered');
-      await untilAborted(leader.closed, t.signal);
+      const end = await untilAborted(leader.process.ended, t.signal);
       assert.equal(
-        leader.exit?.signal,
+        end.signal,
         'SIGKILL',
-        `The process must end the frozen leader.\n${leader.stderr}`,
+        `The process must end the frozen leader.\n${leader.process.stderrTail()}`,
       );
       assert.deepEqual(roles, ['leader']);
     },
@@ -464,13 +461,13 @@ describe('Socket lock server failover', () => {
         'mutex-test-',
       );
       await using _successor = succeedLastLeader(directory.path);
-      await using leader = startWorker(
-        participant(directory.path, leaderBody, { leaseDuration: 500 }),
-        'leader',
-      );
       // The leader must start.
-      await leader.next('ready', { signal: t.signal });
-      await using holder = startWorker(
+      await using leader = await new NodeCommand(
+        participant(directory.path, leaderBody, { leaseDuration: 500 }),
+        { name: 'leader', env: process.env, clock: globalThis },
+      ).start({ ready: { message: 'ready' }, signal: t.signal });
+      // The holder must enter.
+      await using holder = await new NodeCommand(
         participant(
           directory.path,
           `const outcome = await mutex.acquire('product:42', async () => {
@@ -479,10 +476,8 @@ describe('Socket lock server failover', () => {
 					}).then(() => 'ok', (error) => error.name);
 					process.send({ type: 'done', outcome });`,
         ),
-        'holder',
-      );
-      // The holder must enter.
-      await holder.next('entered', { signal: t.signal });
+        { name: 'holder', env: process.env, clock: globalThis },
+      ).start({ ready: { message: 'entered' }, signal: t.signal });
       await using store = new SocketStore(directory.path, {
         clock: globalThis,
       });
@@ -492,26 +487,26 @@ describe('Socket lock server failover', () => {
       assert.deepEqual(roles, ['follower']);
 
       // Act: the leader freezes.
-      leader.child.kill('SIGSTOP');
+      leader.process.signal('SIGSTOP');
 
       // Assert: a follower ended it, the holder reasserted its key on the
       // successor, and the successor grants the key after the release.
-      await untilAborted(leader.closed, t.signal);
+      const end = await untilAborted(leader.process.ended, t.signal);
       assert.equal(
-        leader.exit?.signal,
+        end.signal,
         'SIGKILL',
-        `A follower must end the frozen leader.\n${leader.stderr}`,
+        `A follower must end the frozen leader.\n${leader.process.stderrTail()}`,
       );
       assert.equal(
         await store.isHeld('product:42'),
         true,
         'The holder must reassert its key on the successor',
       );
-      holder.child.send('finish');
+      holder.send({ type: 'finish' });
       // The holder must finish.
       await holder.next('done', { signal: t.signal });
       assert.equal(
-        holder.find('done')?.outcome,
+        holder.messages.find((message) => message.type === 'done')?.outcome,
         'ok',
         'The holder must keep its lease through the end of the frozen leader',
       );
@@ -735,7 +730,7 @@ describe('Socket store follower failure', () => {
     await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
 
     // Act: a follower process whose role listener throws once acquires twice, then just ends.
-    await using follower = startWorker(
+    await using follower = await new NodeCommand(
       `
 				import { Mutex } from ${JSON.stringify(mutexUrl.href)};
 				import { SocketStore } from ${JSON.stringify(socketStoreUrl.href)};
@@ -750,15 +745,21 @@ describe('Socket store follower failure', () => {
 				process.send({ type: 'first', outcome: await outcome(mutex.acquire('product:42', async () => {})) });
 				process.send({ type: 'second', outcome: await outcome(mutex.acquire('product:42', async () => {})) });
 			`,
-      'follower',
-    );
+      { name: 'follower', env: process.env, clock: globalThis },
+    ).start({ signal: t.signal });
     // The follower must end on its own once its work is done.
-    await untilAborted(follower.closed, t.signal);
+    const end = await untilAborted(follower.process.ended, t.signal);
 
     // Assert: the failed acquire reported the listener's error, the next one worked, and nothing kept the process alive.
-    assert.equal(follower.find('first')?.outcome, 'The role listener failed');
-    assert.equal(follower.find('second')?.outcome, 'granted');
-    assert.deepEqual(follower.exit, { code: 0, signal: null }, follower.stderr);
+    assert.equal(
+      follower.messages.find((message) => message.type === 'first')?.outcome,
+      'The role listener failed',
+    );
+    assert.equal(
+      follower.messages.find((message) => message.type === 'second')?.outcome,
+      'granted',
+    );
+    assert.deepEqual(end, { exitCode: 0 }, follower.process.stderrTail());
   });
 
   test(
@@ -850,7 +851,8 @@ describe('Socket store after a clean shutdown', () => {
         'mutex-test-',
       );
       await using _successor = succeedLastLeader(directory.path);
-      await using first = startWorker(
+      // The first process must lead.
+      await using first = await new NodeCommand(
         participant(
           directory.path,
           `${leaderBody}
@@ -858,32 +860,36 @@ describe('Socket store after a clean shutdown', () => {
 					await store[Symbol.asyncDispose]();
 					process.send({ type: 'done' }, () => process.disconnect());`,
         ),
-        'first',
-      );
-      // The first process must lead.
-      await first.next('ready', { signal: t.signal });
-      await using frozen = startWorker(
-        participant(directory.path, leaderBody),
-        'frozen',
-      );
+        { name: 'first', env: process.env, clock: globalThis },
+      ).start({ ready: { message: 'ready' }, signal: t.signal });
       // The second process must follow, and so record its session.
-      await frozen.next('ready', { signal: t.signal });
-      frozen.child.kill('SIGSTOP');
+      await using frozen = await new NodeCommand(
+        participant(directory.path, leaderBody),
+        { name: 'frozen', env: process.env, clock: globalThis },
+      ).start({ ready: { message: 'ready' }, signal: t.signal });
+      frozen.process.signal('SIGSTOP');
       try {
-        first.child.send('dispose');
+        first.send({ type: 'dispose' });
         // The first process must exit.
-        await untilAborted(first.closed, t.signal);
+        const firstEnd = await untilAborted(first.process.ended, t.signal);
         assert.deepEqual(
-          { exit: first.exit, done: first.has('done') },
-          { exit: { code: 0, signal: null }, done: true },
-          `The first process must shut down cleanly.\n${first.stderr}`,
+          {
+            exit: firstEnd,
+            done: first.messages.some((message) => message.type === 'done'),
+          },
+          { exit: { exitCode: 0 }, done: true },
+          `The first process must shut down cleanly.\n${first.process.stderrTail()}`,
         );
         const recorded = await sessionFiles(directory.path);
 
         // Act
-        await using next = startWorker(loneProcess(directory.path), 'next');
+        await using next = await new NodeCommand(loneProcess(directory.path), {
+          name: 'next',
+          env: process.env,
+          clock: globalThis,
+        }).start({ signal: t.signal });
         // The next process must exit.
-        await untilAborted(next.closed, t.signal);
+        const nextEnd = await untilAborted(next.process.ended, t.signal);
 
         // Assert
         assert.equal(
@@ -897,12 +903,15 @@ describe('Socket store after a clean shutdown', () => {
           'The next process must lead the second term',
         );
         assert.deepEqual(
-          { exit: next.exit, done: next.has('done') },
-          { exit: { code: 0, signal: null }, done: true },
-          `The next process must lock with no wait on its clock.\n${next.stderr}`,
+          {
+            exit: nextEnd,
+            done: next.messages.some((message) => message.type === 'done'),
+          },
+          { exit: { exitCode: 0 }, done: true },
+          `The next process must lock with no wait on its clock.\n${next.process.stderrTail()}`,
         );
       } finally {
-        frozen.child.kill('SIGCONT');
+        frozen.process.signal('SIGCONT');
       }
     },
   );
@@ -1008,21 +1017,19 @@ describe('Socket store sessions', () => {
         'mutex-test-',
       );
       await using _successor = succeedLastLeader(directory.path);
-      await using leader = startWorker(
-        participant(directory.path, leaderBody),
-        'leader',
-      );
       // The leader must start.
-      await leader.next('ready', { signal: t.signal });
-      await using holder = startWorker(
-        participant(directory.path, holderBody, { leaseDuration: 60_000 }),
-        'holder',
-      );
+      await using leader = await new NodeCommand(
+        participant(directory.path, leaderBody),
+        { name: 'leader', env: process.env, clock: globalThis },
+      ).start({ ready: { message: 'ready' }, signal: t.signal });
       // The holder must enter.
-      await holder.next('entered', { signal: t.signal });
-      holder.child.kill('SIGSTOP');
-      leader.child.kill('SIGKILL');
-      await leader.closed;
+      await using holder = await new NodeCommand(
+        participant(directory.path, holderBody, { leaseDuration: 60_000 }),
+        { name: 'holder', env: process.env, clock: globalThis },
+      ).start({ ready: { message: 'entered' }, signal: t.signal });
+      holder.process.signal('SIGSTOP');
+      leader.process.signal('SIGKILL');
+      await leader.process.ended;
       // The new leader runs its checks and deadlines on a clock of the test.
       const clock = createClock();
       await using store = new SocketStore(directory.path, { clock });
@@ -1037,8 +1044,8 @@ describe('Socket store sessions', () => {
       const acquired = watch(acquiring);
 
       // Act: the frozen holder is killed, and the clock moves by steps of the back-off until the key is granted.
-      holder.child.kill('SIGKILL');
-      await holder.closed;
+      holder.process.signal('SIGKILL');
+      await holder.process.ended;
       let moved = 0;
       await waitFor(
         async () => {
@@ -1076,22 +1083,20 @@ describe('Socket store sessions', () => {
     // Arrange: a leader, and a holder with a lease duration of one minute; both are killed.
     await using directory = await new TemporaryFiles().directory('mutex-test-');
     await using _successor = succeedLastLeader(directory.path);
-    await using leader = startWorker(
-      participant(directory.path, leaderBody),
-      'leader',
-    );
     // The leader must start.
-    await leader.next('ready', { signal: t.signal });
-    await using holder = startWorker(
-      participant(directory.path, holderBody, { leaseDuration: 60_000 }),
-      'holder',
-    );
+    await using leader = await new NodeCommand(
+      participant(directory.path, leaderBody),
+      { name: 'leader', env: process.env, clock: globalThis },
+    ).start({ ready: { message: 'ready' }, signal: t.signal });
     // The holder must enter.
-    await holder.next('entered', { signal: t.signal });
-    holder.child.kill('SIGKILL');
-    await holder.closed;
-    leader.child.kill('SIGKILL');
-    await leader.closed;
+    await using holder = await new NodeCommand(
+      participant(directory.path, holderBody, { leaseDuration: 60_000 }),
+      { name: 'holder', env: process.env, clock: globalThis },
+    ).start({ ready: { message: 'entered' }, signal: t.signal });
+    holder.process.signal('SIGKILL');
+    await holder.process.ended;
+    leader.process.signal('SIGKILL');
+    await leader.process.ended;
     // The clock of the new leader never moves, so no deadline and no check at a step of the back-off can end a recovery.
     await using store = new SocketStore(directory.path, {
       clock: createClock(),
@@ -1117,12 +1122,11 @@ describe('Socket store sessions', () => {
     // Arrange: a leader that is killed, so the next leader recovers.
     await using directory = await new TemporaryFiles().directory('mutex-test-');
     await using _successor = succeedLastLeader(directory.path);
-    await using leader = startWorker(
-      participant(directory.path, leaderBody),
-      'leader',
-    );
     // The leader must start.
-    await leader.next('ready', { signal: t.signal });
+    await using leader = await new NodeCommand(
+      participant(directory.path, leaderBody),
+      { name: 'leader', env: process.env, clock: globalThis },
+    ).start({ ready: { message: 'ready' }, signal: t.signal });
     // No operation holds a session between its presence and its record, so
     // the test takes a presence at the path of a session and keeps it, as a
     // session that is starting holds it.
@@ -1131,8 +1135,8 @@ describe('Socket store sessions', () => {
     const starting = `${randomUUID()}.presence`;
     using presence = Presence.tryOpen(join(sessions, starting));
     assert.ok(presence, 'The starting session must get its presence');
-    leader.child.kill('SIGKILL');
-    await leader.closed;
+    leader.process.signal('SIGKILL');
+    await leader.process.ended;
     // The clock of the new leader never moves, so no wait on it ends the recovery.
     await using store = new SocketStore(directory.path, {
       clock: createClock(),
@@ -1157,12 +1161,11 @@ describe('Socket store sessions', () => {
     // Arrange: a leader that is killed, so the next leader recovers.
     await using directory = await new TemporaryFiles().directory('mutex-test-');
     await using _successor = succeedLastLeader(directory.path);
-    await using leader = startWorker(
-      participant(directory.path, leaderBody),
-      'leader',
-    );
     // The leader must start.
-    await leader.next('ready', { signal: t.signal });
+    await using leader = await new NodeCommand(
+      participant(directory.path, leaderBody),
+      { name: 'leader', env: process.env, clock: globalThis },
+    ).start({ ready: { message: 'ready' }, signal: t.signal });
     // No operation stops a session between its presence and its record, so
     // the test takes and ends a presence at the path of a session, as a
     // session that died at that step leaves it.
@@ -1172,8 +1175,8 @@ describe('Socket store sessions', () => {
     const presence = Presence.tryOpen(join(sessions, stopped));
     assert.ok(presence, 'The stopped session must get its presence');
     presence[Symbol.dispose]();
-    leader.child.kill('SIGKILL');
-    await leader.closed;
+    leader.process.signal('SIGKILL');
+    await leader.process.ended;
     // The clock of the new leader never moves, so no wait on it ends the recovery.
     await using store = new SocketStore(directory.path, {
       clock: createClock(),
@@ -1213,22 +1216,20 @@ describe('Socket store sessions', () => {
         'mutex-test-',
       );
       await using _successor = succeedLastLeader(directory.path);
-      await using leader = startWorker(
-        participant(directory.path, leaderBody),
-        'leader',
-      );
       // The leader must start.
-      await leader.next('ready', { signal: t.signal });
-      await using frozen = startWorker(
-        participant(directory.path, followerBody, { leaseDuration: 700 }),
-        'frozen',
-      );
+      await using leader = await new NodeCommand(
+        participant(directory.path, leaderBody),
+        { name: 'leader', env: process.env, clock: globalThis },
+      ).start({ ready: { message: 'ready' }, signal: t.signal });
       // The follower must record its session.
-      await frozen.next('ready', { signal: t.signal });
-      frozen.child.kill('SIGSTOP');
+      await using frozen = await new NodeCommand(
+        participant(directory.path, followerBody, { leaseDuration: 700 }),
+        { name: 'frozen', env: process.env, clock: globalThis },
+      ).start({ ready: { message: 'ready' }, signal: t.signal });
+      frozen.process.signal('SIGSTOP');
       try {
-        leader.child.kill('SIGKILL');
-        await leader.closed;
+        leader.process.signal('SIGKILL');
+        await leader.process.ended;
         // The new leader runs its deadlines on a clock of the test.
         const clock = createClock();
         await using store = new SocketStore(directory.path, { clock });
@@ -1263,7 +1264,7 @@ describe('Socket store sessions', () => {
           'A session that missed its lease may still run, so its record stays',
         );
       } finally {
-        frozen.child.kill('SIGCONT');
+        frozen.process.signal('SIGCONT');
       }
     },
   );

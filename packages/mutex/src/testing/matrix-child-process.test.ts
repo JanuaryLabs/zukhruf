@@ -7,9 +7,9 @@ import { type TestContext, test } from 'node:test';
 
 import { Docker } from '@zukhruf/docker';
 import { TemporaryFiles } from '@zukhruf/fs';
+import { NodeCommand } from '@zukhruf/process';
 import { waitFor } from '@zukhruf/testing/async';
 import { DockerTestbed, forLogMessage } from '@zukhruf/testing/docker';
-import { startWorker } from '@zukhruf/testing/process';
 
 import { mutexUrl } from './module-urls.ts';
 import {
@@ -19,7 +19,7 @@ import {
 
 const memoryUrl = new URL('./subjects/memory.ts', import.meta.url);
 const dockerUrl = new URL('./subjects/docker-engine.ts', import.meta.url);
-const workerProcessUrl = import.meta.resolve('@zukhruf/testing/process');
+const processUrl = import.meta.resolve('@zukhruf/process');
 
 /** Whether the process `pid` still runs. EPERM means the OS gave the pid to a process of another user. */
 const isRunning = (pid: number) => {
@@ -39,11 +39,12 @@ const isRunning = (pid: number) => {
 
 test('a matrix child exits when its test process is killed', async (t) => {
   // Arrange: a test process starts a matrix child that grants a key again and again.
-  await using testProcess = startWorker(
+  // The matrix child must grant.
+  await using testProcess = await new NodeCommand(
     `
-				import { startWorker } from ${JSON.stringify(workerProcessUrl)};
+				import { NodeCommand } from ${JSON.stringify(processUrl)};
 
-				const child = startWorker(\`
+				const child = await new NodeCommand(\`
 					import { setTimeout as delay } from 'node:timers/promises';
 					import { Mutex } from ${JSON.stringify(mutexUrl.href)};
 					import { openInProcess } from ${JSON.stringify(memoryUrl.href)};
@@ -55,20 +56,20 @@ test('a matrix child exits when its test process is killed', async (t) => {
 						await mutex.acquire('report:daily', async () => {});
 						await delay(10);
 					}
-				\`, 'child');
-				child.child.once('message', () =>
-					process.send({ type: 'granting', pid: child.child.pid }),
-				);
+				\`, { name: 'child', env: process.env, clock: globalThis }).start({
+					ready: { message: 'granted' },
+				});
+				process.send({ type: 'granting', pid: child.process.pid });
 			`,
-    'test process',
+    { name: 'test process', env: process.env, clock: globalThis },
+  ).start({ ready: { message: 'granting' }, signal: t.signal });
+  const pid = Number(
+    testProcess.messages.find((message) => message.type === 'granting')?.pid,
   );
-  // The matrix child must grant.
-  await testProcess.next('granting', { signal: t.signal });
-  const pid = Number(testProcess.find('granting')?.pid);
   try {
     // Act
-    testProcess.child.kill('SIGKILL');
-    await testProcess.closed;
+    testProcess.process.signal('SIGKILL');
+    await testProcess.process.ended;
 
     // Assert
     await waitFor(
@@ -96,7 +97,8 @@ test('a matrix child that opens the DockerEngineStore in the run of the fixture 
   await using host = store.open(fixture.location);
 
   // Act
-  await using child = startWorker(
+  // The matrix child must start.
+  await using child = await new NodeCommand(
     `
 				import { openInProcess } from ${JSON.stringify(dockerUrl.href)};
 
@@ -107,14 +109,15 @@ test('a matrix child that opens the DockerEngineStore in the run of the fixture 
 				process.send({ type: 'held' });
 				setInterval(() => {}, 1000);
 			`,
-    'child',
-    { admit: (child) => store.process.admit(host, child) },
-  );
-  // The matrix child must start.
-  await child.next('started', { signal: t.signal });
+    { name: 'child', env: process.env, clock: globalThis },
+  ).start({
+    ready: { message: 'started' },
+    admit: (child) => store.process.admit(host, child),
+    signal: t.signal,
+  });
 
   // Assert
-  // The disposal kills the child: a kill during its take of the hold would
+  // The disposal stops the child: a stop during its take of the hold would
   // leave the run's reaper created.
   // The matrix child must hold the run's reaper.
   await child.next('held', { signal: t.signal });
@@ -270,9 +273,12 @@ async function onSecondEngine(
     ZUKHRUF_TESTING_RUN_DIR: records.path,
   });
 
-  await using child = startWorker(source(fixture.location), 'child');
   // The matrix child must acquire a key.
-  await child.next('acquired', { signal: t.signal });
+  await using child = await new NodeCommand(source(fixture.location), {
+    name: 'child',
+    env: process.env,
+    clock: globalThis,
+  }).start({ ready: { message: 'acquired' }, signal: t.signal });
 
   const claims = `dev.zukhruf.testing.run=${run}`;
   const reapers = `dev.zukhruf.testing.reaper=${run}`;

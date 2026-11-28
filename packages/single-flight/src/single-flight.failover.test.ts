@@ -12,8 +12,8 @@ import { setTimeout } from 'node:timers/promises';
 import { untilAborted } from '@zukhruf/async';
 import { SqliteElection } from '@zukhruf/election';
 import { TemporaryFiles, isErrno } from '@zukhruf/fs';
+import { NodeCommand, type NodeProcess } from '@zukhruf/process';
 import { waitFor } from '@zukhruf/testing/async';
-import { type WorkerProcess, startWorker } from '@zukhruf/testing/process';
 
 import { SingleFlight } from './index.ts';
 import {
@@ -42,9 +42,11 @@ async function caller(
   name: string,
   options?: CallerOptions,
 ) {
-  const worker = startWorker(callerSource(directory, options), name);
-  await worker.next('ready', { signal: t.signal });
-  return worker;
+  return new NodeCommand(callerSource(directory, options), {
+    name,
+    env: process.env,
+    clock: globalThis,
+  }).start({ ready: { message: 'ready' }, signal: t.signal });
 }
 
 /**
@@ -57,9 +59,9 @@ async function coordinatorOf(
   options?: CallerOptions,
 ) {
   const coordinator = await caller(t, directory, 'coordinator', options);
-  coordinator.child.send({ type: 'run', call: 'warm-up', key: 'warm-up' });
+  coordinator.send({ type: 'run', call: 'warm-up', key: 'warm-up' });
   await heard(t, coordinator, 'leading', 'warm-up');
-  coordinator.child.send({ type: 'finish', call: 'warm-up', value: 'warm' });
+  coordinator.send({ type: 'finish', call: 'warm-up', value: 'warm' });
   await heard(t, coordinator, 'value', 'warm-up');
   return coordinator;
 }
@@ -67,7 +69,7 @@ async function coordinatorOf(
 /** Waits until `worker` reported `type` for `call`, and returns that report. */
 async function heard(
   t: TestContext,
-  worker: WorkerProcess,
+  worker: NodeProcess,
   type: string,
   call: string,
 ) {
@@ -78,7 +80,7 @@ async function heard(
 }
 
 /** Whether the call `call` of `worker` leads by now. */
-function led(worker: WorkerProcess, call: string) {
+function led(worker: NodeProcess, call: string) {
   return worker.messages.some(
     (message) => message.type === 'leading' && message.call === call,
   );
@@ -91,7 +93,7 @@ function led(worker: WorkerProcess, call: string) {
  */
 async function firstOf(
   t: TestContext,
-  worker: WorkerProcess,
+  worker: NodeProcess,
   call: string,
   types: readonly string[],
 ) {
@@ -102,8 +104,8 @@ async function firstOf(
 }
 
 /** Runs `key` in `worker` as the call `call`. */
-function run(worker: WorkerProcess, call: string, key: string) {
-  worker.child.send({ type: 'run', call, key });
+function run(worker: NodeProcess, call: string, key: string) {
+  worker.send({ type: 'run', call, key });
 }
 
 /** The runs of the work, as `<process>:work:<key>`, in order. */
@@ -135,13 +137,13 @@ describe('A single flight across processes when a leader stops', () => {
     await heard(t, joiner, 'joined', 'j');
 
     // Act
-    leader.child.kill('SIGKILL');
-    await leader.closed;
+    leader.process.signal('SIGKILL');
+    await leader.process.ended;
     // The coordinator lives, so it learns of the stop from the closed connection at once, not from a timeout.
     const interrupted = await heard(t, joiner, 'error', 'j');
     run(joiner, 'next', 'sync');
     await heard(t, joiner, 'leading', 'next');
-    joiner.child.send({ type: 'finish', call: 'next', value: 'second' });
+    joiner.send({ type: 'finish', call: 'next', value: 'second' });
     const next = await heard(t, joiner, 'value', 'next');
 
     // Assert
@@ -170,8 +172,8 @@ describe('A single flight across processes when a leader stops', () => {
     await heard(t, second, 'joined', 'j');
 
     // Act: a joiner's process takes over. The leader died with the coordinator, so nobody reasserts its flight.
-    coordinator.child.kill('SIGKILL');
-    await coordinator.closed;
+    coordinator.process.signal('SIGKILL');
+    await coordinator.process.ended;
     const firstEnd = await heard(t, first, 'error', 'j');
     const secondEnd = await heard(t, second, 'error', 'j');
 
@@ -195,13 +197,13 @@ describe('A single flight across processes when a leader stops', () => {
     // Act: the coordinator decides one connection's requests in order, so
     // once the probe's run of another key, sent after the fresh run, has its
     // answer, the fresh run had its chance to lead.
-    leader.child.send({ type: 'dispose' });
+    leader.send({ type: 'dispose' });
     await leader.next('disposed', { signal: t.signal });
     run(probe, 'fresh', 'sync');
     await heard(t, probe, 'called', 'fresh');
     run(probe, 'other', 'other');
     await heard(t, probe, 'leading', 'other');
-    probe.child.send({ type: 'finish', call: 'other', value: 'other' });
+    probe.send({ type: 'finish', call: 'other', value: 'other' });
     await heard(t, probe, 'value', 'other');
     const ledBesideWork = led(probe, 'fresh');
 
@@ -214,7 +216,7 @@ describe('A single flight across processes when a leader stops', () => {
 
     // Act: the work ends. A disposed leader cannot deliver its outcome, so
     // the fresh run cannot join it.
-    leader.child.send({ type: 'finish', call: 'l', value: 'unheard' });
+    leader.send({ type: 'finish', call: 'l', value: 'unheard' });
     const first = await firstOf(t, probe, 'fresh', ['leading', 'joined']);
 
     // Assert
@@ -225,7 +227,7 @@ describe('A single flight across processes when a leader stops', () => {
     );
 
     // Act
-    probe.child.send({ type: 'finish', call: 'fresh', value: 'second' });
+    probe.send({ type: 'finish', call: 'fresh', value: 'second' });
     const fresh = await heard(t, probe, 'value', 'fresh');
 
     // Assert
@@ -263,16 +265,16 @@ async function newTerm(t: TestContext, directory: string, epoch: string) {
 async function handOver(
   t: TestContext,
   directory: string,
-  coordinator: WorkerProcess,
-  frozen: WorkerProcess[],
+  coordinator: NodeProcess,
+  frozen: NodeProcess[],
 ) {
-  for (const worker of frozen) worker.child.kill('SIGSTOP');
+  for (const worker of frozen) worker.process.signal('SIGSTOP');
   try {
-    coordinator.child.kill('SIGKILL');
-    await coordinator.closed;
+    coordinator.process.signal('SIGKILL');
+    await coordinator.process.ended;
     await newTerm(t, directory, '2');
   } finally {
-    for (const worker of frozen) worker.child.kill('SIGCONT');
+    for (const worker of frozen) worker.process.signal('SIGCONT');
   }
 }
 
@@ -289,10 +291,10 @@ async function connected(t: TestContext, directory: string, name: string) {
  * they arrive, so once this run led, each run that `worker` sent before it
  * was decided.
  */
-async function runAlone(t: TestContext, worker: WorkerProcess, call: string) {
+async function runAlone(t: TestContext, worker: NodeProcess, call: string) {
   run(worker, call, call);
   await heard(t, worker, 'leading', call);
-  worker.child.send({ type: 'finish', call, value: call });
+  worker.send({ type: 'finish', call, value: call });
   await heard(t, worker, 'value', call);
 }
 
@@ -305,15 +307,15 @@ async function runAlone(t: TestContext, worker: WorkerProcess, call: string) {
  */
 async function rejectingSuccessor(
   directory: string,
-  coordinator: WorkerProcess,
-  frozen: WorkerProcess[],
+  coordinator: NodeProcess,
+  frozen: NodeProcess[],
   signal: AbortSignal,
 ) {
   await using serving = new AsyncDisposableStack();
-  for (const worker of frozen) worker.child.kill('SIGSTOP');
+  for (const worker of frozen) worker.process.signal('SIGSTOP');
   try {
-    coordinator.child.kill('SIGKILL');
-    await coordinator.closed;
+    coordinator.process.signal('SIGKILL');
+    await coordinator.process.ended;
     const term = await new SqliteElection({
       clock: globalThis,
       directory,
@@ -356,7 +358,7 @@ async function rejectingSuccessor(
     server.listen(socketPath);
     await once(server, 'listening');
   } finally {
-    for (const worker of frozen) worker.child.kill('SIGCONT');
+    for (const worker of frozen) worker.process.signal('SIGCONT');
   }
   return serving.move();
 }
@@ -378,7 +380,7 @@ describe('A single flight across processes when the coordinator stops', () => {
     // Act: the probe takes over and answers a run of another key, and then the leader lands.
     await handOver(t, directory.path, coordinator, [leader, joiner]);
     await runAlone(t, probe, 'other');
-    leader.child.send({ type: 'finish', call: 'l', value: { files: 42 } });
+    leader.send({ type: 'finish', call: 'l', value: { files: 42 } });
     const led = await heard(t, leader, 'value', 'l');
     const joined = await heard(t, joiner, 'value', 'j');
 
@@ -413,10 +415,10 @@ describe('A single flight across processes when the coordinator stops', () => {
     await handOver(t, directory.path, coordinator, [leader, joiner]);
     // The landing of `other` goes out behind the leader's reassertions, so
     // once it reached the joiner, the next coordinator holds both flights.
-    leader.child.send({ type: 'finish', call: 'o', value: 'other' });
+    leader.send({ type: 'finish', call: 'o', value: 'other' });
     await heard(t, joiner, 'value', 'k');
-    leader.child.kill('SIGKILL');
-    await leader.closed;
+    leader.process.signal('SIGKILL');
+    await leader.process.ended;
     const ended = await heard(t, joiner, 'error', 'j');
 
     // Assert
@@ -438,10 +440,10 @@ describe('A single flight across processes when the coordinator disposes', () =>
     await heard(t, joiner, 'joined', 'j');
 
     // Act: the coordinator disposes, and the leader lands at the next coordinator.
-    coordinator.child.send({ type: 'dispose' });
+    coordinator.send({ type: 'dispose' });
     await coordinator.next('disposed', { signal: t.signal });
     await newTerm(t, directory.path, '2');
-    leader.child.send({ type: 'finish', call: 'l', value: { files: 42 } });
+    leader.send({ type: 'finish', call: 'l', value: { files: 42 } });
     const led = await heard(t, leader, 'value', 'l');
     const joined = await heard(t, joiner, 'value', 'j');
 
@@ -449,7 +451,11 @@ describe('A single flight across processes when the coordinator disposes', () =>
     assert.deepEqual(led.value, { files: 42 });
     assert.deepEqual(joined.value, { files: 42 });
     assert.equal(joined.joined, true);
-    assert.equal(leader.has('lost'), false, 'The leader lost its lease');
+    assert.equal(
+      leader.messages.some((message) => message.type === 'lost'),
+      false,
+      'The leader lost its lease',
+    );
     assert.deepEqual(
       (await journal(directory.path)).filter((line) => line.endsWith(':sync')),
       ['leader:work:sync'],
@@ -490,7 +496,7 @@ describe('A single flight across processes when the coordinator disposes', () =>
       const report = 'x'.repeat(2 * 1024 * 1024);
 
       // Act: the leader lands, and its process stops coordinating at once.
-      joiner.child.kill('SIGSTOP');
+      joiner.process.signal('SIGSTOP');
       let disposing: Promise<void> | undefined;
       try {
         ending.resolve(report);
@@ -506,7 +512,7 @@ describe('A single flight across processes when the coordinator disposes', () =>
           { signal: t.signal },
         );
       } finally {
-        joiner.child.kill('SIGCONT');
+        joiner.process.signal('SIGCONT');
       }
       await disposing;
       const joined = await heard(t, joiner, 'value', 'j');
@@ -528,15 +534,15 @@ describe('A single flight across processes in the gaps of a failover', () => {
       await using _successor = succeedLastLeader(directory.path);
       await using coordinator = await coordinatorOf(t, directory.path);
       await using next = await connected(t, directory.path, 'next');
-      coordinator.child.kill('SIGSTOP');
+      coordinator.process.signal('SIGSTOP');
       run(next, 'fresh', 'sync');
       await heard(t, next, 'called', 'fresh');
 
       // Act: the call joined nothing, so the next coordinator takes it as a new call.
-      coordinator.child.kill('SIGKILL');
-      await coordinator.closed;
+      coordinator.process.signal('SIGKILL');
+      await coordinator.process.ended;
       await heard(t, next, 'leading', 'fresh');
-      next.child.send({ type: 'finish', call: 'fresh', value: 'led' });
+      next.send({ type: 'finish', call: 'fresh', value: 'led' });
       const result = await heard(t, next, 'value', 'fresh');
 
       // Assert
@@ -564,20 +570,20 @@ describe('A single flight across processes in the gaps of a failover', () => {
       // Act: the work ends while the leader's coordinator is gone. Whichever the
       // leader hears first, the end of its work or the lost connection, its
       // first landing cannot reach a coordinator.
-      leader.child.kill('SIGSTOP');
-      joiner.child.kill('SIGSTOP');
+      leader.process.signal('SIGSTOP');
+      joiner.process.signal('SIGSTOP');
       try {
-        coordinator.child.kill('SIGKILL');
-        await coordinator.closed;
+        coordinator.process.signal('SIGKILL');
+        await coordinator.process.ended;
         await newTerm(t, directory.path, '2');
-        leader.child.send({
+        leader.send({
           type: 'finish',
           call: 'l',
           value: 'landed in the gap',
         });
       } finally {
-        joiner.child.kill('SIGCONT');
-        leader.child.kill('SIGCONT');
+        joiner.process.signal('SIGCONT');
+        leader.process.signal('SIGCONT');
       }
       const led = await heard(t, leader, 'value', 'l');
       const joined = await heard(t, joiner, 'value', 'j');
@@ -606,19 +612,19 @@ describe('A single flight across processes in the gaps of a failover', () => {
       run(leader, 'l', 'sync');
       await heard(t, leader, 'leading', 'l');
       await using probe = await connected(t, directory.path, 'probe');
-      leader.child.kill('SIGSTOP');
+      leader.process.signal('SIGSTOP');
       try {
-        coordinator.child.kill('SIGKILL');
-        await coordinator.closed;
+        coordinator.process.signal('SIGKILL');
+        await coordinator.process.ended;
         await newTerm(t, directory.path, '2');
 
         // Act
         run(probe, 'fresh', 'sync');
       } finally {
-        leader.child.kill('SIGCONT');
+        leader.process.signal('SIGCONT');
       }
       await heard(t, probe, 'joined', 'fresh');
-      leader.child.send({ type: 'finish', call: 'l', value: 'once' });
+      leader.send({ type: 'finish', call: 'l', value: 'once' });
       const fresh = await heard(t, probe, 'value', 'fresh');
 
       // Assert: the fresh run never led beside the frozen leader.
@@ -641,8 +647,8 @@ describe('A single flight across processes in the gaps of a failover', () => {
     await using probe = await connected(t, directory.path, 'probe');
 
     // Act
-    coordinator.child.kill('SIGKILL');
-    await coordinator.closed;
+    coordinator.process.signal('SIGKILL');
+    await coordinator.process.ended;
     await newTerm(t, directory.path, '2');
     run(probe, 'fresh', 'sync');
 
@@ -666,13 +672,13 @@ describe('A single flight across processes in the gaps of a failover', () => {
       await heard(t, joiner, 'joined', 'j');
       await using probe = await connected(t, directory.path, 'probe');
       await handOver(t, directory.path, coordinator, [leader, joiner]);
-      leader.child.send({ type: 'finish', call: 'l', value: 'first' });
+      leader.send({ type: 'finish', call: 'l', value: 'first' });
       await heard(t, joiner, 'value', 'j');
 
       // Act: the first flight ended at the next coordinator; this run comes after it.
       run(probe, 'fresh', 'sync');
       await heard(t, probe, 'leading', 'fresh');
-      probe.child.send({ type: 'finish', call: 'fresh', value: 'second' });
+      probe.send({ type: 'finish', call: 'fresh', value: 'second' });
       const fresh = await heard(t, probe, 'value', 'fresh');
 
       // Assert
@@ -710,7 +716,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
       const lost = await heard(t, leader, 'lost', 'l');
 
       // Act: the work fails with its own error, not with the reason of the lost lease.
-      leader.child.send({
+      leader.send({
         type: 'fail',
         call: 'l',
         message: 'The disk is full',
@@ -754,7 +760,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
       await heard(t, leader, 'lost', 'l');
 
       // Act: the work stops with signal.throwIfAborted().
-      leader.child.send({ type: 'throw-reason', call: 'l' });
+      leader.send({ type: 'throw-reason', call: 'l' });
       const led = await heard(t, leader, 'error', 'l');
 
       // Assert: the reason of the signal has no cause; a second LeaseLostError would carry the first as its cause.
@@ -789,13 +795,16 @@ describe('A single flight across processes in the gaps of a failover', () => {
       await heard(t, leader, 'lost', 'l');
 
       // Act
-      leader.child.send({ type: 'finish', call: 'l', value: 'stale' });
+      leader.send({ type: 'finish', call: 'l', value: 'stale' });
       const led = await heard(t, leader, 'error', 'l');
 
       // Assert
       assert.equal(led.name, 'LeaseLostError');
       assert.equal(led.subject, 'sync');
-      assert.deepEqual(led.cause, { message: 'This value cannot be encoded' });
+      assert.deepEqual(led.cause, {
+        message: 'This value cannot be encoded',
+        code: undefined,
+      });
     },
   );
 
@@ -830,10 +839,10 @@ describe('A single flight across processes in the gaps of a failover', () => {
       await heard(t, probe, 'called', 'fresh');
       await runAlone(t, probe, 'after');
       const ledBesideWork = led(probe, 'fresh');
-      leader.child.send({ type: 'finish', call: 'l', value: 'stale' });
+      leader.send({ type: 'finish', call: 'l', value: 'stale' });
       const ended = await heard(t, leader, 'error', 'l');
       const first = await firstOf(t, probe, 'fresh', ['leading', 'joined']);
-      probe.child.send({ type: 'finish', call: 'fresh', value: 'second' });
+      probe.send({ type: 'finish', call: 'fresh', value: 'second' });
       await heard(t, probe, 'value', 'fresh');
 
       // Assert
@@ -878,14 +887,14 @@ describe('A single flight across processes in the gaps of a failover', () => {
       await using probe = await connected(t, directory.path, 'probe');
       await handOver(t, directory.path, coordinator, [leader, joiner]);
       // Both processes re-sent their flights to the probe before the landing of `other` reached the joiner.
-      leader.child.send({ type: 'finish', call: 'o', value: 'other' });
+      leader.send({ type: 'finish', call: 'o', value: 'other' });
       await heard(t, joiner, 'value', 'k');
 
       // Act: the probe stops too, and a third term begins.
-      probe.child.kill('SIGKILL');
-      await probe.closed;
+      probe.process.signal('SIGKILL');
+      await probe.process.ended;
       await newTerm(t, directory.path, '3');
-      leader.child.send({ type: 'finish', call: 'l', value: 'survived' });
+      leader.send({ type: 'finish', call: 'l', value: 'survived' });
       const joined = await heard(t, joiner, 'value', 'j');
 
       // Assert
@@ -921,7 +930,7 @@ describe('A single flight across processes when a leader is frozen past a failov
       // The freeze length is this test's input, so a timer that outlasts a
       // short freeze cannot stand in for the lock.
       const frozenFor = 2000;
-      leader.child.kill('SIGSTOP');
+      leader.process.signal('SIGSTOP');
       let ledBesideLeader: boolean;
       try {
         const handoffBegan = performance.now();
@@ -934,7 +943,7 @@ describe('A single flight across processes when a leader is frozen past a failov
         );
         ledBesideLeader = led(probe, 'fresh');
       } finally {
-        leader.child.kill('SIGCONT');
+        leader.process.signal('SIGCONT');
       }
       const first = await firstOf(t, probe, 'fresh', ['leading', 'joined']);
 
@@ -951,7 +960,7 @@ describe('A single flight across processes when a leader is frozen past a failov
       );
 
       // Act
-      leader.child.send({ type: 'finish', call: 'l', value: 'once' });
+      leader.send({ type: 'finish', call: 'l', value: 'once' });
       const fresh = await heard(t, probe, 'value', 'fresh');
 
       // Assert
@@ -987,10 +996,10 @@ describe('A single flight across processes when a leader is frozen past a failov
       await using probe = await connected(t, directory.path, 'probe');
 
       // Act: the leader stays frozen until the next coordinator answered a run of another key.
-      leader.child.kill('SIGSTOP');
+      leader.process.signal('SIGSTOP');
       let ledBesideLeader: boolean;
       try {
-        coordinator.child.send({ type: 'dispose' });
+        coordinator.send({ type: 'dispose' });
         await coordinator.next('disposed', { signal: t.signal });
         await newTerm(t, directory.path, '2');
         run(probe, 'fresh', 'sync');
@@ -998,7 +1007,7 @@ describe('A single flight across processes when a leader is frozen past a failov
         await runAlone(t, probe, 'other');
         ledBesideLeader = led(probe, 'fresh');
       } finally {
-        leader.child.kill('SIGCONT');
+        leader.process.signal('SIGCONT');
       }
       const first = await firstOf(t, probe, 'fresh', ['leading', 'joined']);
 
@@ -1015,7 +1024,7 @@ describe('A single flight across processes when a leader is frozen past a failov
       );
 
       // Act
-      leader.child.send({ type: 'finish', call: 'l', value: 'once' });
+      leader.send({ type: 'finish', call: 'l', value: 'once' });
       const fresh = await heard(t, probe, 'value', 'fresh');
 
       // Assert
@@ -1054,20 +1063,20 @@ describe('A single flight across processes when a leader is frozen past a failov
       await using probe = await connected(t, directory.path, 'probe');
 
       // Act: the leader stays frozen until the next coordinator answered a run of another key.
-      leader.child.kill('SIGSTOP');
+      leader.process.signal('SIGSTOP');
       try {
         await handOver(t, directory.path, coordinator, [joiner]);
         await runAlone(t, probe, 'other');
       } finally {
-        leader.child.kill('SIGCONT');
+        leader.process.signal('SIGCONT');
       }
       // A client sends its reassertions before any new run on a connection,
       // so once this run leads, the reassertion of `l` went out first.
       run(leader, 'after', 'after');
       await heard(t, leader, 'leading', 'after');
-      leader.child.send({ type: 'finish', call: 'after', value: 'after' });
+      leader.send({ type: 'finish', call: 'after', value: 'after' });
       await heard(t, leader, 'value', 'after');
-      leader.child.send({ type: 'finish', call: 'l', value: 'kept' });
+      leader.send({ type: 'finish', call: 'l', value: 'kept' });
       const ledEnd = await firstOf(t, leader, 'l', ['value', 'error']);
       const joinedEnd = await firstOf(t, joiner, 'j', ['value', 'error']);
 
@@ -1121,20 +1130,20 @@ describe('A single flight across processes when a leader is frozen past a failov
       await using probe = await connected(t, directory.path, 'probe');
 
       // Act: the leader stays frozen until the next coordinator answered a run of another key.
-      leader.child.kill('SIGSTOP');
+      leader.process.signal('SIGSTOP');
       try {
         await handOver(t, directory.path, coordinator, [joiner]);
         await runAlone(t, probe, 'other');
       } finally {
-        leader.child.kill('SIGCONT');
+        leader.process.signal('SIGCONT');
       }
       // A client sends its reassertions before any new run on a connection,
       // so once this run leads, the reassertion of `l` went out first.
       run(leader, 'after', 'after');
       await heard(t, leader, 'leading', 'after');
-      leader.child.send({ type: 'finish', call: 'after', value: 'after' });
+      leader.send({ type: 'finish', call: 'after', value: 'after' });
       await heard(t, leader, 'value', 'after');
-      leader.child.send({
+      leader.send({
         type: 'fail',
         call: 'l',
         message: 'The disk is full',
@@ -1176,12 +1185,12 @@ describe('A single flight across processes when a leader is frozen past a failov
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
       await heard(t, leader, 'leading', 'l');
-      leader.child.send({ type: 'cancel', call: 'l' });
+      leader.send({ type: 'cancel', call: 'l' });
       await heard(t, leader, 'error', 'l');
       await using probe = await connected(t, directory.path, 'probe');
 
       // Act: the leader stays frozen until the next coordinator answered a run of another key.
-      leader.child.kill('SIGSTOP');
+      leader.process.signal('SIGSTOP');
       let ledBesideLeader: boolean;
       try {
         await handOver(t, directory.path, coordinator, []);
@@ -1190,7 +1199,7 @@ describe('A single flight across processes when a leader is frozen past a failov
         await runAlone(t, probe, 'other');
         ledBesideLeader = led(probe, 'fresh');
       } finally {
-        leader.child.kill('SIGCONT');
+        leader.process.signal('SIGCONT');
       }
       const first = await firstOf(t, probe, 'fresh', ['leading', 'joined']);
 
@@ -1207,7 +1216,7 @@ describe('A single flight across processes when a leader is frozen past a failov
       );
 
       // Act
-      leader.child.send({ type: 'finish', call: 'l', value: 'once' });
+      leader.send({ type: 'finish', call: 'l', value: 'once' });
       const fresh = await heard(t, probe, 'value', 'fresh');
 
       // Assert
@@ -1244,20 +1253,20 @@ describe('A single flight across processes when a leader is frozen past a failov
       await using probe = await connected(t, directory.path, 'probe');
 
       // Act: the leader never resumes; it stops while frozen.
-      leader.child.kill('SIGSTOP');
+      leader.process.signal('SIGSTOP');
       try {
         await handOver(t, directory.path, coordinator, [joiner]);
         await runAlone(t, probe, 'other');
-        leader.child.kill('SIGKILL');
-        await leader.closed;
+        leader.process.signal('SIGKILL');
+        await leader.process.ended;
       } finally {
-        leader.child.kill('SIGCONT');
+        leader.process.signal('SIGCONT');
       }
       // The joiner waits for no other run: the kernel frees the dead leader's key.
       const joined = await heard(t, joiner, 'error', 'j');
       run(probe, 'fresh', 'sync');
       await heard(t, probe, 'leading', 'fresh');
-      probe.child.send({ type: 'finish', call: 'fresh', value: 'again' });
+      probe.send({ type: 'finish', call: 'fresh', value: 'again' });
       const fresh = await heard(t, probe, 'value', 'fresh');
 
       // Assert: the current contract for a flight whose leader died.
@@ -1281,16 +1290,16 @@ describe('A single flight across processes when a leader is frozen past a failov
       await using probe = await connected(t, directory.path, 'probe');
 
       // Act
-      leader.child.kill('SIGSTOP');
+      leader.process.signal('SIGSTOP');
       let other: Awaited<ReturnType<typeof heard>>;
       try {
         await handOver(t, directory.path, coordinator, []);
         run(probe, 'other', 'other');
         await heard(t, probe, 'leading', 'other');
-        probe.child.send({ type: 'finish', call: 'other', value: 'served' });
+        probe.send({ type: 'finish', call: 'other', value: 'served' });
         other = await heard(t, probe, 'value', 'other');
       } finally {
-        leader.child.kill('SIGCONT');
+        leader.process.signal('SIGCONT');
       }
 
       // Assert
@@ -1309,14 +1318,14 @@ describe('A single flight across processes after a flight lands', () => {
     await using leader = await caller(t, directory.path, 'leader');
     run(leader, 'l', 'sync');
     await heard(t, leader, 'leading', 'l');
-    leader.child.send({ type: 'finish', call: 'l', value: 'first' });
+    leader.send({ type: 'finish', call: 'l', value: 'first' });
     await heard(t, leader, 'value', 'l');
     await using next = await caller(t, directory.path, 'next');
 
     // Act
     run(next, 'n', 'sync');
     await heard(t, next, 'leading', 'n');
-    next.child.send({ type: 'finish', call: 'n', value: 'second' });
+    next.send({ type: 'finish', call: 'n', value: 'second' });
     const second = await heard(t, next, 'value', 'n');
 
     // Assert
@@ -1355,19 +1364,19 @@ describe('A single flight across processes when the coordinator freezes', () => 
       );
 
       // Act: the coordinator freezes.
-      coordinator.child.kill('SIGSTOP');
+      coordinator.process.signal('SIGSTOP');
 
       // Assert: a follower ended it, a survivor won the next term, and the
       // flight in progress lands for the joiner.
-      await untilAborted(coordinator.closed, t.signal);
+      const end = await untilAborted(coordinator.process.ended, t.signal);
       assert.equal(record.leaseDuration, 500);
       assert.equal(
-        coordinator.child.signalCode,
+        end.signal,
         'SIGKILL',
-        `A follower must end the frozen coordinator.\n${coordinator.stderr}`,
+        `A follower must end the frozen coordinator.\n${coordinator.process.stderrTail()}`,
       );
       await newTerm(t, directory.path, '2');
-      leader.child.send({ type: 'finish', call: 'l', value: 'shared' });
+      leader.send({ type: 'finish', call: 'l', value: 'shared' });
       const landed = await heard(t, leader, 'value', 'l');
       const shared = await heard(t, joiner, 'value', 'j');
       assert.equal(landed.value, 'shared');
@@ -1390,14 +1399,14 @@ describe('A single flight across processes when the coordinator freezes', () => 
       // before it serves.
       await using directory = await new TemporaryFiles().directory('flights-');
       await using _successor = succeedLastLeader(directory.path);
-      await using coordinator = startWorker(
+      await using coordinator = await new NodeCommand(
         `import { flightElection } from ${JSON.stringify(flightElectionUrl.href)};
         const term = await flightElection(${JSON.stringify(directory.path)}, globalThis, 1500).campaign();
         // A listener keeps the channel to the test, and so this process, alive.
         process.on('message', () => {});
         process.send({ type: term ? 'coordinating' : 'lost' });`,
-        'coordinator',
-      );
+        { name: 'coordinator', env: process.env, clock: globalThis },
+      ).start({ signal: t.signal });
       const outcome = await coordinator.next(
         (message) => message.type === 'coordinating' || message.type === 'lost',
         { signal: t.signal },
@@ -1405,9 +1414,9 @@ describe('A single flight across processes when the coordinator freezes', () => 
       assert.equal(
         outcome.type,
         'coordinating',
-        `The coordinator must win the term.\n${coordinator.stderr}`,
+        `The coordinator must win the term.\n${coordinator.process.stderrTail()}`,
       );
-      coordinator.child.kill('SIGSTOP');
+      coordinator.process.signal('SIGSTOP');
       await using flights = new SingleFlight<string>({
         clock: globalThis,
         directory: directory.path,
@@ -1421,11 +1430,11 @@ describe('A single flight across processes when the coordinator freezes', () => 
 
       // Assert
       assert.deepEqual(result, { value: 'ran', joined: false });
-      await untilAborted(coordinator.closed, t.signal);
+      const end = await untilAborted(coordinator.process.ended, t.signal);
       assert.equal(
-        coordinator.child.signalCode,
+        end.signal,
         'SIGKILL',
-        `The process must end the frozen coordinator.\n${coordinator.stderr}`,
+        `The process must end the frozen coordinator.\n${coordinator.process.stderrTail()}`,
       );
     },
   );

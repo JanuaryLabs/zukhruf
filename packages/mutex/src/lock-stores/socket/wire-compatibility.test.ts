@@ -9,9 +9,9 @@ import { describe } from 'node:test';
 import { Latch, untilAborted } from '@zukhruf/async';
 import { FileLock, TemporaryFiles } from '@zukhruf/fs';
 import { test } from '@zukhruf/parameterized-test';
+import { NodeCommand } from '@zukhruf/process';
 import { UnchangedJournal, open } from '@zukhruf/sqlite-open';
 import { waitFor } from '@zukhruf/testing/async';
-import { startWorker } from '@zukhruf/testing/process';
 
 import { Mutex } from '../../index.ts';
 import { linesOf } from '../../testing/lines-of.ts';
@@ -538,7 +538,7 @@ describe('What a socket store shares with other versions on Windows', () => {
     const pipe = pipeFor(resolve(scratch.path, directory, 'lock.sock'));
 
     // Act
-    await using follower = startWorker(
+    await using follower = await new NodeCommand(
       `
         import { createServer } from 'node:net';
         import { createInterface } from 'node:readline';
@@ -557,22 +557,28 @@ describe('What a socket store shares with other versions on Windows', () => {
           void new Mutex(store).acquire('product:42', async () => {});
         });
       `,
-      'windows-follower',
-      { nodeOptions: asOnWindows },
-    );
+      {
+        name: 'windows-follower',
+        env: process.env,
+        clock: globalThis,
+        nodeOptions: asOnWindows,
+      },
+    ).start({ signal: t.signal });
     // A hello, a role or an exit; the assertion below says which.
     await Promise.race([
       follower.next(({ type }) => type === 'hello' || type === 'role', {
         signal: t.signal,
       }),
-      follower.closed,
+      follower.process.ended,
     ]);
 
     // Assert
     assert.match(
-      String(follower.find('hello')?.line),
+      String(
+        follower.messages.find((message) => message.type === 'hello')?.line,
+      ),
       helloLine,
-      `Messages: ${JSON.stringify(follower.messages)} ${follower.stderr}`,
+      `Messages: ${JSON.stringify(follower.messages)} ${follower.process.stderrTail()}`,
     );
   });
 
@@ -582,7 +588,7 @@ describe('What a socket store shares with other versions on Windows', () => {
     const pipe = pipeFor(resolve(scratch.path, directory, 'lock.sock'));
 
     // Act: the store leads, and a follower of a published version says hello on the pipe.
-    await using leader = startWorker(
+    await using leader = await new NodeCommand(
       `
         import { connect } from 'node:net';
         import { Mutex } from ${JSON.stringify(mutexUrl.href)};
@@ -601,23 +607,30 @@ describe('What a socket store shares with other versions on Windows', () => {
         follower.on('error', (error) => process.send({ type: 'failed', message: String(error) }));
         follower.write('{"op":"hello","version":3,"session":"d3b07384-d9a0-4c9b-8f6e-1a2b3c4d5e6f"}\\n');
       `,
-      'windows-leader',
-      { nodeOptions: asOnWindows },
-    );
+      {
+        name: 'windows-leader',
+        env: process.env,
+        clock: globalThis,
+        nodeOptions: asOnWindows,
+      },
+    ).start({ signal: t.signal });
     // An answer, a failure or an exit; the assertions below say which.
     await Promise.race([
       leader.next(({ type }) => type === 'answer' || type === 'failed', {
         signal: t.signal,
       }),
-      leader.closed,
+      leader.process.ended,
     ]);
 
     // Assert
-    assert.equal(leader.find('role')?.role, 'leader');
     assert.equal(
-      leader.find('answer')?.received,
+      leader.messages.find((message) => message.type === 'role')?.role,
+      'leader',
+    );
+    assert.equal(
+      leader.messages.find((message) => message.type === 'answer')?.received,
       '{"op":"welcome"}\n',
-      `Messages: ${JSON.stringify(leader.messages)} ${leader.stderr}`,
+      `Messages: ${JSON.stringify(leader.messages)} ${leader.process.stderrTail()}`,
     );
   });
 });

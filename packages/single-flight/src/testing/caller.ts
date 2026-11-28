@@ -23,7 +23,7 @@ export function journalOf(directory: string) {
 
 /**
  * The source of a process that uses one `SingleFlight` on `directory`, for
- * `startWorker`. A test drives it with orders over IPC, and it reports what
+ * a `NodeCommand`. A test drives it with orders over IPC, and it reports what
  * the public API gave it:
  * - `{ type: 'run', call, key }` calls `run`. The work reports `leading` with
  *   its token, and waits for an order for that call: `finish` with a `value`,

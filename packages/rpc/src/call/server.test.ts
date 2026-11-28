@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
+import type { ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { describe, test } from 'node:test';
 
 import { untilAborted } from '@zukhruf/async';
-import { startWorker } from '@zukhruf/testing/process';
+import { NodeCommand } from '@zukhruf/process';
 
 import {
   ChildProcessConnection,
   Client,
+  type ConnectionSupervisor,
   ErrorCodec,
   Server,
   ServerWarning,
@@ -32,22 +34,26 @@ describe('A server', () => {
   test('refuses a method of its target that it does not list, and does not run it', async (t) => {
     // Arrange: the target has `secret`, but the server lists only `ping`.
     let ran = false;
-    await using asker = startAsker(
+    await using asker = await startAsker(
       `
 				const secret = await client.call('secret', []).then(() => 'answered', (error) => error.name);
 				process.send({ type: 'secret', secret });
 			`,
       `{ secret: (answer) => answer === undefined }`,
-    );
-    new Server(
       {
-        secret: () => {
-          ran = true;
-        },
-        ping: () => 'pong',
+        admit: (child) =>
+          new Server(
+            {
+              secret: () => {
+                ran = true;
+              },
+              ping: () => 'pong',
+            },
+            { methods: { ping: noParams }, errors: new ErrorCodec([]) },
+          ).serve(linkTo(new ChildProcessConnection(child, { tag }))),
+        signal: t.signal,
       },
-      { methods: { ping: noParams }, errors: new ErrorCodec([]) },
-    ).serve(linkTo(new ChildProcessConnection(asker.child, { tag })));
+    );
 
     // Act
     const reported = await asker.next('secret', { signal: t.signal });
@@ -64,29 +70,33 @@ describe('A server', () => {
   test('refuses parameters that fail the check of the method, and does not run it', async (t) => {
     // Arrange: `add` takes two numbers; the asker sends two strings.
     let calls = 0;
-    await using asker = startAsker(
+    await using asker = await startAsker(
       `
 				const sum = await client.call('add', ['1', '2']).then(String, (error) => error.name);
 				process.send({ type: 'sum', sum });
 			`,
       `{ add: (answer) => typeof answer === 'number' }`,
+      {
+        admit: (child) =>
+          new Server(
+            {
+              add: (a: number, b: number) => {
+                calls++;
+                return a + b;
+              },
+            },
+            {
+              methods: {
+                add: (params): params is [number, number] =>
+                  params.length === 2 &&
+                  params.every((term) => typeof term === 'number'),
+              },
+              errors: new ErrorCodec([]),
+            },
+          ).serve(linkTo(new ChildProcessConnection(child, { tag }))),
+        signal: t.signal,
+      },
     );
-    new Server(
-      {
-        add: (a: number, b: number) => {
-          calls++;
-          return a + b;
-        },
-      },
-      {
-        methods: {
-          add: (params): params is [number, number] =>
-            params.length === 2 &&
-            params.every((term) => typeof term === 'number'),
-        },
-        errors: new ErrorCodec([]),
-      },
-    ).serve(linkTo(new ChildProcessConnection(asker.child, { tag })));
 
     // Act
     const reported = await asker.next('sum', { signal: t.signal });
@@ -257,7 +267,8 @@ describe('A thread that serves', () => {
 describe('A process that serves over its IPC channel', () => {
   test("answers its parent's next call after the last call of a client on the same link", async (t) => {
     // Arrange: the process serves `ping` and asks `add` through one link; this process does both on its end.
-    await using peer = startWorker(
+    const served = Promise.withResolvers<ConnectionSupervisor<unknown>>();
+    await using peer = await new NodeCommand(
       `
 				import { promisify } from 'node:util';
 				import * as rpc from ${JSON.stringify(rpcUrl.href)};
@@ -270,21 +281,26 @@ describe('A process that serves over its IPC channel', () => {
 				});
 				process.send({ type: 'sum', sum: await client.call('add', [1, 2]) });
 			`,
-      'peer',
-    );
-    const link = linkTo(new ChildProcessConnection(peer.child, { tag }));
-    new Server(
-      { add: (a: number, b: number) => a + b },
-      {
-        methods: {
-          add: (params): params is [number, number] =>
-            params.length === 2 &&
-            params.every((param) => typeof param === 'number'),
-        },
-        errors: new ErrorCodec([]),
+      { name: 'peer', env: process.env, clock: globalThis },
+    ).start({
+      admit: (child) => {
+        const link = linkTo(new ChildProcessConnection(child, { tag }));
+        new Server(
+          { add: (a: number, b: number) => a + b },
+          {
+            methods: {
+              add: (params): params is [number, number] =>
+                params.length === 2 &&
+                params.every((param) => typeof param === 'number'),
+            },
+            errors: new ErrorCodec([]),
+          },
+        ).serve(link);
+        served.resolve(link);
       },
-    ).serve(link);
-    await using client = new Client<{ ping(): string }>(link, {
+      signal: t.signal,
+    });
+    await using client = new Client<{ ping(): string }>(await served.promise, {
       errors: new ErrorCodec([]),
       answers: { ping: isString },
     });
@@ -300,7 +316,8 @@ describe('A process that serves over its IPC channel', () => {
 
   test('stays alive to answer while it serves, and exits by itself once it closes its link', async (t) => {
     // Arrange: the process only serves; its `close` closes its link after the answer goes, and reports what still listens on its channel.
-    await using peer = startWorker(
+    const admitted = Promise.withResolvers<ChildProcess>();
+    await using peer = await new NodeCommand(
       `
 				import { promisify } from 'node:util';
 				import * as rpc from ${JSON.stringify(rpcUrl.href)};
@@ -317,10 +334,10 @@ describe('A process that serves over its IPC channel', () => {
 					{ methods: { ping: (p) => p.length === 0, close: (p) => p.length === 0 }, errors: new rpc.ErrorCodec([]) },
 				).serve(link);
 			`,
-      'peer',
-    );
+      { name: 'peer', env: process.env, clock: globalThis },
+    ).start({ admit: admitted.resolve, signal: t.signal });
     await using client = new Client<{ ping(): string; close(): void }>(
-      linkTo(new ChildProcessConnection(peer.child, { tag })),
+      linkTo(new ChildProcessConnection(await admitted.promise, { tag })),
       {
         errors: new ErrorCodec([]),
         answers: { ping: isString, close: isVoid },
@@ -337,13 +354,17 @@ describe('A process that serves over its IPC channel', () => {
       (await peer.next('closed', { signal: t.signal })).listeners,
       0,
     );
-    await untilAborted(peer.closed, t.signal);
-    assert.deepEqual(peer.exit, { code: 0, signal: null }, peer.stderr);
+    assert.deepEqual(
+      await untilAborted(peer.process.ended, t.signal),
+      { exitCode: 0 },
+      peer.process.stderrTail(),
+    );
   });
 
   test("drops an answer whose caller's link is gone, and answers a call on a new link", async (t) => {
     // Arrange: `late` answers only once the process's channel to this process is gone; then the process calls `ping` of the same server over a port of its own.
-    const peer = startWorker(
+    const admitted = Promise.withResolvers<ChildProcess>();
+    await using peer = await new NodeCommand(
       `
 				import { once } from 'node:events';
 				import { promisify } from 'node:util';
@@ -379,31 +400,25 @@ describe('A process that serves over its IPC channel', () => {
 				await served.close();
 				port1.close();
 			`,
-      'peer',
+      { name: 'peer', env: process.env, clock: globalThis },
+    ).start({ admit: admitted.resolve, signal: t.signal });
+    const child = await admitted.promise;
+    await using client = new Client<{ late(): string }>(
+      linkTo(new ChildProcessConnection(child, { tag })),
+      { errors: new ErrorCodec([]), answers: { late: isString } },
     );
-    // Node emits no `close` for a child whose channel its parent disconnected, so `peer.closed` never settles and the test waits for `exit`.
-    const exited = once(peer.child, 'exit');
-    try {
-      await using client = new Client<{ late(): string }>(
-        linkTo(new ChildProcessConnection(peer.child, { tag })),
-        { errors: new ErrorCodec([]), answers: { late: isString } },
-      );
-      const late = client.call('late', []).catch((error: unknown) => error);
-      await peer.next('called', { signal: t.signal });
+    const late = client.call('late', []).catch((error: unknown) => error);
+    await peer.next('called', { signal: t.signal });
 
-      // Act: the link goes before `late` answers.
-      peer.child.disconnect();
+    // Act: the link goes before `late` answers.
+    child.disconnect();
 
-      // Assert: the process ends with 0 only after `ping` answered; a send to the lost link that threw would end it with an unhandled rejection first.
-      assert.ok(Error.isError(await untilAborted(late, t.signal)));
-      assert.deepEqual(
-        await untilAborted(exited, t.signal),
-        [0, null],
-        peer.stderr,
-      );
-    } finally {
-      if (peer.child.exitCode === null && peer.child.signalCode === null)
-        peer.child.kill('SIGKILL');
-    }
+    // Assert: the process ends with 0 only after `ping` answered; a send to the lost link that threw would end it with an unhandled rejection first.
+    assert.ok(Error.isError(await untilAborted(late, t.signal)));
+    assert.deepEqual(
+      await untilAborted(peer.process.ended, t.signal),
+      { exitCode: 0 },
+      peer.process.stderrTail(),
+    );
   });
 });

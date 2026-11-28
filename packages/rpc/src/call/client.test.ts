@@ -113,7 +113,9 @@ describe('A call that waits', () => {
   test('keeps its process alive until its answer, and the process exits by itself once no call waits', async (t) => {
     // Arrange: a process asks twice, and reports what keeps it alive after the first answer and while the second call waits.
     // Its IPC channel is listed as one more `PipeWrap`, beside its stderr pipe, only while the channel is ref'd; a small `process.send` of its own adds none.
-    await using asker = startAsker(
+    const second = Promise.withResolvers<string>();
+    let pings = 0;
+    await using asker = await startAsker(
       `
 				await client.call('ping', []);
 				const idle = process.getActiveResourcesInfo();
@@ -122,13 +124,15 @@ describe('A call that waits', () => {
 				process.send({ type: 'answer', answer: await second });
 			`,
       `{ ping: (answer) => typeof answer === 'string' }`,
+      {
+        admit: (child) =>
+          new Server(
+            { ping: () => (++pings === 1 ? 'first' : second.promise) },
+            { methods: { ping: noParams }, errors: new ErrorCodec([]) },
+          ).serve(linkTo(new ChildProcessConnection(child, { tag }))),
+        signal: t.signal,
+      },
     );
-    const second = Promise.withResolvers<string>();
-    let pings = 0;
-    new Server(
-      { ping: () => (++pings === 1 ? 'first' : second.promise) },
-      { methods: { ping: noParams }, errors: new ErrorCodec([]) },
-    ).serve(linkTo(new ChildProcessConnection(asker.child, { tag })));
     const reported = await asker.next('waiting', { signal: t.signal });
 
     // Act
@@ -144,31 +148,41 @@ describe('A call that waits', () => {
       (await asker.next('answer', { signal: t.signal })).answer,
       'pong',
     );
-    await untilAborted(asker.closed, t.signal);
-    assert.deepEqual(asker.exit, { code: 0, signal: null }, asker.stderr);
+    assert.deepEqual(
+      await untilAborted(asker.process.ended, t.signal),
+      { exitCode: 0 },
+      asker.process.stderrTail(),
+    );
   });
 
   test('whose signal aborts rejects with the reason, and no longer keeps its process alive although no answer came', async (t) => {
     // Arrange: this process never answers; the asker stops waiting after 50 ms.
-    await using asker = startAsker(
+    await using asker = await startAsker(
       `
 				const reason = await client.call('hang', [], { signal: AbortSignal.timeout(50) }).catch((error) => error.name);
 				process.send({ type: 'reason', reason });
 			`,
       `{ hang: (answer) => answer === undefined }`,
+      {
+        admit: (child) =>
+          new Server(
+            { hang: () => new Promise<void>(() => {}) },
+            { methods: { hang: noParams }, errors: new ErrorCodec([]) },
+          ).serve(linkTo(new ChildProcessConnection(child, { tag }))),
+        signal: t.signal,
+      },
     );
-    new Server(
-      { hang: () => new Promise<void>(() => {}) },
-      { methods: { hang: noParams }, errors: new ErrorCodec([]) },
-    ).serve(linkTo(new ChildProcessConnection(asker.child, { tag })));
 
     // Act
     const reported = await asker.next('reason', { signal: t.signal });
 
     // Assert
     assert.equal(reported.reason, 'TimeoutError');
-    await untilAborted(asker.closed, t.signal);
-    assert.deepEqual(asker.exit, { code: 0, signal: null }, asker.stderr);
+    assert.deepEqual(
+      await untilAborted(asker.process.ended, t.signal),
+      { exitCode: 0 },
+      asker.process.stderrTail(),
+    );
   });
 });
 
@@ -253,29 +267,36 @@ describe('A notification', () => {
 
   test('queued before the connection opens lets its process exit by itself once it went out', async (t) => {
     // Arrange: a process whose only work is one notification, made before its connection opens.
-    await using asker = startAsker(
+    const recorded = Promise.withResolvers<string>();
+    await using asker = await startAsker(
       `client.notify('record', ['went']);`,
       `{ record: (answer) => answer === undefined }`,
-    );
-    const recorded = Promise.withResolvers<string>();
-    new Server(
-      { record: (word: string) => recorded.resolve(word) },
       {
-        methods: {
-          record: (params): params is [string] =>
-            params.length === 1 && typeof params[0] === 'string',
-        },
-        errors: new ErrorCodec([]),
+        admit: (child) =>
+          new Server(
+            { record: (word: string) => recorded.resolve(word) },
+            {
+              methods: {
+                record: (params): params is [string] =>
+                  params.length === 1 && typeof params[0] === 'string',
+              },
+              errors: new ErrorCodec([]),
+            },
+          ).serve(linkTo(new ChildProcessConnection(child, { tag }))),
+        signal: t.signal,
       },
-    ).serve(linkTo(new ChildProcessConnection(asker.child, { tag })));
+    );
 
     // Act
     const word = await untilAborted(recorded.promise, t.signal);
 
     // Assert
     assert.equal(word, 'went');
-    await untilAborted(asker.closed, t.signal);
-    assert.deepEqual(asker.exit, { code: 0, signal: null }, asker.stderr);
+    assert.deepEqual(
+      await untilAborted(asker.process.ended, t.signal),
+      { exitCode: 0 },
+      asker.process.stderrTail(),
+    );
   });
 });
 

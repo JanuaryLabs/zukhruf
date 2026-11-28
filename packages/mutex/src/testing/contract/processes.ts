@@ -6,8 +6,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
 import { describe, test } from '@zukhruf/parameterized-test';
+import { NodeCommand } from '@zukhruf/process';
 import { waitFor } from '@zukhruf/testing/async';
-import { startWorker } from '@zukhruf/testing/process';
 
 import { Mutex } from '../../mutex/mutex.ts';
 import { hold } from '../hold.ts';
@@ -39,19 +39,21 @@ export function processes<H extends Host>(
       // Arrange: another process holds the key and never lets it go.
       await using fixture = await store.fixture(process.env);
       await using host = store.open(fixture.location);
-      await using holder = startWorker(
-        holderSource(sharing.module, fixture.location),
-        'holder',
-        { admit: (child) => sharing.admit(host, child) },
-      );
       // The holder process must enter its task.
-      await holder.next('entered', { signal: t.signal });
+      await using holder = await new NodeCommand(
+        holderSource(sharing.module, fixture.location),
+        { name: 'holder', env: process.env, clock: globalThis },
+      ).start({
+        ready: { message: 'entered' },
+        admit: (child) => sharing.admit(host, child),
+        signal: t.signal,
+      });
       const mutex = new Mutex(host.store);
 
       // Act
       const whileAlive = await mutex.isHeld('report:daily');
-      holder.child.kill('SIGKILL');
-      await holder.closed;
+      holder.process.signal('SIGKILL');
+      await holder.process.ended;
 
       // Assert: the store sees the end of the holder some time after its process closed.
       assert.equal(whileAlive, true);
@@ -65,15 +67,17 @@ export function processes<H extends Host>(
       // Arrange: a holder process dies while it holds the key.
       await using fixture = await store.fixture(process.env);
       await using host = store.open(fixture.location);
-      await using holder = startWorker(
-        holderSource(sharing.module, fixture.location),
-        'holder',
-        { admit: (child) => sharing.admit(host, child) },
-      );
       // The holder process must enter its task.
-      await holder.next('entered', { signal: t.signal });
-      holder.child.kill('SIGKILL');
-      await holder.closed;
+      await using holder = await new NodeCommand(
+        holderSource(sharing.module, fixture.location),
+        { name: 'holder', env: process.env, clock: globalThis },
+      ).start({
+        ready: { message: 'entered' },
+        admit: (child) => sharing.admit(host, child),
+        signal: t.signal,
+      });
+      holder.process.signal('SIGKILL');
+      await holder.process.ended;
       const mutex = new Mutex(host.store);
 
       // Act
@@ -101,19 +105,24 @@ export function processes<H extends Host>(
         await entered.promise;
 
         // Act
-        await using looker = startWorker(
+        // The child must report its look.
+        await using looker = await new NodeCommand(
           `
 							${childPrelude(sharing.module, fixture.location)}
 							process.send({ type: 'looked', held: await mutex.isHeld('report:daily') });
 						`,
-          'looker',
-          { admit: (child) => sharing.admit(host, child) },
-        );
-        // The child must report its look.
-        await looker.next('looked', { signal: t.signal });
+          { name: 'looker', env: process.env, clock: globalThis },
+        ).start({
+          ready: { message: 'looked' },
+          admit: (child) => sharing.admit(host, child),
+          signal: t.signal,
+        });
 
         // Assert
-        assert.equal(looker.find('looked')?.held, true);
+        assert.equal(
+          looker.messages.find((message) => message.type === 'looked')?.held,
+          true,
+        );
       } finally {
         release.resolve();
         await holding;
@@ -146,11 +155,11 @@ export function processes<H extends Host>(
 					const journal = ${JSON.stringify(journal)};
 
 					process.on('message', async (command) => {
-						if (command === 'finish') {
+						if (command.type === 'finish') {
 							finish.resolve();
 							return;
 						}
-						if (command !== 'start') return;
+						if (command.type !== 'start') return;
 						process.send({ type: 'attempted' });
 
 						try {
@@ -170,51 +179,50 @@ export function processes<H extends Host>(
 					process.send({ type: 'ready' });
 				`;
 
-        await using first = startWorker(workerSource, 'first', {
-          admit: (child) => sharing.admit(host, child),
-        });
-        await using second = startWorker(workerSource, 'second', {
-          admit: (child) => sharing.admit(host, child),
-        });
-        const stderr = () => first.stderr + second.stderr;
-
+        const start = (name: string) =>
+          new NodeCommand(workerSource, {
+            name,
+            env: process.env,
+            clock: globalThis,
+          }).start({
+            ready: { message: 'ready' },
+            admit: (child) => sharing.admit(host, child),
+            signal: t.signal,
+          });
         // Both Node processes must be ready before the contention scenario starts.
-        await Promise.all([
-          first.next('ready', { signal: t.signal }),
-          second.next('ready', { signal: t.signal }),
-        ]);
+        await using first = await start('first');
+        await using second = await start('second');
+        const stderr = () =>
+          first.process.stderrTail() + second.process.stderrTail();
 
         // Act: first holds the key while second attempts to acquire that same key.
-        first.child.send('start');
+        first.send({ type: 'start' });
         // The first acquire of a new process also opens the store.
         // The first process must enter its callback.
         await first.next('entered', { signal: t.signal });
-        second.child.send('start');
+        second.send({ type: 'start' });
         // The second process must attempt the same resource key.
         await second.next('attempted', { signal: t.signal });
         // Both workers are already running. Keep the first callback open briefly
         // so an unprotected second callback has an opportunity to overlap it.
         await delay(windowFor(store, 100), undefined, { signal: t.signal });
-        first.child.send('finish');
+        first.send({ type: 'finish' });
         // After the first operation finishes, the second process must enter its callback.
         await Promise.all([
           first.next('completed', { signal: t.signal }),
           second.next('entered', { signal: t.signal }),
         ]);
-        second.child.send('finish');
+        second.send({ type: 'finish' });
         // Both processes must finish their operations and exit.
-        await untilAborted(
-          Promise.all([first.closed, second.closed]),
+        const ends = await untilAborted(
+          Promise.all([first.process.ended, second.process.ended]),
           t.signal,
         );
 
         // Assert: both callers finish, and the actual callback intervals never overlap.
         assert.deepEqual(
-          [first.exit, second.exit],
-          [
-            { code: 0, signal: null },
-            { code: 0, signal: null },
-          ],
+          ends,
+          [{ exitCode: 0 }, { exitCode: 0 }],
           `Both worker processes must exit successfully.\n${stderr()}`,
         );
         assert.deepEqual(
@@ -239,7 +247,8 @@ export function processes<H extends Host>(
         // Arrange: another process enters the callback and never leaves it.
         await using fixture = await store.fixture(process.env);
         await using host = store.open(fixture.location);
-        await using holder = startWorker(
+        // The holder process must enter its callback.
+        await using holder = await new NodeCommand(
           `
 						${workerPrelude(fixture.location)}
 						setInterval(() => {}, 1000);
@@ -248,16 +257,17 @@ export function processes<H extends Host>(
 							await new Promise(() => {});
 						});
 					`,
-          'holder',
-          { admit: (child) => sharing.admit(host, child) },
-        );
-        // The holder process must enter its callback.
-        await holder.next('entered', { signal: t.signal });
+          { name: 'holder', env: process.env, clock: globalThis },
+        ).start({
+          ready: { message: 'entered' },
+          admit: (child) => sharing.admit(host, child),
+          signal: t.signal,
+        });
         const mutex = new Mutex(host.store);
 
         // Act: the holder dies without releasing, then this process asks for the same key.
-        holder.child.kill('SIGKILL');
-        await holder.closed;
+        holder.process.signal('SIGKILL');
+        await holder.process.ended;
         const acquired = await mutex.acquire(key, async () => true, {
           signal: t.signal,
         });
@@ -309,24 +319,31 @@ export function processes<H extends Host>(
 
       // Act: all processes contend for the same key at once.
       await using workers = new AsyncDisposableStack();
-      const processes = ['a', 'b', 'c', 'd'].map((name) =>
-        workers.use(
-          startWorker(source, name, {
-            admit: (child) => sharing.admit(host, child),
-          }),
+      const processes = await Promise.all(
+        ['a', 'b', 'c', 'd'].map(async (name) =>
+          workers.use(
+            await new NodeCommand(source, {
+              name,
+              env: process.env,
+              clock: globalThis,
+            }).start({
+              ready: { message: 'ready' },
+              admit: (child) => sharing.admit(host, child),
+              signal: t.signal,
+            }),
+          ),
         ),
       );
-      await Promise.all(
-        processes.map((worker) => worker.next('ready', { signal: t.signal })),
+      for (const worker of processes) worker.send({ type: 'go' });
+      const ends = await Promise.all(
+        processes.map((worker) => worker.process.ended),
       );
-      for (const worker of processes) worker.child.send({ type: 'go' });
-      await Promise.all(processes.map((worker) => worker.closed));
 
       // Assert: every increment ran exclusively, so none was overwritten.
       assert.deepEqual(
-        processes.map((worker) => worker.exit),
-        processes.map(() => ({ code: 0, signal: null })),
-        `Every worker process must exit successfully.\n${processes.map((worker) => worker.stderr).join('')}`,
+        ends,
+        processes.map(() => ({ exitCode: 0 })),
+        `Every worker process must exit successfully.\n${processes.map((worker) => worker.process.stderrTail()).join('')}`,
       );
       assert.equal(
         await readFile(counter, 'utf8'),
@@ -364,7 +381,7 @@ export function processes<H extends Host>(
 					${workerPrelude(fixture.location)}
 					const release = Promise.withResolvers();
 					process.on('message', (command) => {
-						if (command === 'release') release.resolve();
+						if (command.type === 'release') release.resolve();
 					});
 					await mutex.acquire('product:42', async () => {
 						process.send({ type: 'holding' });
@@ -372,14 +389,19 @@ export function processes<H extends Host>(
 					});
 					process.send({ type: 'released' });
 				`;
-        await using holder = startWorker(holderSource, 'holder', {
-          admit: (child) => sharing.admit(host, child),
-        });
         // The holder must take the key
-        await holder.next('holding', { signal: t.signal });
+        await using holder = await new NodeCommand(holderSource, {
+          name: 'holder',
+          env: process.env,
+          clock: globalThis,
+        }).start({
+          ready: { message: 'holding' },
+          admit: (child) => sharing.admit(host, child),
+          signal: t.signal,
+        });
 
         // Act: the holder freezes, and this process waits for the key.
-        holder.child.kill('SIGSTOP');
+        holder.process.signal('SIGSTOP');
         const acquire = mutex.acquire(
           'product:42',
           async (lease) => lease.token,
@@ -387,8 +409,8 @@ export function processes<H extends Host>(
         const waiter = watch(acquire);
         await delay(windowFor(store, settle * 10));
         const whileFrozen = waiter.now.status;
-        holder.child.kill('SIGCONT');
-        holder.child.send('release');
+        holder.process.signal('SIGCONT');
+        holder.send({ type: 'release' });
 
         // Assert: a frozen holder can resume at any time, so its key stays its own.
         assert.equal(
@@ -408,7 +430,8 @@ export function processes<H extends Host>(
       await using host = store.open(fixture.location);
       const mutex = new Mutex(host.store);
       const holder = await hold(mutex, 'report:daily');
-      await using child = startWorker(
+      // The child must report.
+      await using child = await new NodeCommand(
         `
 					import { Mutex } from ${JSON.stringify(mutexUrl.href)};
 					import { Modes } from ${JSON.stringify(modesUrl.href)};
@@ -417,21 +440,25 @@ export function processes<H extends Host>(
 					const report = (message) => process.send(message);
 					${skipperBody}
 				`,
-        'skipper',
-        { admit: (child) => sharing.admit(host, child) },
-      );
+        { name: 'skipper', env: process.env, clock: globalThis },
+      ).start({
+        ready: { message: 'results' },
+        admit: (child) => sharing.admit(host, child),
+        signal: t.signal,
+      });
 
       // Act
-      // The child must report.
-      await child.next('results', { signal: t.signal });
       await holder.release();
 
       // Assert: both skips gave up, the wait was cancelled, and no grant was left with the child.
+      const results = child.messages.find(
+        (message) => message.type === 'results',
+      );
       assert.deepEqual(
         {
-          atOnce: child.find('results')?.atOnce,
-          afterLimit: child.find('results')?.afterLimit,
-          cancelled: child.find('results')?.cancelled,
+          atOnce: results?.atOnce,
+          afterLimit: results?.afterLimit,
+          cancelled: results?.cancelled,
         },
         {
           atOnce: { acquired: false },

@@ -5,8 +5,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { TemporaryFiles, isErrno } from '@zukhruf/fs';
 import { describe, test } from '@zukhruf/parameterized-test';
+import { NodeCommand } from '@zukhruf/process';
 import { waitFor } from '@zukhruf/testing/async';
-import { startWorker } from '@zukhruf/testing/process';
 
 import { Mutex } from '../../mutex/mutex.ts';
 import { mutexUrl } from '../../testing/module-urls.ts';
@@ -20,7 +20,7 @@ describe('Process-tree mutex with IpcStore', () => {
     const coordinator = new IpcLockCoordinator();
     const mutex = new Mutex(coordinator);
     const ipcStoreUrl = new URL('./ipc-store.ts', import.meta.url);
-    await using child = startWorker(
+    await using child = await new NodeCommand(
       `
 					import { Mutex } from ${JSON.stringify(mutexUrl.href)};
 					import { IpcStore } from ${JSON.stringify(ipcStoreUrl.href)};
@@ -33,9 +33,8 @@ describe('Process-tree mutex with IpcStore', () => {
 					await mutex.acquire('product:42', async () => {});
 					process.send({ type: 'released' });
 				`,
-      'child',
-      { admit: (child) => coordinator.adopt(child) },
-    );
+      { name: 'child', env: process.env, clock: globalThis },
+    ).start({ admit: (child) => coordinator.adopt(child), signal: t.signal });
 
     // Act
     // The child must take and release the key after its other messages.
@@ -89,7 +88,7 @@ describe('Process-tree mutex with IpcStore', () => {
 					appendFileSync(${JSON.stringify(journal)}, 'rejected:' + error.name + '\\n');
 				}
 			`;
-      await using parent = startWorker(
+      await using parent = await new NodeCommand(
         `
 					import { spawn } from 'node:child_process';
 					import { Mutex } from ${JSON.stringify(mutexUrl.href)};
@@ -105,8 +104,8 @@ describe('Process-tree mutex with IpcStore', () => {
 						await new Promise(() => {});
 					});
 				`,
-        'parent',
-      );
+        { name: 'parent', env: process.env, clock: globalThis },
+      ).start({ signal: t.signal });
       const childLog = async () =>
         (
           await readFile(journal, 'utf8').catch((error: unknown) => {
@@ -121,7 +120,10 @@ describe('Process-tree mutex with IpcStore', () => {
         waitFor(
           async () => {
             log = await childLog();
-            assert.ok(log.includes(line), `${message}\n${parent.stderr}`);
+            assert.ok(
+              log.includes(line),
+              `${message}\n${parent.process.stderrTail()}`,
+            );
           },
           { signal: t.signal },
         );
@@ -133,8 +135,8 @@ describe('Process-tree mutex with IpcStore', () => {
       await delay(settle);
 
       // Act: the parent dies while the child is still waiting.
-      parent.child.kill('SIGKILL');
-      await parent.closed;
+      parent.process.signal('SIGKILL');
+      await parent.process.ended;
 
       // Assert: the child is told plainly instead of waiting forever or being granted.
       await waitFor(
@@ -186,7 +188,7 @@ describe('Process-tree mutex with IpcStore', () => {
 				});
 				log('waiting');
 			`;
-      await using parent = startWorker(
+      await using parent = await new NodeCommand(
         `
 					import { spawn } from 'node:child_process';
 					import { Mutex } from ${JSON.stringify(mutexUrl.href)};
@@ -202,8 +204,8 @@ describe('Process-tree mutex with IpcStore', () => {
 						await new Promise(() => {});
 					});
 				`,
-        'parent',
-      );
+        { name: 'parent', env: process.env, clock: globalThis },
+      ).start({ signal: t.signal });
       let log: string[] = [];
       const waitForLog = (done: (log: string[]) => boolean, message: string) =>
         waitFor(
@@ -218,7 +220,7 @@ describe('Process-tree mutex with IpcStore', () => {
               .split('\n');
             assert.ok(
               done(log),
-              `${message}\n${log.join('\n')}\n${parent.stderr}`,
+              `${message}\n${log.join('\n')}\n${parent.process.stderrTail()}`,
             );
           },
           { signal: t.signal },
@@ -227,18 +229,20 @@ describe('Process-tree mutex with IpcStore', () => {
         (lines) => lines.includes('waiting'),
         'The child must ask its parent for the key',
       );
-      const child = parent.find('entered')?.child;
+      const child = parent.messages.find(
+        (message) => message.type === 'entered',
+      )?.child;
       assert.equal(typeof child, 'number');
 
       // Act: the parent stops answering, the child sends a try, and then the parent dies.
-      parent.child.kill('SIGSTOP');
+      parent.process.signal('SIGSTOP');
       process.kill(Number(child), 'SIGUSR2');
       await waitForLog(
         (lines) => lines.includes('try sent'),
         'The child must send its try',
       );
-      parent.child.kill('SIGKILL');
-      await parent.closed;
+      parent.process.signal('SIGKILL');
+      await parent.process.ended;
 
       // Assert: every call is told plainly, at once, instead of waiting forever or being granted.
       await waitForLog(
@@ -269,7 +273,7 @@ describe('A worker or child whose token cannot be minted', () => {
       '../../mutex/acquire-modes/modes.ts',
       import.meta.url,
     );
-    await using child = startWorker(
+    await using child = await new NodeCommand(
       `
           import { Mutex } from ${JSON.stringify(mutexUrl.href)};
           import { Modes } from ${JSON.stringify(modesUrl.href)};
@@ -288,15 +292,14 @@ describe('A worker or child whose token cannot be minted', () => {
             await new Promise(() => {});
           });
         `,
-      'child',
-      { admit: (child) => coordinator.adopt(child) },
-    );
+      { name: 'child', env: process.env, clock: globalThis },
+    ).start({ admit: (child) => coordinator.adopt(child), signal: t.signal });
 
     // Act: the child reports while it holds the second key, and then exits.
     // The child must report while it holds a key.
     await child.next('holding', { signal: t.signal });
-    child.child.kill('SIGKILL');
-    await child.closed;
+    child.process.signal('SIGKILL');
+    await child.process.ended;
     const next = await mutex.acquire(
       'product:43',
       async () => 'granted' as const,
@@ -305,7 +308,7 @@ describe('A worker or child whose token cannot be minted', () => {
 
     // Assert
     assert.equal(
-      child.find('holding')?.failure,
+      child.messages.find((message) => message.type === 'holding')?.failure,
       'GrantFailedError: The lock coordinator could not grant "product:42": The token file could not be written.',
     );
     assert.equal(

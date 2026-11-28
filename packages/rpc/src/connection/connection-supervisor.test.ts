@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
+import type { ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { untilAborted } from '@zukhruf/async';
+import { NodeCommand } from '@zukhruf/process';
 import { waitFor } from '@zukhruf/testing/async';
-import { startWorker } from '@zukhruf/testing/process';
 
 import { isRecord } from '../shared/is-record.ts';
 import { scriptedConnector, scriptedPeer } from '../testing/scripted-peer.ts';
@@ -269,7 +270,8 @@ describe('Connection supervisor', () => {
 describe('A process whose supervisor connects over its IPC channel', () => {
   test('a hold taken before open reaches the first connection, so the process stays alive to hear its parent', async (t) => {
     // Arrange: a process holds its supervisor before it opens it, and lets go once it hears its parent; an IPC connection starts without listening.
-    await using waiter = startWorker(
+    const admitted = Promise.withResolvers<ChildProcess>();
+    await using waiter = await new NodeCommand(
       `
 				import { promisify } from 'node:util';
 				import { ConnectionSupervisor } from ${JSON.stringify(supervisorUrl.href)};
@@ -284,25 +286,32 @@ describe('A process whose supervisor connects over its IPC channel', () => {
 				});
 				supervisor.open();
 			`,
-      'waiter',
-    );
-    await waiter.next('connected', { signal: t.signal });
+      { name: 'waiter', env: process.env, clock: globalThis },
+    ).start({
+      admit: admitted.resolve,
+      ready: { message: 'connected' },
+      signal: t.signal,
+    });
+    const child = await admitted.promise;
 
     // Act
     // A process that exited first gets no message.
-    waiter.child.send({ '@test': { n: 1 } }, () => undefined);
+    child.send({ '@test': { n: 1 } }, () => undefined);
 
     // Assert: the process heard its parent, and exited by itself once nobody held its supervisor.
     const heard = await waiter.next('heard', { signal: t.signal });
     assert.deepEqual(heard.message, { n: 1 });
-    await untilAborted(waiter.closed, t.signal);
-    assert.deepEqual(waiter.exit, { code: 0, signal: null }, waiter.stderr);
+    assert.deepEqual(
+      await untilAborted(waiter.process.ended, t.signal),
+      { exitCode: 0 },
+      waiter.process.stderrTail(),
+    );
   });
 
   test("stays ref'd while one of two holds is out, and lets the process exit once nobody holds it", async (t) => {
     // Arrange: a process holds its supervisor twice, lets go of one hold and then of the other, and reports what keeps it alive at each step.
     // Its IPC channel is listed as one more `PipeWrap`, beside its stderr pipe, only while the channel is ref'd; a small `process.send` of its own adds none.
-    await using holder = startWorker(
+    await using holder = await new NodeCommand(
       `
 				import { once } from 'node:events';
 				import { promisify } from 'node:util';
@@ -320,8 +329,8 @@ describe('A process whose supervisor connects over its IPC channel', () => {
 				second[Symbol.dispose]();
 				process.send({ type: 'resources', both, one, none: process.getActiveResourcesInfo() });
 			`,
-      'holder',
-    );
+      { name: 'holder', env: process.env, clock: globalThis },
+    ).start({ signal: t.signal });
 
     // Act
     const reported = await holder.next('resources', { signal: t.signal });
@@ -337,7 +346,10 @@ describe('A process whose supervisor connects over its IPC channel', () => {
       pipes(reported.one),
       'A second hold refs nothing more',
     );
-    await untilAborted(holder.closed, t.signal);
-    assert.deepEqual(holder.exit, { code: 0, signal: null }, holder.stderr);
+    assert.deepEqual(
+      await untilAborted(holder.process.ended, t.signal),
+      { exitCode: 0 },
+      holder.process.stderrTail(),
+    );
   });
 });

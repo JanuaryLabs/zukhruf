@@ -10,8 +10,8 @@ import { createClock } from '@sinonjs/fake-timers';
 import { type Clock, untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
 import { test } from '@zukhruf/parameterized-test';
+import { NodeCommand, type NodeProcess } from '@zukhruf/process';
 import { waitFor } from '@zukhruf/testing/async';
-import { type WorkerProcess, startWorker } from '@zukhruf/testing/process';
 
 import { SqliteElection } from '../index.ts';
 
@@ -144,9 +144,9 @@ async function succeed(directory: string, signal: AbortSignal) {
 }
 
 /** Resolves when the process answers a message: it runs, and nobody ended it. */
-async function answers(t: TestContext, worker: WorkerProcess) {
+async function answers(t: TestContext, worker: NodeProcess) {
   const id = randomUUID();
-  worker.child.send({ id });
+  worker.send({ type: 'ping', id });
   await worker.next(`pong ${id}`, { signal: t.signal });
 }
 
@@ -198,14 +198,13 @@ describe('A candidate that waits on the leader of a SQLite election', () => {
     await using directory = await new TemporaryFiles().directory(
       'election-test-',
     );
-    await using leader = startWorker(
+    await using leader = await new NodeCommand(
       leaderSource(directory.path, {
         leaseDuration: 15_000,
         heartbeatInterval: 5_000,
       }),
-      'leader',
-    );
-    await leader.next('leader', { signal: t.signal });
+      { name: 'leader', env: process.env, clock: globalThis },
+    ).start({ ready: { message: 'leader' }, signal: t.signal });
     const clock = createClock();
     const campaigning = track(
       electionIn(directory.path, clock).campaign({ timeout: Infinity }),
@@ -213,8 +212,8 @@ describe('A candidate that waits on the leader of a SQLite election', () => {
     await waitingOnOneTimer(t, clock);
 
     // Act
-    leader.child.kill('SIGKILL');
-    await leader.closed;
+    leader.process.signal('SIGKILL');
+    await leader.process.ended;
     await untilAborted(campaigning.done, t.signal);
 
     // Assert
@@ -231,15 +230,14 @@ describe('A candidate that waits on the leader of a SQLite election', () => {
       await using directory = await new TemporaryFiles().directory(
         'election-test-',
       );
-      await using leader = startWorker(
+      await using leader = await new NodeCommand(
         leaderSource(directory.path, {
           leaseDuration: 300,
           heartbeatInterval: 100,
         }),
-        'leader',
-      );
-      await leader.next('leader', { signal: t.signal });
-      leader.child.kill('SIGSTOP');
+        { name: 'leader', env: process.env, clock: globalThis },
+      ).start({ ready: { message: 'leader' }, signal: t.signal });
+      leader.process.signal('SIGSTOP');
       const clock = createClock();
       const campaigning = track(
         electionIn(directory.path, clock).campaign({ timeout: Infinity }),
@@ -248,12 +246,12 @@ describe('A candidate that waits on the leader of a SQLite election', () => {
 
       // Act
       await clock.tickAsync(300);
-      await untilAborted(leader.closed, t.signal);
+      const end = await untilAborted(leader.process.ended, t.signal);
       await untilAborted(campaigning.done, t.signal);
 
       // Assert
       await using successor = campaigning.value;
-      assert.equal(leader.child.signalCode, 'SIGKILL');
+      assert.equal(end.signal, 'SIGKILL');
       assert.equal(campaigning.error, undefined);
       assert.equal(successor?.epoch, 2n);
     },
@@ -264,16 +262,14 @@ describe('A candidate that waits on the leader of a SQLite election', () => {
     await using directory = await new TemporaryFiles().directory(
       'election-test-',
     );
-    const leader = startWorker(
+    const leader = await new NodeCommand(
       leaderSource(directory.path, {
         leaseDuration: 1_000,
         heartbeatInterval: 50,
       }),
-      'leader',
-    );
+      { name: 'leader', env: process.env, clock: globalThis },
+    ).start({ ready: { message: 'leader' }, signal: t.signal });
     try {
-      await leader.next('leader', { signal: t.signal });
-
       // Act
       const outcome = await electionIn(directory.path).campaign({
         timeout: 2_000,
@@ -298,23 +294,24 @@ describe('A candidate that waits on the leader of a SQLite election', () => {
       'election-test-',
     );
     const recordPath = join(directory.path, 'term.lock.leader');
-    await using dead = startWorker(
+    await using dead = await new NodeCommand(
       leaderSource(directory.path, {
         leaseDuration: 300,
         heartbeatInterval: 100,
       }),
-      'dead',
-    );
-    await dead.next('leader', { signal: t.signal });
-    dead.child.kill('SIGKILL');
-    await dead.closed;
-    const holder = startWorker(publishedLeaderSource(directory.path), 'holder');
+      { name: 'dead', env: process.env, clock: globalThis },
+    ).start({ ready: { message: 'leader' }, signal: t.signal });
+    dead.process.signal('SIGKILL');
+    await dead.process.ended;
+    const holder = await new NodeCommand(
+      publishedLeaderSource(directory.path),
+      { name: 'holder', env: process.env, clock: globalThis },
+    ).start({ ready: { message: 'holding' }, signal: t.signal });
     try {
-      await holder.next('holding', { signal: t.signal });
       const record = JSON.parse(await readFile(recordPath, 'utf8'));
       await writeFile(
         recordPath,
-        JSON.stringify({ ...record, processId: holder.child.pid }),
+        JSON.stringify({ ...record, processId: holder.process.pid }),
       );
       const clock = createClock();
       using observer = electionIn(directory.path, clock).observe();
@@ -346,11 +343,10 @@ describe('A candidate that waits on the leader of a SQLite election', () => {
     await using directory = await new TemporaryFiles().directory(
       'election-test-',
     );
-    await using holder = startWorker(
+    await using holder = await new NodeCommand(
       publishedLeaderSource(directory.path),
-      'holder',
-    );
-    await holder.next('holding', { signal: t.signal });
+      { name: 'holder', env: process.env, clock: globalThis },
+    ).start({ ready: { message: 'holding' }, signal: t.signal });
     const clock = createClock();
     const campaigning = track(
       electionIn(directory.path, clock).campaign({ timeout: Infinity }),
@@ -364,8 +360,8 @@ describe('A candidate that waits on the leader of a SQLite election', () => {
       await clock.nextAsync();
       waits.push(clock.now - before);
     }
-    holder.child.kill('SIGKILL');
-    await holder.closed;
+    holder.process.signal('SIGKILL');
+    await holder.process.ended;
     await waitingOnOneTimer(t, clock);
     await clock.nextAsync();
     await untilAborted(campaigning.done, t.signal);
@@ -402,20 +398,21 @@ describe('A candidate that waits on the leader of a SQLite election', () => {
     },
     async (t) => {
       // Arrange: a hung leader accepts nothing, so connects fill its queue.
+      // A stopped leader holds the SIGTERM of the stop, so the grace is short.
       await using directory = await new TemporaryFiles().directory(
         'election-test-',
       );
-      const leader = startWorker(
+      const leader = await new NodeCommand(
         leaderSource(directory.path, {
           leaseDuration: 15_000,
           heartbeatInterval: 5_000,
         }),
-        'leader',
-      );
+        { name: 'leader', env: process.env, clock: globalThis, grace: 100 },
+      ).start({ signal: t.signal });
       const queued: Socket[] = [];
       try {
         await leader.next('leader', { signal: t.signal });
-        leader.child.kill('SIGSTOP');
+        leader.process.signal('SIGSTOP');
         const { address } = JSON.parse(
           await readFile(join(directory.path, 'term.lock.leader'), 'utf8'),
         );
@@ -589,15 +586,14 @@ describe('The leader of a SQLite election', () => {
     await using directory = await new TemporaryFiles().directory(
       'election-test-',
     );
-    const leader = startWorker(
+    const leader = await new NodeCommand(
       forgetfulLeaderSource(directory.path, {
         leaseDuration: 1_000,
         heartbeatInterval: 50,
       }),
-      'leader',
-    );
+      { name: 'leader', env: process.env, clock: globalThis },
+    ).start({ ready: { message: 'leader' }, signal: t.signal });
     try {
-      await leader.next('leader', { signal: t.signal });
       using observer = electionIn(directory.path).observe();
       const left = track(observer.left);
       const record = JSON.parse(
@@ -614,7 +610,7 @@ describe('The leader of a SQLite election', () => {
           () =>
             assert.ok(
               received() >= 30,
-              `The leader sent ${received()} heartbeats.\n${leader.stderr}`,
+              `The leader sent ${received()} heartbeats.\n${leader.process.stderrTail()}`,
             ),
           { signal: t.signal },
         );
@@ -639,19 +635,18 @@ describe('The leader of a SQLite election', () => {
       await using directory = await new TemporaryFiles().directory(
         'election-test-',
       );
-      await using leader = startWorker(
+      await using leader = await new NodeCommand(
         leaderSource(directory.path, {
           leaseDuration: 15_000,
           heartbeatInterval: 5_000,
         }),
-        'leader',
-      );
-      await leader.next('leader', { signal: t.signal });
+        { name: 'leader', env: process.env, clock: globalThis },
+      ).start({ ready: { message: 'leader' }, signal: t.signal });
       const { address } = JSON.parse(
         await readFile(join(directory.path, 'term.lock.leader'), 'utf8'),
       );
-      leader.child.kill('SIGKILL');
-      await leader.closed;
+      leader.process.signal('SIGKILL');
+      await leader.process.ended;
       await access(address);
 
       // Act
@@ -670,19 +665,18 @@ describe('The leader of a SQLite election', () => {
       await using directory = await new TemporaryFiles().directory(
         'election-test-',
       );
-      await using leader = startWorker(
+      await using leader = await new NodeCommand(
         leaderSource(directory.path, {
           leaseDuration: 15_000,
           heartbeatInterval: 5_000,
         }),
-        'leader',
-      );
-      await leader.next('leader', { signal: t.signal });
+        { name: 'leader', env: process.env, clock: globalThis },
+      ).start({ ready: { message: 'leader' }, signal: t.signal });
       const { address } = JSON.parse(
         await readFile(join(directory.path, 'term.lock.leader'), 'utf8'),
       );
-      leader.child.kill('SIGKILL');
-      await leader.closed;
+      leader.process.signal('SIGKILL');
+      await leader.process.ended;
       await rm(address);
 
       // Act
@@ -749,24 +743,23 @@ describe('An observer of a SQLite election', () => {
     await using directory = await new TemporaryFiles().directory(
       'election-test-',
     );
-    await using leader = startWorker(
+    await using leader = await new NodeCommand(
       leaderSource(directory.path, {
         leaseDuration: 15_000,
         heartbeatInterval: 5_000,
       }),
-      'leader',
-    );
-    await leader.next('leader', { signal: t.signal });
+      { name: 'leader', env: process.env, clock: globalThis },
+    ).start({ ready: { message: 'leader' }, signal: t.signal });
     const clock = createClock();
     using observer = electionIn(directory.path, clock).observe();
     await waitingOnOneTimer(t, clock);
 
     // Act
-    leader.child.kill('SIGKILL');
+    leader.process.signal('SIGKILL');
 
     // Assert
     assert.equal(await observer.left, 'closed');
-    await leader.closed;
+    await leader.process.ended;
     await succeed(directory.path, t.signal);
   });
 
@@ -778,15 +771,14 @@ describe('An observer of a SQLite election', () => {
       await using directory = await new TemporaryFiles().directory(
         'election-test-',
       );
-      await using leader = startWorker(
+      await using leader = await new NodeCommand(
         leaderSource(directory.path, {
           leaseDuration: 300,
           heartbeatInterval: 100,
         }),
-        'leader',
-      );
-      await leader.next('leader', { signal: t.signal });
-      leader.child.kill('SIGSTOP');
+        { name: 'leader', env: process.env, clock: globalThis },
+      ).start({ ready: { message: 'leader' }, signal: t.signal });
+      leader.process.signal('SIGSTOP');
       const clock = createClock();
       using observer = electionIn(directory.path, clock).observe();
       await waitingOnOneTimer(t, clock);
@@ -796,8 +788,8 @@ describe('An observer of a SQLite election', () => {
 
       // Assert
       assert.equal(await observer.left, 'ended');
-      await untilAborted(leader.closed, t.signal);
-      assert.equal(leader.child.signalCode, 'SIGKILL');
+      const end = await untilAborted(leader.process.ended, t.signal);
+      assert.equal(end.signal, 'SIGKILL');
       await succeed(directory.path, t.signal);
     },
   );
@@ -807,16 +799,20 @@ describe('An observer of a SQLite election', () => {
     await using directory = await new TemporaryFiles().directory(
       'election-test-',
     );
-    const worker = startWorker(selfObserverSource(directory.path), 'worker');
+    const worker = await new NodeCommand(selfObserverSource(directory.path), {
+      name: 'worker',
+      env: process.env,
+      clock: globalThis,
+    }).start({ signal: t.signal });
     try {
       // Act
-      await worker.next('ticked', { signal: t.signal });
+      const ticked = await worker.next('ticked', { signal: t.signal });
 
       // Assert
       await answers(t, worker);
       await worker.next('left unsettled', { signal: t.signal });
       assert.equal(
-        worker.find('ticked')?.timers,
+        ticked.timers,
         0,
         'A heartbeat after the refusal must set no new deadline',
       );
@@ -847,16 +843,15 @@ describe('An observer of a SQLite election', () => {
       await using directory = await new TemporaryFiles().directory(
         'election-test-',
       );
-      const leader = startWorker(
+      const leader = await new NodeCommand(
         leaderSource(directory.path, {
           leaseDuration: 300,
           heartbeatInterval: 100,
         }),
-        'leader',
-      );
+        { name: 'leader', env: process.env, clock: globalThis },
+      ).start({ ready: { message: 'leader' }, signal: t.signal });
       try {
-        await leader.next('leader', { signal: t.signal });
-        leader.child.kill('SIGSTOP');
+        leader.process.signal('SIGSTOP');
         const clock = createClock();
         const observer = electionIn(directory.path, clock).observe();
         const left = track(observer.left);
@@ -865,7 +860,7 @@ describe('An observer of a SQLite election', () => {
         // Act
         observer[Symbol.dispose]();
         await clock.tickAsync(1_000);
-        leader.child.kill('SIGCONT');
+        leader.process.signal('SIGCONT');
 
         // Assert
         await answers(t, leader);

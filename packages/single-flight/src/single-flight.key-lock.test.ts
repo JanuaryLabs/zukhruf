@@ -10,8 +10,8 @@ import type { TestContext } from 'node:test';
 
 import { SqliteElection } from '@zukhruf/election';
 import { TemporaryFiles } from '@zukhruf/fs';
+import { NodeCommand, type NodeProcess } from '@zukhruf/process';
 import { waitFor } from '@zukhruf/testing/async';
-import { type WorkerProcess, startWorker } from '@zukhruf/testing/process';
 
 import { callerSource, journalOf } from './testing/caller.ts';
 import { succeedLastLeader } from './testing/succeed-last-leader.ts';
@@ -30,20 +30,22 @@ function socketPathOf(directory: string) {
 
 /** A caller process on `directory`, ready for orders. */
 async function caller(t: TestContext, directory: string, name: string) {
-  const worker = startWorker(callerSource(directory), name);
-  await worker.next('ready', { signal: t.signal });
-  return worker;
+  return new NodeCommand(callerSource(directory), {
+    name,
+    env: process.env,
+    clock: globalThis,
+  }).start({ ready: { message: 'ready' }, signal: t.signal });
 }
 
 /** Runs `key` in `worker` as the call `call`. */
-function run(worker: WorkerProcess, call: string, key: string) {
-  worker.child.send({ type: 'run', call, key });
+function run(worker: NodeProcess, call: string, key: string) {
+  worker.send({ type: 'run', call, key });
 }
 
 /** Waits until `worker` reported `type` for `call`, and returns that report. */
 async function heard(
   t: TestContext,
-  worker: WorkerProcess,
+  worker: NodeProcess,
   type: string,
   call: string,
 ) {
@@ -57,7 +59,7 @@ async function heard(
  */
 async function firstOf(
   t: TestContext,
-  worker: WorkerProcess,
+  worker: NodeProcess,
   call: string,
   types: readonly string[],
 ) {
@@ -68,10 +70,10 @@ async function firstOf(
 }
 
 /** Runs the work of `call` in `worker` to the end with `call` as its value. */
-async function lead(t: TestContext, worker: WorkerProcess, call: string) {
+async function lead(t: TestContext, worker: NodeProcess, call: string) {
   run(worker, call, call);
   await heard(t, worker, 'leading', call);
-  worker.child.send({ type: 'finish', call, value: call });
+  worker.send({ type: 'finish', call, value: call });
   await heard(t, worker, 'value', call);
 }
 
@@ -149,11 +151,7 @@ async function leadingCoordinator(directory: string) {
  * read, so the run waits for the key's lock: the answers of one connection
  * are read in order, and a run of another key, sent after it, leads later.
  */
-async function waitsForKey(
-  t: TestContext,
-  worker: WorkerProcess,
-  call: string,
-) {
+async function waitsForKey(t: TestContext, worker: NodeProcess, call: string) {
   run(worker, call, 'sync');
   await heard(t, worker, 'called', call);
   await lead(t, worker, `${call}-after`);
@@ -190,7 +188,7 @@ describe('A single flight across processes while a run waits for its key', () =>
     await waitsForKey(t, runner, 'fresh');
 
     // Act
-    runner.child.send({ type: 'cancel', call: 'fresh' });
+    runner.send({ type: 'cancel', call: 'fresh' });
     const stopped = await firstOf(t, runner, 'fresh', ['error', 'value']);
     const requests = coordinator.connections.find((lines) =>
       lines.some((line) => line.includes('"key":"fresh-after"')),
@@ -205,12 +203,12 @@ describe('A single flight across processes while a run waits for its key', () =>
         ),
       { signal: t.signal },
     );
-    holder.child.send({ type: 'finish', call: 'l', value: 'first' });
+    holder.send({ type: 'finish', call: 'l', value: 'first' });
     await heard(t, holder, 'value', 'l');
     await using next = await caller(t, directory.path, 'next');
     run(next, 'n', 'sync');
     const first = await firstOf(t, next, 'n', ['leading', 'error']);
-    next.child.send({ type: 'finish', call: 'n', value: 'next' });
+    next.send({ type: 'finish', call: 'n', value: 'next' });
     await heard(t, next, 'value', 'n');
 
     // Assert
@@ -234,14 +232,14 @@ describe('A single flight across processes while a run waits for its key', () =>
     await waitsForKey(t, runner, 'fresh');
 
     // Act
-    runner.child.send({ type: 'dispose' });
+    runner.send({ type: 'dispose' });
     const closed = await firstOf(t, runner, 'fresh', ['error', 'value']);
-    holder.child.send({ type: 'finish', call: 'l', value: 'first' });
+    holder.send({ type: 'finish', call: 'l', value: 'first' });
     await heard(t, holder, 'value', 'l');
     await using next = await caller(t, directory.path, 'next');
     run(next, 'n', 'sync');
     const first = await firstOf(t, next, 'n', ['leading', 'error']);
-    next.child.send({ type: 'finish', call: 'n', value: 'next' });
+    next.send({ type: 'finish', call: 'n', value: 'next' });
     await heard(t, next, 'value', 'n');
 
     // Assert
@@ -271,7 +269,7 @@ describe('A single flight across processes while a run waits for its key', () =>
     await rm(folder);
     run(runner, 'healed', 'sync');
     const healed = await firstOf(t, runner, 'healed', ['leading', 'error']);
-    runner.child.send({ type: 'finish', call: 'healed', value: 'healed' });
+    runner.send({ type: 'finish', call: 'healed', value: 'healed' });
     await heard(t, runner, 'value', 'healed');
 
     // Assert: the second run was not left waiting on the first one's flight.
@@ -291,7 +289,7 @@ describe('A single flight across processes when the work of a key ends', () => {
     await using leader = await caller(t, directory.path, 'leader');
     run(leader, 'l', 'sync');
     await heard(t, leader, 'leading', 'l');
-    leader.child.send({
+    leader.send({
       type: 'fail',
       call: 'l',
       message: 'broken',
@@ -303,7 +301,7 @@ describe('A single flight across processes when the work of a key ends', () => {
     // Act
     run(next, 'n', 'sync');
     const first = await firstOf(t, next, 'n', ['leading', 'joined']);
-    next.child.send({ type: 'finish', call: 'n', value: 'second' });
+    next.send({ type: 'finish', call: 'n', value: 'second' });
     const second = await heard(t, next, 'value', 'n');
 
     // Assert
@@ -327,7 +325,7 @@ describe('A single flight across processes with keys that are no file names', ()
     // Act
     run(worker, 'long', key);
     const first = await firstOf(t, worker, 'long', ['leading', 'error']);
-    worker.child.send({ type: 'finish', call: 'long', value: 'long' });
+    worker.send({ type: 'finish', call: 'long', value: 'long' });
     const long = await heard(t, worker, 'value', 'long');
 
     // Assert
@@ -353,8 +351,8 @@ describe('A single flight across processes with keys that differ only in case', 
     // Act
     run(lower, 'l', 'sync');
     const first = await firstOf(t, lower, 'l', ['leading', 'joined']);
-    upper.child.send({ type: 'finish', call: 'u', value: 'upper' });
-    lower.child.send({ type: 'finish', call: 'l', value: 'lower' });
+    upper.send({ type: 'finish', call: 'u', value: 'upper' });
+    lower.send({ type: 'finish', call: 'l', value: 'lower' });
     const upperValue = await heard(t, upper, 'value', 'u');
     const lowerValue = await heard(t, lower, 'value', 'l');
 
@@ -375,9 +373,9 @@ describe('A single flight across processes with keys that differ only in case', 
     // Act: the work of `sync` waits for the run of `Sync`, as a nested call would.
     run(worker, 'inner', 'Sync');
     const first = await firstOf(t, worker, 'inner', ['leading', 'joined']);
-    worker.child.send({ type: 'finish', call: 'inner', value: 'inner' });
+    worker.send({ type: 'finish', call: 'inner', value: 'inner' });
     const inner = await heard(t, worker, 'value', 'inner');
-    worker.child.send({ type: 'finish', call: 'outer', value: 'outer' });
+    worker.send({ type: 'finish', call: 'outer', value: 'outer' });
     const outer = await heard(t, worker, 'value', 'outer');
 
     // Assert

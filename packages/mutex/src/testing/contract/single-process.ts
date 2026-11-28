@@ -9,8 +9,8 @@ import { Hono } from 'hono';
 import { Latch, untilAborted } from '@zukhruf/async';
 import type { FencingToken } from '@zukhruf/fencing';
 import { describe, test } from '@zukhruf/parameterized-test';
+import { NodeCommand } from '@zukhruf/process';
 import { waitFor } from '@zukhruf/testing/async';
-import { startWorker } from '@zukhruf/testing/process';
 
 import { Modes } from '../../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../../mutex/mutex.ts';
@@ -92,7 +92,7 @@ export function singleProcess<H extends Host>(store: Subject<H>): void {
       await using host = store.open(fixture.location);
 
       // Act: the application catches a failure, then processes another request later.
-      await using application = startWorker(
+      await using application = await new NodeCommand(
         `
 					import assert from 'node:assert/strict';
 					import { setImmediate as nextTurn } from 'node:timers/promises';
@@ -118,20 +118,24 @@ export function singleProcess<H extends Host>(store: Subject<H>): void {
 						'A later request must succeed after an earlier caller handled its own failure',
 					);
 				`,
-        'application',
         {
-          admit: (child) => store.process.admit(host, child),
+          name: 'application',
+          env: process.env,
+          clock: globalThis,
           nodeOptions: ['--unhandled-rejections=strict'],
         },
-      );
+      ).start({
+        admit: (child) => store.process.admit(host, child),
+        signal: t.signal,
+      });
       // The application must finish.
-      await untilAborted(application.closed, t.signal);
+      const end = await untilAborted(application.process.ended, t.signal);
 
       // Assert: catching a callback error must be enough to keep the app running.
       assert.deepEqual(
-        application.exit,
-        { code: 0, signal: null },
-        `The application must survive a handled failure and finish the later request.\n${application.stderr}`,
+        end,
+        { exitCode: 0 },
+        `The application must survive a handled failure and finish the later request.\n${application.process.stderrTail()}`,
       );
     });
 

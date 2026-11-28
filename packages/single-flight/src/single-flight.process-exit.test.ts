@@ -7,7 +7,7 @@ import { describe, test } from 'node:test';
 import { untilAborted } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/fs';
 import { PipeEndpoint } from '@zukhruf/pipes';
-import { startWorker } from '@zukhruf/testing/process';
+import { NodeCommand } from '@zukhruf/process';
 
 import { flightElection } from './connection/flight-election.ts';
 import { SingleFlight } from './index.ts';
@@ -22,7 +22,7 @@ const indexUrl = new URL('./index.ts', import.meta.url);
  * alive.
  */
 function followerProcess(directory: string, steps: string) {
-  return startWorker(
+  return new NodeCommand(
     `
       import { SingleFlight } from ${JSON.stringify(indexUrl.href)};
       const flights = new SingleFlight({
@@ -32,8 +32,8 @@ function followerProcess(directory: string, steps: string) {
       });
       ${steps}
     `,
-    'follower',
-  );
+    { name: 'follower', env: process.env, clock: globalThis },
+  ).start();
 }
 
 /** This process coordinates the single flights on `directory`: its first run wins the term. The run leads `key` until the test lands it. */
@@ -67,7 +67,7 @@ describe('A follower process of a single flight', () => {
       directory.path,
       'report',
     );
-    await using follower = followerProcess(
+    await using follower = await followerProcess(
       directory.path,
       `
         const answer = await flights.run('report', async () => 'never', {
@@ -82,12 +82,15 @@ describe('A follower process of a single flight', () => {
     await untilAborted(coordinator.land('quarterly'), t.signal);
 
     // Assert
-    await untilAborted(follower.closed, t.signal);
-    assert.deepEqual(follower.exit, { code: 0, signal: null }, follower.stderr);
-    assert.deepEqual(follower.find('answered')?.answer, {
-      value: 'quarterly',
-      joined: true,
-    });
+    const end = await untilAborted(follower.process.ended, t.signal);
+    assert.deepEqual(end, { exitCode: 0 }, follower.process.stderrTail());
+    assert.deepEqual(
+      follower.messages.find((message) => message.type === 'answered')?.answer,
+      {
+        value: 'quarterly',
+        joined: true,
+      },
+    );
   });
 
   // A new single flight keeps its process alive until its first run ends, so
@@ -99,7 +102,7 @@ describe('A follower process of a single flight', () => {
       directory.path,
       'report',
     );
-    await using follower = followerProcess(
+    await using follower = await followerProcess(
       directory.path,
       `
         await flights.run('export', async () => 'exported');
@@ -119,12 +122,15 @@ describe('A follower process of a single flight', () => {
     await untilAborted(coordinator.land('quarterly'), t.signal);
 
     // Assert
-    await untilAborted(follower.closed, t.signal);
-    assert.deepEqual(follower.exit, { code: 0, signal: null }, follower.stderr);
-    assert.deepEqual(follower.find('answered')?.answer, {
-      value: 'quarterly',
-      joined: true,
-    });
+    const end = await untilAborted(follower.process.ended, t.signal);
+    assert.deepEqual(end, { exitCode: 0 }, follower.process.stderrTail());
+    assert.deepEqual(
+      follower.messages.find((message) => message.type === 'answered')?.answer,
+      {
+        value: 'quarterly',
+        joined: true,
+      },
+    );
   });
 
   test('a follower process that led a flight stays alive until the coordinator acknowledges its landing, and then exits by itself', async (t) => {
@@ -156,7 +162,7 @@ describe('A follower process of a single flight', () => {
         if (op === 'land') landed.resolve({ peer, id });
       });
     });
-    await using follower = followerProcess(
+    await using follower = await followerProcess(
       directory.path,
       `
         const answer = await flights.run('export', async () => 'exported');
@@ -173,8 +179,8 @@ describe('A follower process of a single flight', () => {
     landing.peer.write(`${JSON.stringify({ op: 'ack', id: landing.id })}\n`);
 
     // Assert
-    await untilAborted(follower.closed, t.signal);
-    assert.deepEqual(follower.exit, { code: 0, signal: null }, follower.stderr);
+    const end = await untilAborted(follower.process.ended, t.signal);
+    assert.deepEqual(end, { exitCode: 0 }, follower.process.stderrTail());
     assert.deepEqual(alive.answer, {
       value: 'exported',
       joined: false,

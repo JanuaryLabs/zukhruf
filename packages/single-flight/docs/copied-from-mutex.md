@@ -119,7 +119,7 @@ Only its comment differs: it names a single flight, not a store.
 **`testing/succeed-last-leader.ts` → `testing/succeed-last-leader.ts`.**
 It wins and resigns a term of `flightElection`, not of `socketElection`. Its comment says coordinator and single flights. The tests that start caller processes dispose it after their processes, so the suite leaves no socket file of an election pipe in the temporary folder of the system.
 
-The temporary directory of the tests is not a copy: the tests use `TemporaryFiles` of `@zukhruf/fs`, with the prefix `flights-`. The worker process is not a copy either: the tests use `startWorker` of `@zukhruf/testing/process`, as the mutex and the election do. The tests keep no copy of `fact-timeout.ts`: a wait in a test ends at the limit of the test, `t.signal` (backlog #4205).
+The temporary directory of the tests is not a copy: the tests use `TemporaryFiles` of `@zukhruf/fs`, with the prefix `flights-`. The worker process is not a copy either: the tests use `NodeCommand` of `@zukhruf/process`, as the mutex and the election do. The tests keep no copy of `fact-timeout.ts`: a wait in a test ends at the limit of the test, `t.signal` (backlog #4205).
 
 These helpers do not belong in `@zukhruf/coordinator`. They stay copies. Only a test helper whose knowledge is in three or more repositories goes into `@zukhruf/testing` ([testing ADR 0016](../../testing/docs/adr/0016-a-test-helper-goes-into-an-area-when-three-repositories-have-its-knowledge-and-it-does-not-use-mock.md)). The knowledge of these helpers is only in this repository.
 

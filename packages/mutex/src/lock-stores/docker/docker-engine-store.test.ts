@@ -16,9 +16,9 @@ import { promisify } from 'node:util';
 import { untilAborted } from '@zukhruf/async';
 import { Docker, type EngineApi } from '@zukhruf/docker';
 import { TemporaryFiles } from '@zukhruf/fs';
+import { NodeCommand } from '@zukhruf/process';
 import { waitFor } from '@zukhruf/testing/async';
 import { DockerTestbed, forLogMessage } from '@zukhruf/testing/docker';
-import { startWorker } from '@zukhruf/testing/process';
 
 import { Mutex } from '../../index.ts';
 import { hold } from '../../testing/hold.ts';
@@ -104,22 +104,22 @@ const holderSource = (namespace: string, key: string) => `
 test("a killed holder's key goes to the next waiter", async (t) => {
   // Arrange: another process holds the key.
   await using fixture = await engine();
-  await using holder = startWorker(
+  await using holder = await new NodeCommand(
     holderSource(fixture.namespace, 'report:daily'),
-    'holder',
-  );
-  await holder.next('holding', { signal: t.signal });
+    { name: 'holder', env: process.env, clock: globalThis },
+  ).start({ ready: { message: 'holding' }, signal: t.signal });
   const waiting = new Mutex(fixture.store()).acquire(
     'report:daily',
     async (lease) => lease.token.value,
   );
 
   // Act
-  holder.child.kill('SIGKILL');
+  holder.process.signal('SIGKILL');
   const token = await untilAborted(waiting, t.signal);
 
   // Assert: the end of the attach of a killed holder ended its claim.
-  assert.ok(token > BigInt(String(holder.find('holding')?.token)));
+  const holding = holder.messages.find((message) => message.type === 'holding');
+  assert.ok(token > BigInt(String(holding?.token)));
 });
 
 /** The OpenSSH server of `droppableSshEngine`: a key login as root, with the defaults of sshd for a client that went away. Alpine's sshd_config sets `AllowTcpForwarding no`, which also denies the connect to the engine socket. */
@@ -293,11 +293,10 @@ test("a key whose holder machine reaches the engine over SSH and goes away with 
   // Arrange: another process holds the key through an SSH server whose packets the test can drop.
   await using fixture = await engine();
   await using sshd = await droppableSshEngine();
-  await using holder = startWorker(
+  await using holder = await new NodeCommand(
     sshHolderSource(fixture.namespace, 'report:daily', sshd),
-    'holder',
-  );
-  await holder.next('holding', { signal: t.signal });
+    { name: 'holder', env: process.env, clock: globalThis },
+  ).start({ ready: { message: 'holding' }, signal: t.signal });
   const waiting = new Mutex(fixture.store()).acquire(
     'report:daily',
     async (lease) => lease.token.value,
@@ -305,11 +304,12 @@ test("a key whose holder machine reaches the engine over SSH and goes away with 
 
   // Act: the network of the holder machine goes away, and then the holder, so no close reaches the engine's host.
   await sshd.drop(t.signal);
-  holder.child.kill('SIGKILL');
+  holder.process.signal('SIGKILL');
   const token = await untilAborted(waiting, t.signal);
 
   // Assert: the engine's host ended the connection of the gone holder, so its claim ended.
-  assert.ok(token > BigInt(String(holder.find('holding')?.token)));
+  const holding = holder.messages.find((message) => message.type === 'holding');
+  assert.ok(token > BigInt(String(holding?.token)));
 });
 
 test('an acquire whose claim image has sh and no cat rejects with the code 127 and the image', async (t) => {
@@ -479,53 +479,53 @@ const startedCallerSource = (
 test('a caller whose claim a rival removed before its start takes the key with a new claim, and its process exits by itself', async (t) => {
   // Arrange: the caller's start of its first claim reaches the engine after the removal of that claim, as a waiter removes a claim that stays created.
   await using fixture = await engine();
-  await using caller = startWorker(
+  await using caller = await new NodeCommand(
     startedCallerSource(
       fixture.namespace,
       'report:daily',
       `report.removed = request.path.split('/').at(-2);
 		execFileSync('docker', ['rm', report.removed], { env: { ...process.env, ...docker.cliEnvironment } });`,
     ),
-    'caller',
-  );
+    { name: 'caller', env: process.env, clock: globalThis },
+  ).start({ signal: t.signal });
 
   // Act
   const settled = await caller.next('settled', { signal: t.signal });
   // The attach of a claim whose start found no container ends, so the
   // process exits once it released the key.
-  await untilAborted(caller.closed, t.signal);
+  const end = await untilAborted(caller.process.ended, t.signal);
 
   // Assert
-  assert.equal(settled.error, undefined, caller.stderr);
+  assert.equal(settled.error, undefined, caller.process.stderrTail());
   assert.equal(
     typeof settled.removed,
     'string',
     'The rival must remove the first claim at its start',
   );
-  assert.deepEqual(caller.exit, { code: 0, signal: null }, caller.stderr);
+  assert.deepEqual(end, { exitCode: 0 }, caller.process.stderrTail());
 });
 
 test('a caller whose start fails before it reaches the engine rejects with that failure, and its process exits by itself', async (t) => {
   // Arrange: the request of the start of the caller's claim fails before the engine gets it, as a dropped connection fails it, so the claim never starts.
   await using fixture = await engine();
-  await using caller = startWorker(
+  await using caller = await new NodeCommand(
     startedCallerSource(
       fixture.namespace,
       'report:daily',
       `request.destroy(new Error('The connection dropped the start.'));`,
     ),
-    'caller',
-  );
+    { name: 'caller', env: process.env, clock: globalThis },
+  ).start({ signal: t.signal });
 
   // Act
   const settled = await caller.next('settled', { signal: t.signal });
   // The attach of a claim whose start failed ends, so the process exits once
   // its acquire rejected.
-  await untilAborted(caller.closed, t.signal);
+  const end = await untilAborted(caller.process.ended, t.signal);
 
   // Assert
   assert.equal(settled.error, 'The connection dropped the start.');
-  assert.deepEqual(caller.exit, { code: 0, signal: null }, caller.stderr);
+  assert.deepEqual(end, { exitCode: 0 }, caller.process.stderrTail());
 });
 
 test('a holder that lost its claim during the mint gets no token', async (t) => {
