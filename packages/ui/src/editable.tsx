@@ -17,7 +17,7 @@ interface OwnerSave {
   editing: boolean;
   /** true when the Preview is clicked; false on cancel. Never false on commit: the owner closes. */
   onEditingChange: (editing: boolean) => void;
-  /** A save is in flight: the input is disabled and a commit is ignored. */
+  /** A save is in flight: the input keeps focus, read-only and aria-busy, and a commit or Escape is ignored. */
   saving: boolean;
   /** Called with a trimmed, changed, non-empty value. The owner closes by editing={false}. */
   onValueCommit: (next: string) => void;
@@ -118,13 +118,11 @@ export function Editable(props: EditableProps): ReactNode {
     props.onEditingChange?.(next);
   };
 
-  const cancel = () => changeEditing(false);
-
   const commit = () => {
     if (saving || inFlight.current) return;
     const trimmed = draft.trim();
     if (trimmed === '' || trimmed === value) {
-      cancel();
+      changeEditing(false);
       return;
     }
     if (ownerMode) {
@@ -145,6 +143,11 @@ export function Editable(props: EditableProps): ReactNode {
         setOwnSaving(false);
       },
     );
+  };
+
+  // A save in flight cannot be cancelled: the owner or the promise ends it.
+  const cancel = () => {
+    if (!saving && !inFlight.current) changeEditing(false);
   };
 
   const open = () => {
@@ -203,7 +206,7 @@ function EditablePreview({
 // size cannot override md:text-sm. This one takes the text style around it,
 // hugs its content and shows a faint wash 1 unit past the glyphs.
 const fieldReset =
-  '-mx-1 max-w-full rounded-sm bg-muted px-1 text-inherit outline-none field-sizing-content placeholder:text-muted-foreground/60 disabled:cursor-not-allowed disabled:opacity-60';
+  '-mx-1 max-w-full rounded-sm bg-muted px-1 text-inherit outline-none field-sizing-content placeholder:text-muted-foreground/60 disabled:cursor-not-allowed disabled:opacity-60 aria-busy:cursor-progress aria-busy:opacity-60';
 
 /** A bare input that edits the draft. Rendered only while editing. */
 function EditableInput({
@@ -228,8 +231,15 @@ function EditableInput({
   // Runs when the input appears and again each time saving changes. When it
   // is not saving, the input takes focus with its text selected, also after
   // a refused save. When the input leaves the DOM the edit has ended, and
-  // focus goes to finalFocus if a key ended it. Where focus is does not
-  // decide: a dialog's focus guard takes it when the input leaves.
+  // focus goes to finalFocus if a key ended it.
+  //
+  // React runs this cleanup before it removes the input, in the same commit
+  // that renders finalFocus, so the microtask runs once that commit is done:
+  // finalFocus is the element on screen, also when the owner remounted it,
+  // and focus moves before any frame. A dialog's focus manager reacts to the
+  // input's blur in a later microtask and finds focus on finalFocus, not on
+  // the body, so it leaves it there (Base UI returns a Dialog's own
+  // finalFocus the same way).
   const attach = useCallback(
     (element: HTMLInputElement) => {
       let frame = 0;
@@ -245,9 +255,11 @@ function EditableInput({
       return () => {
         cancelAnimationFrame(frame);
         armed.current = false;
-        requestAnimationFrame(() => {
+        queueMicrotask(() => {
           if (element.isConnected) return;
-          if (endedByKey.current) finalFocus.current?.focus();
+          if (endedByKey.current) {
+            finalFocus.current?.focus({ preventScroll: true });
+          }
           endedByKey.current = false;
         });
       };
@@ -287,7 +299,11 @@ function EditableInput({
         actions.commit();
       }}
       onKeyDown={handleKeyDown}
-      disabled={saving || meta.disabled}
+      // A save never disables the input: a disabled input loses focus to
+      // the body. It stays focused, read-only and busy until the save ends.
+      readOnly={saving}
+      aria-busy={saving || undefined}
+      disabled={meta.disabled}
       placeholder={meta.placeholder}
       maxLength={meta.maxLength}
       className={cn(fieldReset, className)}

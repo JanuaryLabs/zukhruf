@@ -77,9 +77,9 @@ The mode of `Editable` with no `saving` prop. `onValueCommit` returns a promise;
 _Avoid_: Async mode, auto mode
 
 **Saving**:
-The state of `Editable` while a save is in flight: the owner's `saving` prop, or a promise of promise mode that has not settled. The input is disabled and a commit is ignored.
+The state of `Editable` while a save is in flight: the owner's `saving` prop, or a promise of promise mode that has not settled. The input keeps focus, read-only and `aria-busy` (a disabled input would lose focus to the body), and a commit or an Escape is ignored.
 _Avoid_: Pending (a pending promise is a different thing), loading (the loading of `TheButton`), busy
 
 **Final focus**:
-The element that gets focus one frame after a key ends an edit (Escape, or Enter that commits or cancels): the `finalFocus` ref, or by default the preview. An edit that a blur ended does not move focus, so a user who moved focus keeps it. How the edit ended decides, not where focus is, since a dialog's focus guard takes focus when the input leaves. The name is Base UI's.
+The element that gets focus when a key ends an edit (Escape, or Enter that commits or cancels): the `finalFocus` ref, or by default the preview. It gets focus in a microtask after the commit that removes the input, before any frame, so a dialog's focus manager never finds focus on the body. An edit that a blur ended does not move focus, so a user who moved focus keeps it. How the edit ended decides, not where focus is. The name is Base UI's, and Base UI returns a dialog's final focus in a microtask too.
 _Avoid_: Restore focus, return focus target

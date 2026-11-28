@@ -297,7 +297,7 @@ test('Enter while an input method is composing does nothing', async () => {
   }
 });
 
-test('promise mode closes the edit when the save resolves and stays open with the draft and focus when it rejects', async () => {
+test('promise mode closes the edit when the save resolves and stays open with the draft and focus when it rejects, keeping focus on the read-only field while it saves', async () => {
   // Arrange
   GlobalRegistrator.register();
   try {
@@ -331,13 +331,17 @@ test('promise mode closes the edit when the save resolves and stays open with th
       // Act
       await act(async () => typeInto(input(), 'Refused'));
       await act(async () => press(input(), 'Enter'));
-      const disabledWhileSaving = input().disabled;
+      const whileSaving = {
+        readOnly: input().readOnly,
+        busy: input().getAttribute('aria-busy'),
+        focused: document.activeElement === input(),
+      };
       await act(async () => saves[0]?.reject(new Error('taken')));
       const afterReject = {
         open: document.querySelector('input') !== null,
         draft: input().value,
         focused: document.activeElement === input(),
-        disabled: input().disabled,
+        readOnly: input().readOnly,
       };
       await act(nextFrame);
       await act(async () => typeInto(input(), 'Accepted'));
@@ -345,12 +349,16 @@ test('promise mode closes the edit when the save resolves and stays open with th
       await act(async () => saves[1]?.resolve());
 
       // Assert
-      assert.equal(disabledWhileSaving, true);
+      assert.deepEqual(whileSaving, {
+        readOnly: true,
+        busy: 'true',
+        focused: true,
+      });
       assert.deepEqual(afterReject, {
         open: true,
         draft: 'Refused',
         focused: true,
-        disabled: false,
+        readOnly: false,
       });
       assert.equal(document.querySelector('input'), null);
       assert.deepEqual(editingChanges, [false]);
@@ -363,7 +371,7 @@ test('promise mode closes the edit when the save resolves and stays open with th
   }
 });
 
-test('owner mode does not close on commit, ignores a commit while saving, and focuses the input again when saving ends with the edit open', async () => {
+test('owner mode does not close on commit, ignores a commit and an Escape while saving with focus on the read-only field, and focuses the input again when saving ends with the edit open', async () => {
   // Arrange
   GlobalRegistrator.register();
   try {
@@ -400,14 +408,23 @@ test('owner mode does not close on commit, ignores a commit while saving, and fo
       await act(async () => press(input(), 'Enter'));
       const openAfterCommit = document.querySelector('input') !== null;
       await render(true);
-      const disabledWhileSaving = input().disabled;
+      const whileSaving = {
+        readOnly: input().readOnly,
+        busy: input().getAttribute('aria-busy'),
+        focused: document.activeElement === input(),
+      };
       await act(async () => press(input(), 'Enter'));
+      await act(async () => press(input(), 'Escape'));
       await act(async () => input().blur());
       await render(false);
 
       // Assert
       assert.equal(openAfterCommit, true);
-      assert.equal(disabledWhileSaving, true);
+      assert.deepEqual(whileSaving, {
+        readOnly: true,
+        busy: 'true',
+        focused: true,
+      });
       assert.deepEqual(commits, ['Changed']);
       assert.deepEqual(editingChanges, []);
       assert.equal(document.activeElement, input());
@@ -846,4 +863,190 @@ test('the types refuse an unlabelled Input, a mixed owner mode, mixed controlled
 
   assert.equal(accepted.length, 4);
   assert.equal(refused.length, 6);
+});
+
+test('inside a Base UI Dialog, Escape and an unchanged Enter leave focus on finalFocus, before any frame and after the frames settle', async () => {
+  // Arrange: a real Base UI Dialog focuses its popup when focus falls to the
+  // body, at once and again on the next frame.
+  GlobalRegistrator.register();
+  try {
+    Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', true);
+    const { act, createElement, createRef } = await import('react');
+    const { createRoot } = await import('react-dom/client');
+    const { Dialog } = await import('@base-ui/react/dialog');
+    const { Editable } = await import('@zukhruf/ui');
+    // Chrome blurs the focused element when it is removed, so focusout
+    // reaches the dialog with focus on the body. happy-dom 21 does not, so
+    // the test does what Chrome does.
+    const removeChild = Node.prototype.removeChild;
+    const setRemoveChild = (value: (this: Node, child: Node) => Node) =>
+      Object.defineProperty(Node.prototype, 'removeChild', {
+        configurable: true,
+        writable: true,
+        value,
+      });
+    setRemoveChild(function (this: Node, child: Node): Node {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && child.contains(active)) {
+        active.blur();
+      }
+      return removeChild.call(this, child);
+    });
+    const root = createRoot(
+      document.body.appendChild(document.createElement('div')),
+    );
+    const finalFocus = createRef<HTMLAnchorElement>();
+    const where = () => {
+      const active = document.activeElement;
+      if (active === finalFocus.current) return 'row';
+      if (active === document.body) return 'body';
+      return active?.id || (active?.tagName ?? null);
+    };
+    const focusAfter = async (key: string, text?: string) => {
+      await act(async () => {
+        root.render(
+          createElement(
+            Dialog.Root,
+            { open: true },
+            createElement(
+              Dialog.Portal,
+              null,
+              createElement(
+                Dialog.Popup,
+                { id: 'popup' },
+                createElement(Dialog.Title, null, 'Questions'),
+                createElement('a', { ref: finalFocus, href: '#row' }, 'Row'),
+                createElement(Editable, {
+                  key: `${key}-${text}`,
+                  value: 'Draft',
+                  finalFocus,
+                  onValueCommit: async () => undefined,
+                  children: [
+                    createElement(Editable.Preview, {
+                      key: 'preview',
+                      'aria-label': 'Rename',
+                    }),
+                    createElement(Editable.Input, {
+                      key: 'input',
+                      'aria-label': 'Title',
+                    }),
+                  ],
+                }),
+              ),
+            ),
+          ),
+        );
+      });
+      for (let frame = 0; frame < 3; frame++) await act(nextFrame);
+      await act(async () =>
+        document
+          .querySelector<HTMLButtonElement>('[aria-label="Rename"]')
+          ?.click(),
+      );
+      for (let frame = 0; frame < 3; frame++) await act(nextFrame);
+      if (text !== undefined) await act(async () => typeInto(input(), text));
+      await act(async () => press(input(), key));
+      const beforeFrame = where();
+      for (let frame = 0; frame < 3; frame++) await act(nextFrame);
+      return { beforeFrame, settled: where() };
+    };
+    try {
+      // Act
+      const afterEscape = await focusAfter('Escape', 'Changed');
+      const afterUnchangedEnter = await focusAfter('Enter');
+
+      // Assert
+      assert.deepEqual(
+        { afterEscape, afterUnchangedEnter },
+        {
+          afterEscape: { beforeFrame: 'row', settled: 'row' },
+          afterUnchangedEnter: { beforeFrame: 'row', settled: 'row' },
+        },
+      );
+    } finally {
+      await act(async () => root.unmount());
+      setRemoveChild(removeChild);
+    }
+  } finally {
+    Reflect.deleteProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT');
+    await GlobalRegistrator.unregister();
+  }
+});
+
+test('an owner-mode save keeps focus on the field while it saves, and when the owner closes and remounts finalFocus, focus is on the new element before any frame', async () => {
+  // Arrange: a disabled control loses focus to the body in a browser (the
+  // HTML focus fixup rule), so the field must stay enabled while it saves.
+  GlobalRegistrator.register();
+  try {
+    Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', true);
+    const { act, createElement, createRef } = await import('react');
+    const { createRoot } = await import('react-dom/client');
+    const { Editable } = await import('@zukhruf/ui');
+    const finalFocus = createRef<HTMLAnchorElement>();
+    const root = createRoot(
+      document.body.appendChild(document.createElement('div')),
+    );
+    const render = (editing: boolean, saving: boolean) =>
+      act(async () => {
+        root.render([
+          // The owner renders a new row link when the edit closes.
+          createElement(
+            'a',
+            {
+              key: editing ? 'row-editing' : 'row-closed',
+              ref: finalFocus,
+              href: '#row',
+            },
+            'Row',
+          ),
+          createElement(Editable, {
+            key: 'editable',
+            value: 'Draft',
+            editing,
+            saving,
+            finalFocus,
+            onEditingChange: () => undefined,
+            onValueCommit: () => undefined,
+            children: createElement(Editable.Input, { 'aria-label': 'Title' }),
+          }),
+        ]);
+      });
+    try {
+      await render(true, false);
+      await act(nextFrame);
+      const firstRow = document.querySelector('a');
+
+      // Act
+      await act(async () => typeInto(input(), 'Changed'));
+      await act(async () => press(input(), 'Enter'));
+      await render(true, true);
+      await act(nextFrame);
+      const field = input();
+      const whileSaving = {
+        focused: document.activeElement === field,
+        disabled: field.disabled,
+        busy: field.getAttribute('aria-busy'),
+      };
+      await render(false, false);
+      const newRow = document.querySelector('a');
+      const beforeFrame = document.activeElement === newRow;
+      await act(nextFrame);
+      await act(nextFrame);
+
+      // Assert
+      assert.notEqual(newRow, firstRow, 'the owner remounted the row link');
+      assert.deepEqual(whileSaving, {
+        focused: true,
+        disabled: false,
+        busy: 'true',
+      });
+      assert.equal(beforeFrame, true);
+      assert.equal(document.activeElement, newRow);
+    } finally {
+      await act(async () => root.unmount());
+    }
+  } finally {
+    Reflect.deleteProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT');
+    await GlobalRegistrator.unregister();
+  }
 });

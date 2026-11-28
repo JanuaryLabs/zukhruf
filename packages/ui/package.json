@@ -51,6 +51,7 @@
     "lucide-react": "^1.77.0"
   },
   "devDependencies": {
+    "@base-ui/react": "1.9.0",
     "@sinonjs/fake-timers": "15.5.0"
   },
   "peerDependencies": {
