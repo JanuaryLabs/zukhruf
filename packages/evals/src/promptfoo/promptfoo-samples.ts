@@ -55,8 +55,7 @@ export type PromptfooReaders<Answer, C extends Weighted> = {
 // repeats, so testIdx is the key of an answer and its order. Of the rows of
 // one testIdx, which a retry with --retry-errors gives twice, the newest wins:
 // a row that is not an error, else the error rows, which must have the same
-// scores (latestResults of offers-evals' SOB summary, from promptfoo's
-// source). A failed call is a failed sample (ADR 0005): a row whose response
+// scores (promptfoo's own rule, read from its source). A failed call is a failed sample (ADR 0005): a row whose response
 // holds FailedCall's `failed` reason, or an error row that an afterEach hook
 // graded on the answer null, with the error of the row. An error row with no
 // named scores was neither retried nor graded, and is a RangeError.

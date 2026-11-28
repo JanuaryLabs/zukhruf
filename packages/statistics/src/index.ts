@@ -1,3 +1,4 @@
+export { BootstrapInterval } from './bootstrap/bootstrap-interval.ts';
 export { IidBootstrap } from './bootstrap/iid-bootstrap.ts';
 export { ConfidenceInterval } from './interval/confidence-interval.ts';
 export type { ConfidenceIntervalMethod } from './interval/confidence-interval-method.ts';

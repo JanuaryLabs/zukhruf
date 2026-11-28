@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 
 import { test } from '@zukhruf/parameterized-test';
+import { defaultRng } from '@zukhruf/random';
 import { Linear, PercentileInterval } from '@zukhruf/statistics';
 
 import { Bootstrap, Ratio, RunLog, type Sample, Table } from '../index.ts';
 import { render } from '../testing/render.ts';
 import { type Score, ValidityGap } from './index.ts';
+import { measure } from './part.ts';
 
 const info = { id: 'eval-1', label: 'model', createdAt: new Date(0) };
 
@@ -98,10 +100,11 @@ test('a sample whose gate gives no whole is not valid', () => {
     sample('b', { compliance: held, accuracy: new Ratio(2, 2) }),
   ]);
 
-  // The first test's gate has no whole, so the one resample of [a, a] gives
-  // 0, as Ratio.value does.
+  // The first test's gate has no whole, so the one resample of [a, a] has no
+  // value and the share has no interval (#6267), where Ratio.value would
+  // give it [0, 0].
   assert.deepEqual(texts(section).rows, [
-    ['valid', '1.000 [0.000, 0.000]', '—', '—'],
+    ['valid', '1.000', '—', '—'],
     ['accuracy', '0.750 [0.500, 0.500]', '1.000 [1.000, 1.000]', '0 of 1'],
   ]);
 });
@@ -269,4 +272,56 @@ test('a ValidityGap section with no valid answer renders as HTML and Markdown wi
       row: ['accuracy', '0.500 [0.500, 0.500]', '—', '0 of 0'],
     },
   );
+});
+
+test('a cell whose interval comes from fewer resamples than the bootstrap drew says how many it kept', () => {
+  const log = new RunLog(info, [
+    sample('a', { compliance: held, accuracy: new Ratio(1, 2) }),
+    // No whole for accuracy: a resample that draws only b has no value.
+    sample('b', { compliance: held, accuracy: new Ratio(0, 0) }),
+    sample('c', { compliance: failed, accuracy: new Ratio(2, 2) }),
+  ]);
+  const seeded = () => {
+    const generator = defaultRng(7);
+    return new Bootstrap({
+      nResamples: 200,
+      randomIndex: (n) => generator.integers(0, n, 1)[0] ?? Number.NaN,
+      interval: new PercentileInterval({
+        low: 0.025,
+        high: 0.975,
+        method: new Linear(),
+      }),
+    });
+  };
+  // The section draws the share, then accuracy over all answers, then over
+  // the valid ones; the share's gate has a whole on every test.
+  const expected = seeded();
+  const valid = log.samples.filter(({ test }) => test !== 'c');
+  const [share, all, validOnly] = [
+    measure(log, log.samples, 'compliance', expected),
+    measure(log, log.samples, 'accuracy', expected),
+    measure(log, valid, 'accuracy', expected),
+  ].map(({ value, interval }) => ({
+    value: value.toFixed(3),
+    low: interval?.low.toFixed(3),
+    high: interval?.high.toFixed(3),
+    resamples: interval?.resamples,
+  }));
+  assert.ok(share && all && validOnly);
+
+  const section = new ValidityGap(log, {
+    validity: 'compliance',
+    scores: [accuracy],
+    bootstrap: seeded(),
+  });
+
+  assert.deepEqual(texts(section).rows, [
+    ['valid', `${share.value} [${share.low}, ${share.high}]`, '—', '—'],
+    [
+      'accuracy',
+      `${all.value} [${all.low}, ${all.high}] from ${all.resamples} of 200 resamples`,
+      `${validOnly.value} [${validOnly.low}, ${validOnly.high}] from ${validOnly.resamples} of 200 resamples`,
+      '1 of 1',
+    ],
+  ]);
 });

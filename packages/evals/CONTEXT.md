@@ -98,7 +98,7 @@ The mean of the values of the answers, as scikit-learn's `average='samples'` tak
 _Avoid_: macro average (that is the mean over the classes)
 
 **Bootstrap interval**:
-The interval of a score of one run: many resamples draw the tests of the run again, with replacement (each test the mean of its epochs times its weight), `Run#total`, the ratio of sums of those test units, gives each resample a value (it equals `Totals` of the scorecards only when every test has the same number of epochs), and two quantiles of those values are its ends (ADR 0010).
+The interval of a score of one run: many resamples draw the tests of the run again, with replacement (each test the mean of its epochs times its weight), `Run#total`, the ratio of sums of those test units, gives each resample a value (it equals `Totals` of the scorecards only when every test has the same number of epochs), and two quantiles of those values are its ends (ADR 0010). A resample whose tests have no whole has no value and is left out; the interval says how many resamples it kept (#6267).
 
 **Run**:
 The scorecards that one model gives on many tests of one harness, each with its test id and its weight. A paired bootstrap reads two runs (ADR 0004).
@@ -125,7 +125,7 @@ For one name, the ratio of sums over the change run minus the ratio of sums over
 The confidence interval of the paired difference over the resamples, with the observed paired difference: `DifferenceInterval` of @zukhruf/statistics. The verdict is better when the whole interval is on the better side of 0, by the direction of the name, worse when it is on the worse side, and inconclusive when it holds 0 (ADR 0004).
 
 **Verdict**:
-The result of a paired bootstrap for one name: better, worse or inconclusive, with the paired difference, its difference interval, a p-value and the counts of the tests. The words better, worse and inconclusive are mteb's `ChangeVerdict.result`. The p-value has no correction: a caller that tests many names corrects it, such as with Holm.
+The result of a paired bootstrap for one name: better, worse or inconclusive, with the paired difference, its difference interval, a p-value and the counts of the tests; or untested, with the counts of the tests only, when no resample gives the name a whole in both runs (#6267). The words better, worse and inconclusive are mteb's `ChangeVerdict.result`. The p-value has no correction: a caller that tests many names corrects it, such as with Holm.
 
 **Improvements**, **regressions** and **ties**:
 The tests whose value is better, worse or the same in the change run, by the direction of the name. Braintrust's `summarize()` gives improvements and regressions. "Ties" is the label of this package.

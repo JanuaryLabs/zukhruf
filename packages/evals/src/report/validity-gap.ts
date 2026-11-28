@@ -7,7 +7,7 @@ import {
   type Section,
   Table,
 } from '../index.ts';
-import { withEnds } from './data-tables.ts';
+import { withKept } from './data-tables.ts';
 import { measure } from './part.ts';
 import type { Score } from './summary.ts';
 
@@ -83,16 +83,11 @@ export class ValidityGap<Answer, C> implements Section {
       new Table(
         ['', 'all answers', 'valid answers', 'wrong among valid'],
         [
-          [
-            plain('valid'),
-            plain(withEnds(share.value, share.ends)),
-            plain('—'),
-            plain('—'),
-          ],
+          [plain('valid'), plain(withKept(share)), plain('—'), plain('—')],
           ...rows.map((row) => [
             plain(row.name),
-            plain(withEnds(row.all.value, row.all.ends)),
-            plain(withEnds(row.valid.value, row.valid.ends)),
+            plain(withKept(row.all)),
+            plain(withKept(row.valid)),
             plain(`${row.wrong} of ${row.scored}`),
           ]),
         ],

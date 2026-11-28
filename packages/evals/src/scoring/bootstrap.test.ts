@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { defaultRng } from '@zukhruf/random';
 import {
   ConfidenceInterval,
   Linear,
@@ -27,7 +28,7 @@ test('a resample draws the tests of a run, not their epochs', () => {
   // The first unit is test a, the mean of its three epochs, drawn twice: 1/3.
   // Its first epoch, drawn four times as a unit of its own, would give 1.
   assert.deepEqual(
-    { low: interval.low, high: interval.high },
+    { low: interval?.low, high: interval?.high },
     { low: 1 / 3, high: 1 / 3 },
   );
 });
@@ -50,7 +51,7 @@ test('the epochs of a test reduce to the mean of their parts and their wholes', 
   // Pooling the epochs of a would give 2 / 5 = 0.4, and the mean of the
   // values of its epochs (0.5 over 1) would give 1.5 / 2 = 0.75.
   assert.deepEqual(
-    { low: interval.low, high: interval.high },
+    { low: interval?.low, high: interval?.high },
     { low: 0.5, high: 0.5 },
   );
 });
@@ -73,7 +74,7 @@ test('the statistic is the ratio of sums of the scored ratios, over as many draw
   // The resamples are [a, b], 60 / 66, and [a, a], 120 / 130. The mean of the
   // values would give 0.46 and 0.92; one draw for each resample, 0.92 and 0.92.
   assert.deepEqual(
-    { low: interval.low, high: interval.high },
+    { low: interval?.low, high: interval?.high },
     { low: 60 / 66, high: 120 / 130 },
   );
 });
@@ -93,7 +94,7 @@ test('the weight of the case of a test multiplies its ratio', () => {
 
   // a counts 3 times and b once: 3 / 4. Without the weights, 1 / 2.
   assert.deepEqual(
-    { low: interval.low, high: interval.high },
+    { low: interval?.low, high: interval?.high },
     { low: 0.75, high: 0.75 },
   );
 });
@@ -129,7 +130,7 @@ test('a test that does not give the name counts as Ratio(0, 0)', () => {
 
   // b adds nothing to the recall of a and b: 1 / 2. As Ratio(0, 1), 1 / 3.
   assert.deepEqual(
-    { low: interval.low, high: interval.high },
+    { low: interval?.low, high: interval?.high },
     { low: 0.5, high: 0.5 },
   );
 });
@@ -168,7 +169,7 @@ test('the interval method of the caller reads the statistics in the order of the
   // The resamples are [a, a], 120 / 130, then [a, b], 60 / 66. A minimum and
   // a maximum of its own would give them the other way round.
   assert.deepEqual(
-    { low: interval.low, high: interval.high },
+    { low: interval?.low, high: interval?.high },
     { low: 120 / 130, high: 60 / 66 },
   );
 });
@@ -184,4 +185,60 @@ test('the level of a bootstrap is the level of its interval method', () => {
   });
 
   assert.equal(bootstrap.level, 0.8);
+});
+
+test('a run where 1 of 10 tests has a whole gives its interval from the resamples that drew that test, and says how many there were', () => {
+  const run = new Run();
+  run.add('t0', { ratios: new Map([['recall', new Ratio(3, 4)]]) }, 1);
+  for (let index = 1; index < 10; index++)
+    run.add(`t${index}`, { ratios: new Map([['recall', new Ratio(0, 0)]]) }, 1);
+  const generator = defaultRng(42);
+  const bootstrap = new Bootstrap({
+    nResamples: 2000,
+    randomIndex: (n) => generator.integers(0, n, 1)[0] ?? Number.NaN,
+    interval: new PercentileInterval({
+      low: 0.025,
+      high: 0.975,
+      method: new Linear(),
+    }),
+  });
+  // The same generator again: the resamples whose 10 draws hold test t0.
+  const replay = defaultRng(42);
+  const drewT0 = Array.from({ length: 2000 }, () =>
+    Array.from(
+      { length: 10 },
+      () => replay.integers(0, 10, 1)[0] ?? Number.NaN,
+    ).includes(0),
+  ).filter(Boolean).length;
+
+  const interval = bootstrap.interval(run, 'recall');
+
+  // Each resample that drew t0 gives 3 / 4 however often it drew it; one
+  // that did not has no whole and no value, where Ratio.value would give 0.
+  assert.deepEqual(
+    {
+      low: interval?.low,
+      high: interval?.high,
+      resamples: interval?.resamples,
+      nResamples: interval?.nResamples,
+    },
+    { low: 0.75, high: 0.75, resamples: drewT0, nResamples: 2000 },
+  );
+  assert.ok(drewT0 > 0 && drewT0 < 2000);
+});
+
+test('a run where no resample draws a test with a whole gives an interval with no value', () => {
+  const run = new Run();
+  run.add('a', { ratios: new Map([['recall', new Ratio(0, 0)]]) }, 1);
+  run.add('b', { ratios: new Map([['recall', new Ratio(1, 1)]]) }, 1);
+  const bootstrap = new Bootstrap({
+    nResamples: 3,
+    // Each resample is [a, a].
+    randomIndex: () => 0,
+    interval: new PercentileInterval({ low: 0, high: 1, method: new Linear() }),
+  });
+
+  const interval = bootstrap.interval(run, 'recall');
+
+  assert.equal(interval, undefined);
 });

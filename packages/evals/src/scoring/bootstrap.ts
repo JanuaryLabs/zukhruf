@@ -1,5 +1,5 @@
 import {
-  type ConfidenceInterval,
+  type BootstrapInterval,
   type ConfidenceIntervalMethod,
   IidBootstrap,
 } from '@zukhruf/statistics';
@@ -13,10 +13,14 @@ import { type Run, runUnits } from './run.ts';
 // first add. A test is the mean of its epochs times the weight of its case,
 // and the statistic is the ratio of sums of those ratios: Run#total, and the
 // statistic of PairedBootstrap for one run. The scorer decides the average,
-// so the bootstrap never changes a ratio. The caller gives the random
-// generator, the number of resamples and the method of the interval, such as
-// SOB's (structured ADR 0010). The generator keeps its state between calls,
-// so the order of the calls is the order of the draws.
+// so the bootstrap never changes a ratio. A resample whose drawn tests have
+// no whole has no statistic, and the interval comes from the resamples that
+// have one, as R boot's boot.ci keeps only the finite statistics; it says
+// how many it kept, and has no value when no resample has one (#6267). The
+// caller gives the random generator, the number of resamples and the method
+// of the interval, such as SOB's (structured ADR 0010). The generator keeps
+// its state between calls, so the order of the calls is the order of the
+// draws.
 export class Bootstrap {
   readonly #bootstrap: IidBootstrap;
   readonly #interval: ConfidenceIntervalMethod;
@@ -39,10 +43,10 @@ export class Bootstrap {
     return this.#interval.level;
   }
 
-  interval(run: Run, name: string): ConfidenceInterval {
+  interval(run: Run, name: string): BootstrapInterval | undefined {
     return this.#bootstrap.interval(
       runUnits(run, name),
-      (resample: readonly Ratio[]) => RatioOfSums.of(resample).value,
+      (resample: readonly Ratio[]) => RatioOfSums.of(resample).ratio.quotient,
       this.#interval,
     );
   }

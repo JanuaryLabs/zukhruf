@@ -11,6 +11,7 @@ import {
   RunPair,
   type Sample,
   Table,
+  type TestedVerdict,
 } from '../index.ts';
 import { render } from '../testing/render.ts';
 import { type Score, Verdicts } from './index.ts';
@@ -54,6 +55,11 @@ const shapes = {
   falls: {
     a: [new Ratio(0, 1), new Ratio(1, 1)],
     b: [new Ratio(3, 3), new Ratio(0, 3)],
+  },
+  // No whole on a or b in either run, so no resample has a value: untested.
+  empty: {
+    a: [new Ratio(0, 0), new Ratio(0, 0)],
+    b: [new Ratio(0, 0), new Ratio(0, 0)],
   },
 } as const;
 
@@ -141,6 +147,11 @@ test('each row gives Run#total of each run and PairedBootstrap.verdict on the sa
     expected.verdict(baseline, change, name, { higherIsBetter: true }),
   );
   assert.ok(recall && precision && f1);
+  assert.ok(
+    recall.result !== 'untested' &&
+      precision.result !== 'untested' &&
+      f1.result !== 'untested',
+  );
   const [recallHolm, f1Holm] = new Holm().adjust([recall.p, f1.p]);
   const signed = (value: number) =>
     value.toLocaleString('en', {
@@ -150,7 +161,7 @@ test('each row gives Run#total of each run and PairedBootstrap.verdict on the sa
     });
   const row = (
     name: string,
-    { difference: { observed, low, high }, p }: typeof recall,
+    { difference: { observed, low, high }, p }: TestedVerdict,
     holm: string,
   ) => [
     name,
@@ -346,6 +357,33 @@ void test.each(
       claim:
         'No difference beyond chance on values_f1 (+0.500 [-1.000, +0.500]); of the other 1 score, after Holm, 0 better and 1 worse',
     },
+    {
+      name: 'an untested primary score, with no other score',
+      scores: { values_f1: 'empty' },
+      against: [0],
+      claim: 'values_f1 is untested: no resample gave it a whole in both runs',
+    },
+    {
+      name: 'an untested primary score, and two other scores of which one is untested',
+      scores: { values_f1: 'empty', recall: 'rises', precision: 'empty' },
+      against: [0, 0, 0],
+      claim:
+        'values_f1 is untested: no resample gave it a whole in both runs; of the other 2 scores, after Holm, 1 better, 0 worse and 1 untested',
+    },
+    {
+      name: 'a primary score better beyond chance, and one other score that is untested',
+      scores: { values_f1: 'rises', recall: 'empty' },
+      against: [0, 0],
+      claim:
+        'values_f1 is better beyond chance: +0.500 [+0.500, +0.500]; the other score is untested',
+    },
+    {
+      name: 'every score untested',
+      scores: { values_f1: 'empty', recall: 'empty', precision: 'empty' },
+      against: [0, 0, 0],
+      claim:
+        'values_f1 is untested: no resample gave it a whole in both runs; the other 2 scores are untested',
+    },
   ] as const,
   ({ name, scores, against, claim }) =>
     test(`the claim leads with the primary score: ${name}`, () => {
@@ -358,6 +396,40 @@ void test.each(
       assert.equal(section.claim, claim);
     }),
 );
+
+test('a score that no resample gives a whole is untested, with no total, difference or p, and Holm corrects only the scores that have a p', () => {
+  const section = new Verdicts(
+    pairOf({ primary: 'rises', empty: 'empty', recall: 'rises' }),
+    {
+      scores: [higher('primary'), higher('empty'), higher('recall')],
+      primary: 'primary',
+      // recall's p is 0.04: alone in the family it stays 0.04 after Holm,
+      // where a family of two would make it 0.08.
+      bootstrap: scripted(2, 0, 2),
+    },
+  );
+
+  assert.deepEqual(table(section).rows.slice(1), [
+    [
+      { text: 'empty', tone: 'neutral' },
+      { text: '—', tone: 'neutral' },
+      { text: '—', tone: 'neutral' },
+      { text: '—', tone: 'neutral' },
+      { text: '—', tone: 'neutral' },
+      { text: '—', tone: 'neutral' },
+      { text: 'untested', tone: 'neutral' },
+    ],
+    [
+      { text: 'recall', tone: 'neutral' },
+      { text: '0.250', tone: 'neutral' },
+      { text: '0.750', tone: 'neutral' },
+      { text: '+0.500 [+0.500, +0.500]', tone: 'neutral' },
+      { text: '0.040', tone: 'neutral' },
+      { text: '0.040', tone: 'neutral' },
+      { text: 'better', tone: 'good' },
+    ],
+  ]);
+});
 
 test('a primary score that is not one of the scores is a RangeError that names the scores', () => {
   assert.throws(
@@ -399,5 +471,35 @@ test('verdicts render as HTML and Markdown with their claim and with no NaN', ()
         nan: false,
       },
     },
+  );
+});
+
+test('a difference from fewer resamples than the bootstrap drew says how many it kept', () => {
+  const pair = new RunPair(
+    log('baseline', [
+      sample('a', { recall: new Ratio(0, 1) }),
+      sample('b', { recall: new Ratio(0, 0) }),
+    ]),
+    log('change', [
+      sample('a', { recall: new Ratio(1, 1) }),
+      sample('b', { recall: new Ratio(0, 0) }),
+    ]),
+  );
+  // [a, a], then [b, b], which has no whole in either run.
+  const draws = [0, 0, 1, 1];
+
+  const section = new Verdicts(pair, {
+    scores: [higher('recall')],
+    primary: 'recall',
+    bootstrap: new PairedBootstrap({
+      nResamples: 2,
+      randomIndex: () => draws.shift() ?? Number.NaN,
+      interval: percentile,
+    }),
+  });
+
+  assert.deepEqual(
+    texts(section).rows.map(([, , , difference]) => difference),
+    ['+1.000 [+1.000, +1.000] from 1 of 2 resamples'],
   );
 });

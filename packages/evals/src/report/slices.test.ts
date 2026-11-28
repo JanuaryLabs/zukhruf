@@ -99,7 +99,7 @@ test('each score cell is Run#total and Bootstrap.interval on the samples of its 
     return ['recall', 'precision'].map((name) => {
       const interval = expected.interval(run, name);
       const value = run.total(name).value;
-      return `${value.toFixed(3)} [${interval.low.toFixed(3)}, ${interval.high.toFixed(3)}]`;
+      return `${value.toFixed(3)} [${interval?.low.toFixed(3)}, ${interval?.high.toFixed(3)}]`;
     });
   };
   const empty = cells('empty');
@@ -411,4 +411,63 @@ test('a Slices section with a key where no sample gives the score renders as HTM
       empty: ['empty', '1', '—'],
     },
   );
+});
+
+test('a cell whose interval comes from fewer resamples than the bootstrap drew says how many it kept', () => {
+  const log = new RunLog(info, [
+    sample('a', { recall: new Ratio(1, 2) }),
+    // No whole for recall: a resample of offers that draws only b has no
+    // value.
+    sample('b', { recall: new Ratio(0, 0) }),
+    sample('c', { recall: new Ratio(3, 4) }, { page: 'other' }),
+    sample('d', { recall: new Ratio(1, 1) }, { page: 'other' }),
+  ]);
+  const seeded = () => {
+    const generator = defaultRng(7);
+    return new Bootstrap({
+      nResamples: 200,
+      randomIndex: (n) => generator.integers(0, n, 1)[0] ?? Number.NaN,
+      interval: new PercentileInterval({
+        low: 0.025,
+        high: 0.975,
+        method: new Linear(),
+      }),
+    });
+  };
+  // The section draws offers, then other.
+  const expected = seeded();
+  const [offers, other] = ['offers', 'other'].map((key) => {
+    const run = new RunLog(
+      info,
+      log.samples.filter((sample) => sample.metadata.page === key),
+    ).run();
+    const interval = expected.interval(run, 'recall');
+    return {
+      value: run.total('recall').value.toFixed(3),
+      low: interval?.low.toFixed(3),
+      high: interval?.high.toFixed(3),
+      resamples: interval?.resamples,
+    };
+  });
+  assert.ok(offers && other);
+
+  const slices = new Slices(log, {
+    scores: [{ name: 'recall', higherIsBetter: true }],
+    slices: [page],
+    bootstrap: seeded(),
+  });
+
+  assert.deepEqual(tables(slices), [
+    {
+      columns: ['page', 'tests', 'recall'],
+      rows: [
+        [
+          'offers',
+          '2',
+          `${offers.value} [${offers.low}, ${offers.high}] from ${offers.resamples} of 200 resamples`,
+        ],
+        ['other', '2', `${other.value} [${other.low}, ${other.high}]`],
+      ],
+    },
+  ]);
 });

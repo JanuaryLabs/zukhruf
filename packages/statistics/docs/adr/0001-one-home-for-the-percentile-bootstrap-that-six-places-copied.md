@@ -2,6 +2,8 @@
 
 Status: the private exception of this ADR ended on 2026-11-07. The package is public, because `@zukhruf/evals` is public and depends on it (workspace ADR 0001, rule 7: a zukhruf package is a dependency, not a peer; backlog #3888, Ezz: "Public").
 
+Status, 2026-11-28 (zukhruf #6267): a statistic can give `undefined` for a resample, where it has no value, such as a ratio of sums whose resample has no whole. `IidBootstrap` leaves that resample out of its distribution, as R boot's `boot.ci` keeps only the finite statistics (`fins <- seq_along(t)[is.finite(t)]`, `R/bootfuns.q` 920-926 of boot 1.3-32), and `interval` gives a `BootstrapInterval` with `resamples`, the count it kept (R's `R` after the filter), and `nResamples`, or `undefined` when no resample has a value. scipy 1.18.1 and arch 9.0.0 keep the NaN and give a NaN interval. The rule is a fact of bootstrapping, not of one caller, so it lives here: R boot applies it in the package. A statistic that always gives a number, such as the mean of mteb and relevance-filtering, gets the same distribution and an interval that is never `undefined`.
+
 Status, 2026-11-27 (#6243): `ConfidenceIntervalMethod` states its `level`, the share of the distribution that its interval covers, as `confidence_level` of `scipy.stats.bootstrap` and `conf` of R's `boot.ci`; `PercentileInterval`'s is `high` minus `low`. A report names the level of the interval it shows from it.
 
 An eval gives a mean, and the reader must know how sure it is. Six places in two repositories compute the same answer, a 95% percentile interval: they draw resamples of the data with replacement, compute a statistic of each, sort the results and read two quantiles (backlog #3819, 2026-11-06):

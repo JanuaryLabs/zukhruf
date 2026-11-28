@@ -71,6 +71,10 @@ for (const name of ['recall', 'precision']) {
   const verdict = paired.verdict(baseline, change, name, {
     higherIsBetter: true,
   });
+  if (verdict.result === 'untested') {
+    console.log(`${name}: untested`);
+    continue;
+  }
   const { observed, low, high } = verdict.difference;
   console.log(
     `${name}: ${verdict.result}, difference ${observed.toFixed(3)} in [${low.toFixed(3)}, ${high.toFixed(3)}], p ${verdict.p.toFixed(4)}`,

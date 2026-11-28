@@ -8,18 +8,34 @@ import { RatioOfSums } from '../aggregation/ratio-of-sums.ts';
 import type { Ratio } from '../aggregation/ratio.ts';
 import { type Run, pairTests, runTests, testUnit } from './run.ts';
 
-export type Verdict = {
+// The verdict of a name on two runs. A tested verdict reads the interval of
+// the differences of the kept resamples against 0; an untested verdict has
+// no difference, no interval and no p, since no resample, or not the two runs
+// themselves, gave the name a whole in both runs (#6267). Both count the
+// tests that the change improves, regresses and ties.
+export type Verdict = TestedVerdict | UntestedVerdict;
+
+type Counts = {
   readonly name: string;
-  readonly result: 'better' | 'worse' | 'inconclusive';
-  // change − baseline: its observed value and its interval.
-  readonly difference: DifferenceInterval;
-  // The two-sided percentile-bootstrap p-value, with no correction.
-  readonly p: number;
   readonly improvements: number;
   readonly regressions: number;
   readonly ties: number;
   readonly tests: number;
 };
+
+export type TestedVerdict = Counts & {
+  readonly result: 'better' | 'worse' | 'inconclusive';
+  // change − baseline: its observed value and its interval.
+  readonly difference: DifferenceInterval;
+  // The two-sided percentile-bootstrap p-value, with no correction.
+  readonly p: number;
+  // The resamples that the interval and p come from: those where both runs
+  // have a value, of the nResamples drawn.
+  readonly resamples: number;
+  readonly nResamples: number;
+};
+
+export type UntestedVerdict = Counts & { readonly result: 'untested' };
 
 // One test in the two runs: its unit in each run, the mean of its epochs
 // times the weight of its case (testUnit).
@@ -32,8 +48,13 @@ type Pair = {
 // resample draws as many tests as there are, with replacement, and gives the
 // ratio of sums of the name over the change minus the same over the baseline,
 // on the same tests. The verdict reads the interval of these differences
-// against 0, in the direction of the name (ADR 0004). The generator keeps its
-// state between calls, so the order of the calls is the order of the draws.
+// against 0, in the direction of the name (ADR 0004). A resample where either
+// run has no whole has no difference and is left out, as Bootstrap leaves it
+// out (#6267): the interval and p come from the resamples that have one, and
+// p divides by their count. Two runs with no such resample, or with no whole
+// in either run on all the tests, give an untested verdict. The generator
+// keeps its state between calls, so the order of the calls is the order of the
+// draws.
 export class PairedBootstrap {
   readonly #bootstrap: IidBootstrap;
   readonly #interval: ConfidenceIntervalMethod;
@@ -68,12 +89,6 @@ export class PairedBootstrap {
       pairs,
       PairedBootstrap.#difference,
     );
-    const interval = this.#interval.of(distribution);
-    const difference = new DifferenceInterval(
-      interval.low,
-      interval.high,
-      PairedBootstrap.#difference(pairs),
-    );
     const direction = higherIsBetter ? 1 : -1;
     const signs = joined.map((test) =>
       Math.sign(
@@ -81,23 +96,38 @@ export class PairedBootstrap {
           direction,
       ),
     );
-    return {
+    const counts: Counts = {
       name,
-      result: PairedBootstrap.#result(difference, higherIsBetter),
-      difference,
-      p: this.#p(distribution),
       improvements: signs.filter((sign) => sign > 0).length,
       regressions: signs.filter((sign) => sign < 0).length,
       ties: signs.filter((sign) => sign === 0).length,
       tests: pairs.length,
     };
+    const observed = PairedBootstrap.#difference(pairs);
+    if (observed === undefined || distribution.length === 0)
+      return { ...counts, result: 'untested' };
+    const interval = this.#interval.of(distribution);
+    const difference = new DifferenceInterval(
+      interval.low,
+      interval.high,
+      observed,
+    );
+    return {
+      ...counts,
+      result: PairedBootstrap.#result(difference, higherIsBetter),
+      difference,
+      p: PairedBootstrap.#p(distribution),
+      resamples: distribution.length,
+      nResamples: this.#nResamples,
+    };
   }
 
   // Two times the smaller share of the differences at or below 0 and at or
-  // above 0, at most 1, as mteb's pairedBootstrapTest gives it.
-  #p(distribution: readonly number[]): number {
+  // above 0, at most 1, as mteb's pairedBootstrapTest gives it. A share is of
+  // the resamples that have a difference.
+  static #p(distribution: readonly number[]): number {
     const share = (side: (value: number) => boolean) =>
-      distribution.filter(side).length / this.#nResamples;
+      distribution.filter(side).length / distribution.length;
     return Math.min(
       1,
       2 *
@@ -111,7 +141,7 @@ export class PairedBootstrap {
   static #result(
     difference: DifferenceInterval,
     higherIsBetter: boolean,
-  ): Verdict['result'] {
+  ): TestedVerdict['result'] {
     const [better, worse] = higherIsBetter
       ? [difference.isAbove(0), difference.isBelow(0)]
       : [difference.isBelow(0), difference.isAbove(0)];
@@ -120,11 +150,15 @@ export class PairedBootstrap {
     return 'inconclusive';
   }
 
-  static #difference(pairs: readonly Pair[]): number {
-    return (
-      RatioOfSums.of(pairs.map((pair) => pair.change)).value -
-      RatioOfSums.of(pairs.map((pair) => pair.baseline)).value
-    );
+  // No value when either run has no whole on the pairs.
+  static #difference(pairs: readonly Pair[]): number | undefined {
+    const change = RatioOfSums.of(pairs.map((pair) => pair.change)).ratio
+      .quotient;
+    const baseline = RatioOfSums.of(pairs.map((pair) => pair.baseline)).ratio
+      .quotient;
+    return change === undefined || baseline === undefined
+      ? undefined
+      : change - baseline;
   }
 
   // The tests of the two runs, paired by test id in the order of the

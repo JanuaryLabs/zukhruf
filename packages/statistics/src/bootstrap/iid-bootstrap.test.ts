@@ -63,14 +63,13 @@ void test.each([0, 1], (nResamples) =>
   }),
 );
 
-test('IidBootstrap.interval gives its method the statistic of every resample, in order, and returns the interval of that method', () => {
+test('IidBootstrap.interval gives its method the statistic of every resample, in order, and returns the ends of that method from all nResamples resamples', () => {
   const generator = scripted([0, 0, 1, 1, 0, 1, 1, 0]);
   const bootstrap = new IidBootstrap({
     nResamples: 4,
     randomIndex: generator.randomIndex,
   });
   const distributions: number[][] = [];
-  const marker = new ConfidenceInterval(-1, 1);
 
   const interval = bootstrap.interval(
     [3, 7],
@@ -79,11 +78,66 @@ test('IidBootstrap.interval gives its method the statistic of every resample, in
       level: 1,
       of: (distribution) => {
         distributions.push([...distribution]);
-        return marker;
+        return new ConfidenceInterval(-1, 1);
       },
     },
   );
 
   assert.deepEqual(distributions, [[33, 77, 37, 73]]);
-  assert.equal(interval, marker);
+  assert.deepEqual(
+    {
+      low: interval.low,
+      high: interval.high,
+      resamples: interval.resamples,
+      nResamples: interval.nResamples,
+    },
+    { low: -1, high: 1, resamples: 4, nResamples: 4 },
+  );
+});
+
+test('a resample whose statistic has no value is left out of the distribution, as R boot.ci keeps only the finite statistics, and the interval says how many resamples it kept', () => {
+  const generator = scripted([0, 0, 1, 1, 0, 1, 1, 0]);
+  const bootstrap = new IidBootstrap({
+    nResamples: 4,
+    randomIndex: generator.randomIndex,
+  });
+  const distributions: number[][] = [];
+  // The resamples are [3, 3], [7, 7], [3, 7] and [7, 3]; one with no 7 has no
+  // value.
+  const statistic = (resample: readonly number[]) =>
+    resample.includes(7) ? resample[0]! * 10 + resample[1]! : undefined;
+
+  const interval = bootstrap.interval([3, 7], statistic, {
+    level: 1,
+    of: (distribution) => {
+      distributions.push([...distribution]);
+      return new ConfidenceInterval(-1, 1);
+    },
+  });
+
+  assert.deepEqual(distributions, [[77, 37, 73]]);
+  assert.deepEqual(
+    { resamples: interval?.resamples, nResamples: interval?.nResamples },
+    { resamples: 3, nResamples: 4 },
+  );
+});
+
+test('when no resample has a value, the distribution is empty and the interval has no value, and the method is not called', () => {
+  const bootstrap = new IidBootstrap({ nResamples: 3, randomIndex: () => 0 });
+  const calls: number[][] = [];
+
+  const interval = bootstrap.interval(['a', 'b'], () => undefined, {
+    level: 1,
+    of: (distribution) => {
+      calls.push([...distribution]);
+      return new ConfidenceInterval(0, 0);
+    },
+  });
+
+  assert.equal(interval, undefined);
+  assert.deepEqual(calls, []);
+  assert.deepEqual(
+    bootstrap.distribution(['a', 'b'], () => undefined),
+    [],
+  );
 });

@@ -57,7 +57,7 @@ test('the run of a log holds the ratio, the epoch and the weight of each sample,
   // Ratio(3, 3), and the failed c is Ratio(0, 1): 3.5 / 6. As four tests of
   // weight 1 it would be 2 / 6; without c, 3.5 / 5.
   assert.deepEqual(
-    { low: interval.low, high: interval.high },
+    { low: interval?.low, high: interval?.high },
     { low: 3.5 / 6, high: 3.5 / 6 },
   );
 });

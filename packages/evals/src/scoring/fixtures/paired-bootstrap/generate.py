@@ -15,11 +15,16 @@
 # - the mean of the epochs of each test: Ratio(sum parts / k, sum wholes / k);
 # - the statistic: the ratio of sums of the change minus that of the baseline,
 #   each ratio times its weight. The sums are the built-in sum() of CPython,
-#   which Totals gives (RatioOfSums);
+#   which Totals gives (RatioOfSums). A ratio of sums with no whole has no
+#   value (None), so a statistic where either run has no whole has none;
 # - the resamples: numpy.random.default_rng(seed).integers(0, n, n) for each
 #   resample, in the order of the baseline's first adds;
-# - the interval: numpy.quantile(..., [0.025, 0.975], method="linear");
-# - p: min(1, 2 * min(share <= 0, share >= 0)), as mteb's pairedBootstrapTest;
+# - a resample whose statistic has no value is left out, as R boot's boot.ci
+#   keeps only the finite statistics (#6267), and "resamples" counts the kept;
+# - the interval: numpy.quantile(..., [0.025, 0.975], method="linear") of the
+#   kept statistics;
+# - p: min(1, 2 * min(share <= 0, share >= 0)), as mteb's pairedBootstrapTest,
+#   each share of the kept statistics;
 # - the counts by the sign of (change value - baseline value), with the
 #   direction.
 # Never edit expected.json by hand: run this script again.
@@ -48,14 +53,17 @@ def reduce(epochs, name):
     return sum(part for part, _ in ratios) / k, sum(whole for _, whole in ratios) / k
 
 
+# The value of a ratio of sums, and None when its whole is 0: a ratio of no
+# whole has no value (#6267), where value() gives SOB's 0.
 def ratio_of_sums(ratios):
-    return value(sum(part for part, _ in ratios), sum(whole for _, whole in ratios))
+    whole = sum(whole for _, whole in ratios)
+    return None if whole == 0 else sum(part for part, _ in ratios) / whole
 
 
 def statistic(pairs):
     change = ratio_of_sums([(part * weight, whole * weight) for _, (part, whole), weight in pairs])
     baseline = ratio_of_sums([(part * weight, whole * weight) for (part, whole), _, weight in pairs])
-    return change - baseline
+    return None if change is None or baseline is None else change - baseline
 
 
 def verdict(case, baseline_adds, change_adds, name, higher_is_better, seed):
@@ -76,11 +84,13 @@ def verdict(case, baseline_adds, change_adds, name, higher_is_better, seed):
     distribution = []
     for _ in range(N_RESAMPLES):
         indices = rng.integers(0, n, n)
-        distribution.append(statistic([pairs[int(index)] for index in indices]))
+        drawn = statistic([pairs[int(index)] for index in indices])
+        if drawn is not None:
+            distribution.append(drawn)
     low, high = np.quantile(np.array(distribution), [0.025, 0.975], method="linear")
     low, high = float(low), float(high)
-    share_at_or_below = sum(1 for item in distribution if item <= 0) / N_RESAMPLES
-    share_at_or_above = sum(1 for item in distribution if item >= 0) / N_RESAMPLES
+    share_at_or_below = sum(1 for item in distribution if item <= 0) / len(distribution)
+    share_at_or_above = sum(1 for item in distribution if item >= 0) / len(distribution)
     p = min(1.0, 2 * min(share_at_or_below, share_at_or_above))
     above, below = low > 0, high < 0
     better, worse = (above, below) if higher_is_better else (below, above)
@@ -98,6 +108,8 @@ def verdict(case, baseline_adds, change_adds, name, higher_is_better, seed):
             "result": "better" if better else "worse" if worse else "inconclusive",
             "difference": {"observed": statistic(pairs), "low": low, "high": high},
             "p": p,
+            "resamples": len(distribution),
+            "nResamples": N_RESAMPLES,
             "improvements": sum(1 for sign in signs if sign > 0),
             "regressions": sum(1 for sign in signs if sign < 0),
             "ties": sum(1 for sign in signs if sign == 0),

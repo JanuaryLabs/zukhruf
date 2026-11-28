@@ -1,4 +1,7 @@
-import type { ConfidenceInterval } from '@zukhruf/statistics';
+import type {
+  BootstrapInterval,
+  ConfidenceInterval,
+} from '@zukhruf/statistics';
 
 import {
   Bars,
@@ -12,7 +15,7 @@ import {
   Table,
   type Tone,
 } from '../index.ts';
-import { fixed, withEnds } from './data-tables.ts';
+import { fixed, kept, withEnds } from './data-tables.ts';
 import { type Numbers, measure } from './part.ts';
 
 // A bar names a slice and one of its keys when it holds on those samples
@@ -67,12 +70,14 @@ type Row =
       readonly label: string;
       readonly value: number;
       readonly ends: Ends;
+      readonly interval: BootstrapInterval | undefined;
     }
   | {
       readonly kind: 'barred';
       readonly label: string;
       readonly value: number;
       readonly ends: Ends;
+      readonly interval: BootstrapInterval | undefined;
       readonly bar: Barred;
     };
 
@@ -235,7 +240,9 @@ export class Summary<Answer, C> implements Section {
       rows.map((row) => [
         plain(row.label),
         plain(fixed(row.value)),
-        plain(`[${fixed(row.ends.low)}, ${fixed(row.ends.high)}]`),
+        plain(
+          `[${fixed(row.ends.low)}, ${fixed(row.ends.high)}]${kept(row.interval)}`,
+        ),
         ...(row.kind === 'barred'
           ? [
               plain(`${row.bar.sign} ${row.bar.at}`),

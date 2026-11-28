@@ -326,10 +326,16 @@ void test.each(modalities, ({ modality, oracle, scorers, categories }) =>
       });
       return Object.fromEntries(
         [...metrics, ...Object.keys(categories)].map((name) => {
-          const { low, high } = bootstrap.interval(run, name);
+          // No resample of the fixture has total weight 0 (its generator
+          // checks it), so each interval has a value, as SOB's does.
+          const interval = bootstrap.interval(run, name);
           return [
             name,
-            { mean: totals.get(name).value, ci95_low: low, ci95_high: high },
+            {
+              mean: totals.get(name).value,
+              ci95_low: interval?.low,
+              ci95_high: interval?.high,
+            },
           ];
         }),
       );

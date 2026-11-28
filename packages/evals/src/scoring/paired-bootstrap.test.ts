@@ -10,6 +10,7 @@ import {
   Recall,
   Run,
   ScorerSet,
+  type Verdict,
 } from '../index.ts';
 import { ConfigCase, TreeWalk, ValueMatches } from '../structured/index.ts';
 
@@ -57,6 +58,7 @@ test('a run takes the ratios of a scorecard alone, so a host that scores without
     higherIsBetter: true,
   });
 
+  assert.ok(verdict.result !== 'untested');
   assert.equal(verdict.difference.observed, 1);
   assert.equal(verdict.improvements, 2);
 });
@@ -142,5 +144,93 @@ test('the difference of a paired bootstrap weighs each test by the weight of its
 
   // Weighted: the change is (6 + 0) / (6 + 2) = 0.75 and the baseline
   // (3 + 2) / (6 + 2) = 0.625; with no weights it would be 0.5 − 0.75.
+  assert.ok(verdict.result !== 'untested');
   assert.equal(verdict.difference.observed, 0.125);
+});
+
+test('a resample where a run has no whole is left out of a paired bootstrap, and its p-value divides by the resamples that are left', () => {
+  const recall = (part: number, whole: number) => ({
+    ratios: new Map([['recall', new Ratio(part, whole)]]),
+  });
+  const baseline = new Run();
+  const change = new Run();
+  baseline.add('t1', recall(0, 0), 1);
+  change.add('t1', recall(0, 0), 1);
+  baseline.add('t2', recall(0, 1), 1);
+  change.add('t2', recall(1, 1), 1);
+  baseline.add('t3', recall(1, 1), 1);
+  change.add('t3', recall(0, 1), 1);
+  // [t1, t1, t1] has no whole; [t2, t2, t2] gives +1, [t3, t3, t3] −1 and
+  // [t2, t2, t1] +1.
+  const draws = [0, 0, 0, 1, 1, 1, 2, 2, 2, 1, 1, 0];
+  const bootstrap = new PairedBootstrap({
+    nResamples: 4,
+    randomIndex: () => draws.shift() ?? Number.NaN,
+    interval: new PercentileInterval({ low: 0, high: 1, method: new Linear() }),
+  });
+
+  const verdict = bootstrap.verdict(baseline, change, 'recall', {
+    higherIsBetter: true,
+  });
+
+  // 1 of the 3 kept differences is at or below 0 and 2 at or above it, so p
+  // is 2 · 1/3. Over all 4 resamples it would be 2 · 1/4.
+  assert.ok(verdict.result !== 'untested');
+  assert.deepEqual(
+    {
+      p: verdict.p,
+      resamples: verdict.resamples,
+      nResamples: verdict.nResamples,
+      low: verdict.difference.low,
+      high: verdict.difference.high,
+    },
+    { p: 2 / 3, resamples: 3, nResamples: 4, low: -1, high: 1 },
+  );
+});
+
+test('a paired bootstrap where no resample gives both runs a whole gives an untested verdict, with no difference, interval or p', () => {
+  const recall = (part: number, whole: number) => ({
+    ratios: new Map([['recall', new Ratio(part, whole)]]),
+  });
+  const baseline = new Run();
+  const change = new Run();
+  baseline.add('t1', recall(0, 0), 1);
+  change.add('t1', recall(0, 0), 1);
+  baseline.add('t2', recall(1, 1), 1);
+  change.add('t2', recall(0, 1), 1);
+  const bootstrap = new PairedBootstrap({
+    nResamples: 2,
+    // Each resample is [t1, t1].
+    randomIndex: () => 0,
+    interval: new PercentileInterval({ low: 0, high: 1, method: new Linear() }),
+  });
+
+  const verdict = bootstrap.verdict(baseline, change, 'recall', {
+    higherIsBetter: true,
+  });
+
+  assert.deepEqual(verdict, {
+    name: 'recall',
+    result: 'untested',
+    improvements: 0,
+    regressions: 1,
+    ties: 1,
+    tests: 2,
+  });
+});
+
+test('an untested verdict cannot hold a difference, an interval or a p', () => {
+  // typecheck proves this test: an @ts-expect-error that has no error fails it.
+  const untested: Verdict = {
+    name: 'recall',
+    result: 'untested',
+    improvements: 0,
+    regressions: 0,
+    ties: 0,
+    tests: 0,
+    // @ts-expect-error An untested verdict has no p.
+    p: 0.5,
+  };
+
+  assert.equal(untested.result, 'untested');
 });

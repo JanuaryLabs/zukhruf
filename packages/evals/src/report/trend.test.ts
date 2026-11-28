@@ -381,3 +381,33 @@ test('a Trend section with a gap renders as HTML and Markdown with its claim and
     },
   );
 });
+
+test('a point whose interval comes from fewer resamples than the bootstrap drew says how many it kept, in the table that the line carries', () => {
+  const run = log('eval-1', '2026-11-01', [
+    sample('a', { recall: new Ratio(1, 2) }),
+    // No whole for recall: a resample that draws only b has no value.
+    sample('b', { recall: new Ratio(0, 0) }),
+    sample('c', { recall: new Ratio(2, 3) }),
+  ]);
+  // Every resample of the one test of eval-2 has a whole, so its interval
+  // comes from all of them; the section draws eval-1 first.
+  const next = single('eval-2', '2026-11-02', { recall: new Ratio(1, 1) });
+  const { value, interval } = measure(run, run.samples, 'recall', seeded(7));
+
+  const { rows } = parts(
+    new Trend([run, next], {
+      scores: [higher('recall')],
+      bootstrap: seeded(7),
+    }),
+  );
+
+  assert.deepEqual(rows, [
+    [
+      'eval-1',
+      '2026-11-01',
+      '3',
+      `${value.toFixed(3)} [${interval?.low.toFixed(3)}, ${interval?.high.toFixed(3)}] from ${interval?.resamples} of 200 resamples`,
+    ],
+    ['eval-2', '2026-11-02', '1', '1.000 [1.000, 1.000]'],
+  ]);
+});

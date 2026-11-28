@@ -71,7 +71,7 @@ export function pairedBootstrapTest(
   }).distribution(differences, mean);
   const interval = PERCENTILES.of(means);
   const share = (side: (value: number) => boolean) =>
-    means.filter(side).length / replicates;
+    means.filter(side).length / means.length;
   const p = Math.min(
     1,
     2 *

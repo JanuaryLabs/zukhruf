@@ -78,7 +78,7 @@ test('the value and the interval are Run#total and Bootstrap.interval on a run o
 
   assert.deepEqual(numbers, {
     value: run.total('recall').value,
-    ends: { low: expected.low, high: expected.high },
+    ends: { low: expected?.low, high: expected?.high },
     interval: expected,
   });
 });

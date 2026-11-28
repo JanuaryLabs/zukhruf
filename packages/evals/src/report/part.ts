@@ -1,13 +1,14 @@
-import type { ConfidenceInterval } from '@zukhruf/statistics';
+import type { BootstrapInterval } from '@zukhruf/statistics';
 
 import { type Bootstrap, type Ends, RunLog, type Sample } from '../index.ts';
 
 // The value and the interval of one score on some samples; a score with no
-// value there has no interval.
+// value there has no interval, and the interval says how many resamples it
+// comes from.
 export type Numbers = {
   readonly value: number;
   readonly ends: Ends;
-  readonly interval: ConfidenceInterval | undefined;
+  readonly interval: BootstrapInterval | undefined;
 };
 
 const none: Numbers = {
@@ -24,7 +25,8 @@ const none: Numbers = {
 // it) and a score with no whole (Ratio.value gives 0 there, as SOB's ratio()
 // does, and a page would read that 0 as a score, report ADR 0002) have no
 // value, and the bootstrap is not called for them: its generator keeps its
-// state between calls, so an extra call would shift every later interval.
+// state between calls, so an extra call would shift every later interval. A
+// score with a value has no interval when no resample has a whole (#6267).
 export function measure<Answer, C>(
   log: RunLog<Answer, C>,
   samples: readonly Sample<Answer, C>[],
@@ -34,11 +36,15 @@ export function measure<Answer, C>(
   if (!samples.some(({ scorecard }) => scorecard.ratios.has(name))) return none;
   const run = new RunLog(log.info, samples).run();
   const total = run.total(name);
-  if (total.ratio.whole === 0) return none;
+  const value = total.ratio.quotient;
+  if (value === undefined) return none;
   const interval = bootstrap.interval(run, name);
   return {
-    value: total.value,
-    ends: { low: interval.low, high: interval.high },
+    value,
+    ends: {
+      low: interval?.low ?? Number.NaN,
+      high: interval?.high ?? Number.NaN,
+    },
     interval,
   };
 }

@@ -7,7 +7,7 @@ import {
   type Section,
   Table,
 } from '../index.ts';
-import { withEnds } from './data-tables.ts';
+import { withEnds, withKept } from './data-tables.ts';
 import { type Numbers, measure } from './part.ts';
 import type { Score } from './summary.ts';
 
@@ -84,7 +84,7 @@ export class Trend<Answer, C> implements Section {
             plain(id),
             plain(createdAt.toISOString().slice(0, 10)),
             plain(String(tests)),
-            ...numbers.map(({ value, ends }) => plain(withEnds(value, ends))),
+            ...numbers.map((entry) => plain(withKept(entry))),
           ]),
         ),
       }),

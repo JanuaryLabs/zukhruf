@@ -88,6 +88,7 @@ void test.each(cases, (fixture) =>
       { higherIsBetter: fixture.higherIsBetter },
     );
 
+    assert.ok(verdict.result !== 'untested');
     assert.deepEqual(
       {
         ...verdict,

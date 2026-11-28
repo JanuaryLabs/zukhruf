@@ -2,6 +2,8 @@
 
 Status: accepted (2026-11-27, #4234). Ezz first picked a statistic Strategy ("Statistic Strategy"), then asked why the two statistics clashed with a name of `./classification`, and left the call to me ("I trust your recommendation … follow the top performers"). The answer below removes the clash at its root, so this ADR has no Strategy.
 
+Status, 2026-11-28 (#6267, Ezz: rule B): a resample whose drawn tests have no whole has no statistic, where `Ratio.value` gave SOB's 0 and pulled the low end of the interval of a score with many whole-0 tests toward 0. The resample is left out, as R boot's `boot.ci` keeps only the finite statistics, the page's own rule of b56d661c (a ratio of no whole has no value) applied to each resample. `Bootstrap.interval` gives a `BootstrapInterval` of `@zukhruf/statistics` with the count it kept, or `undefined` when no resample has a value; `Ratio#quotient` is the value with no SOB 0. Measured on 2000 resamples of `default_rng(42)`: with 1 of 10 tests with a whole, [0.000, 0.750] became [0.750, 0.750] from 1271 resamples; on a group of 8 pages with 5 empty, [0.000, 1.000] became [0.833, 1.000] from 1949; on a whole run of 94 pages nothing changed. Neither golden fixture draws a whole-0 resample, so both keep their numbers.
+
 Status, 2026-11-27 (#6108): `Run#total(name)` gives the number that this interval belongs to: the ratio of sums of the units of the tests, each the mean of its epochs times its weight. `Run#total`, `Bootstrap` and `PairedBootstrap` compute the unit through one function of `run.ts`. `Totals` of all the scorecards equals `Run#total` only when each test has the same number of epochs.
 
 ## Context

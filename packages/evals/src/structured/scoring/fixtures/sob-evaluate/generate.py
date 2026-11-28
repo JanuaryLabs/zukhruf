@@ -58,6 +58,19 @@ with tempfile.TemporaryDirectory() as folder:
     sys.modules["evaluate"] = evaluate
     spec.loader.exec_module(evaluate)
 
+    # SOB's weighted_mean gives 0 for rows of total weight 0 (evaluate.py
+    # 740-744), where @zukhruf/evals gives a ratio of no whole no value and
+    # leaves such a bootstrap resample out (#6267). No resample of this
+    # fixture has total weight 0, so the two rules give the same summary; the
+    # check keeps it so.
+    sob_weighted_mean = evaluate.weighted_mean
+
+    def weighted_mean(rows, metric):
+        assert sum(row["difficulty_weight"] for row in rows) > 0, "a resample of total weight 0"
+        return sob_weighted_mean(rows, metric)
+
+    evaluate.weighted_mean = weighted_mean
+
     responses = here / "responses.jsonl"
 
     def scored(modality):

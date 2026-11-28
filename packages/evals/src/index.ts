@@ -23,7 +23,12 @@ export {
   type Sample,
   type Usage,
 } from './scoring/run-log.ts';
-export { PairedBootstrap, type Verdict } from './scoring/paired-bootstrap.ts';
+export {
+  PairedBootstrap,
+  type TestedVerdict,
+  type UntestedVerdict,
+  type Verdict,
+} from './scoring/paired-bootstrap.ts';
 export {
   Bars,
   type Cell,

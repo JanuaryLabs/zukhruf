@@ -16,7 +16,7 @@ Changes: the caller gives `higherIsBetter`. With `false`, better and worse chang
 
 **The p-value: `min(1, 2 · min(share ≤ 0, share ≥ 0))` → `PairedBootstrap.#p`.**
 Both take the same shares of the same resample differences.
-Changes: none.
+Changes: each share divides by the resamples that have a difference (#6267). mteb's statistic, a mean, always has one, so its `replicates` is that count, and its code divides by it.
 
 ### Not copied
 

@@ -2,6 +2,8 @@
 
 Status: accepted (2026-11-08, backlog #3870). Ezz decided the p-value, and he approved the design on 2026-11-08. The other decisions come from the review of the owner of `@zukhruf/statistics` (session statistics-bootstrap-consolidation, ADR 0001 of that package).
 
+Status, 2026-11-28 (#6267): a resample where either run has no whole on its tests has no difference and is left out, as `Bootstrap` leaves it out (ADR 0010). The interval and the p-value come from the kept resamples, and each share of the p-value divides by their count, not by `nResamples`. A tested `Verdict` gives `resamples` and `nResamples`. Two runs with no kept resample, or with no whole in a run on all the tests, give an untested verdict, which has no difference, no interval and no p: `Verdict` is a union of `TestedVerdict` and `UntestedVerdict`, so an untested verdict cannot hold them. `Verdicts` shows it as untested and leaves it out of the Holm family. mteb's `pairedBootstrapTest` takes the mean of its differences, which always has a value, so its count of replicates is the kept count.
+
 ## Context
 
 A caller runs one harness two times on the same tests: once with the baseline model and once with a change, such as another model. The caller then asks: "Is the change better than the baseline on this harness?" Two means side by side do not answer this question. A difference of 0.02 can be noise on 121 tests. promptfoo 0.125.1 shows the two means and has no interval or p-value (probe of 2026-11-06).

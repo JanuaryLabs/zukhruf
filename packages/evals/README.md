@@ -93,7 +93,7 @@ const pageKinds = new ScorerSet(
 
 `RatioOfSums.of(ratios)` adds a list of ratios in one call.
 
-`Bootstrap` gives the interval of one name over a `Run`, with `@zukhruf/statistics` (ADR 0010). Each resample draws as many tests as the run has, with replacement. A test is the mean of its epochs times the weight of its case, and the statistic is the ratio of sums of those units, `Run#total(name)`, the value to show beside the interval (it equals `Totals` of the scorecards only when every test has the same number of epochs): the scorer decides the average, and the bootstrap keeps it. You give it the number of resamples, the random index and the method of the interval.
+`Bootstrap` gives the interval of one name over a `Run`, with `@zukhruf/statistics` (ADR 0010). Each resample draws as many tests as the run has, with replacement. A test is the mean of its epochs times the weight of its case, and the statistic is the ratio of sums of those units, `Run#total(name)`, the value to show beside the interval (it equals `Totals` of the scorecards only when every test has the same number of epochs): the scorer decides the average, and the bootstrap keeps it. A resample whose tests have no whole has no statistic and is left out, as R boot's `boot.ci` keeps only the finite statistics: the interval is a `BootstrapInterval` of `@zukhruf/statistics` with `resamples`, the count it kept, and `undefined` when no resample has a value (#6267). You give it the number of resamples, the random index and the method of the interval.
 
 ```ts
 const run = new Run();
@@ -114,7 +114,7 @@ const bootstrap = new Bootstrap({
     method: new Linear(),
   }),
 });
-bootstrap.interval(run, 'values_recall'); // { low, high }
+bootstrap.interval(run, 'values_recall'); // { low, high, resamples, nResamples }
 ```
 
 A test with 3 epochs is one unit of a resample, so its answers are not counted as independent (Inspect AI reduces the epochs of a sample before its metrics). A name that no test gives throws an `Error`, and a run with no tests throws a `RangeError`.
@@ -123,7 +123,7 @@ A test with 3 epochs is one unit of a resample, so its answers are not counted a
 
 The package has `Run` and `PairedBootstrap` (backlog #3870, [ADR 0004](docs/adr/0004-two-runs-are-compared-by-a-paired-bootstrap-over-their-tests.md)).
 
-A caller runs one harness two times on the same tests: once with the baseline model and once with a change, such as another model. Two means side by side do not say if the change is better. `PairedBootstrap` gives one verdict for each name: better, worse or inconclusive, with the difference, its interval and a p-value.
+A caller runs one harness two times on the same tests: once with the baseline model and once with a change, such as another model. Two means side by side do not say if the change is better. `PairedBootstrap` gives one verdict for each name: better, worse or inconclusive, with the difference, its interval and a p-value; or untested, with none of them, when no resample gives the name a whole in both runs (#6267).
 
 ```ts
 import { PairedBootstrap, Run } from '@zukhruf/evals';
@@ -159,7 +159,8 @@ const paired = new PairedBootstrap({
 const recall = paired.verdict(baseline, change, 'recall', {
   higherIsBetter: true,
 });
-recall.result; // 'better', 'worse' or 'inconclusive'
+recall.result; // 'better', 'worse', 'inconclusive' or 'untested'
+if (recall.result === 'untested') throw new Error('no resample had a whole');
 recall.difference.observed; // Totals of the change minus Totals of the baseline
 recall.difference.low; // the 2.5% quantile of the resample differences
 recall.p; // the two-sided p-value of the same resamples
@@ -189,18 +190,29 @@ export class Run {
   ): void;
 }
 
-export type Verdict = {
+export type Verdict = TestedVerdict | UntestedVerdict;
+
+type Counts = {
   readonly name: string;
-  readonly result: 'better' | 'worse' | 'inconclusive';
-  /** change − baseline: its observed value and its interval. */
-  readonly difference: DifferenceInterval;
-  /** The two-sided percentile-bootstrap p-value, with no correction. */
-  readonly p: number;
   readonly improvements: number;
   readonly regressions: number;
   readonly ties: number;
   readonly tests: number;
 };
+
+export type TestedVerdict = Counts & {
+  readonly result: 'better' | 'worse' | 'inconclusive';
+  /** change − baseline: its observed value and its interval. */
+  readonly difference: DifferenceInterval;
+  /** The two-sided percentile-bootstrap p-value, with no correction. */
+  readonly p: number;
+  /** The resamples where both runs have a whole, of the nResamples drawn. */
+  readonly resamples: number;
+  readonly nResamples: number;
+};
+
+/** No resample, or not the two runs themselves, gave the name a whole in both runs: no difference, no interval, no p. */
+export type UntestedVerdict = Counts & { readonly result: 'untested' };
 
 /** The paired bootstrap of two runs on the same tests (Koehn 2004). */
 export class PairedBootstrap {
@@ -219,16 +231,16 @@ export class PairedBootstrap {
 }
 ```
 
-| Call                                        | What it does underneath                                                                                                                                                                                                                |
-| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `run.add(testId, scorecard, weight)`        | Keeps the scorecard as one epoch of the test. The weight belongs to the case, so another weight for the same test id throws.                                                                                                           |
-| `paired.verdict(baseline, change, …)`: join | Pairs the tests by test id, in the order in which the baseline run first got them. A test id in one run only throws, with each such id, as mteb's `pairedBootstrapTest` does. A test whose weight differs between the two runs throws. |
-| reduce                                      | Takes the mean of the epochs of each test, name by name: Ratio(sum of the parts / k, sum of the wholes / k) for k epochs (Miller 2024, §3.1). A scorecard without the name counts as Ratio(0, 0), as in `Totals`.                      |
-| resample                                    | `IidBootstrap` of `@zukhruf/statistics` draws the pairs of tests `nResamples` times. Each resample takes one `randomIndex` for each test.                                                                                              |
-| statistic                                   | On the same resampled tests: the ratio of sums of the name over the change, minus the same over the baseline, with each weight (Koehn 2004). `difference.observed` is the same statistic on all the tests.                             |
-| interval and verdict                        | The `ConfidenceIntervalMethod` gives the interval. With `higherIsBetter: true`, `isAbove(0)` is better and `isBelow(0)` is worse. With `false`, the two change places. Else the verdict is inconclusive.                               |
-| p                                           | Two times the smaller share of the resample differences that are at or below 0 and at or above 0, at most 1, as mteb's `pairedBootstrapTest` gives it. The caller applies a correction, such as Holm.                                  |
-| counts                                      | Counts the tests by the sign of (change value − baseline value), with the direction: improvements, regressions and ties.                                                                                                               |
+| Call                                        | What it does underneath                                                                                                                                                                                                                                                                                                                               |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `run.add(testId, scorecard, weight)`        | Keeps the scorecard as one epoch of the test. The weight belongs to the case, so another weight for the same test id throws.                                                                                                                                                                                                                          |
+| `paired.verdict(baseline, change, …)`: join | Pairs the tests by test id, in the order in which the baseline run first got them. A test id in one run only throws, with each such id, as mteb's `pairedBootstrapTest` does. A test whose weight differs between the two runs throws.                                                                                                                |
+| reduce                                      | Takes the mean of the epochs of each test, name by name: Ratio(sum of the parts / k, sum of the wholes / k) for k epochs (Miller 2024, §3.1). A scorecard without the name counts as Ratio(0, 0), as in `Totals`.                                                                                                                                     |
+| resample                                    | `IidBootstrap` of `@zukhruf/statistics` draws the pairs of tests `nResamples` times. Each resample takes one `randomIndex` for each test.                                                                                                                                                                                                             |
+| statistic                                   | On the same resampled tests: the ratio of sums of the name over the change, minus the same over the baseline, with each weight (Koehn 2004). `difference.observed` is the same statistic on all the tests.                                                                                                                                            |
+| interval and verdict                        | The `ConfidenceIntervalMethod` gives the interval of the resamples where both runs have a whole. With `higherIsBetter: true`, `isAbove(0)` is better and `isBelow(0)` is worse. With `false`, the two change places. Else the verdict is inconclusive. With no such resample, or no whole in a run on all the tests, the verdict is untested (#6267). |
+| p                                           | Two times the smaller share of the resample differences that are at or below 0 and at or above 0, at most 1, of the resamples where both runs have a whole (`resamples` of `nResamples`; #6267), as mteb's `pairedBootstrapTest` gives it. The caller applies a correction, such as Holm.                                                             |
+| counts                                      | Counts the tests by the sign of (change value − baseline value), with the direction: improvements, regressions and ties.                                                                                                                                                                                                                              |
 
 `Bootstrap` and `PairedBootstrap` use one statistic, the ratio of sums of `Run#total` over the units of the tests of their runs: `Bootstrap` for one run, `PairedBootstrap` for the difference of two (ADR 0004, ADR 0010). So the interval of `Bootstrap` is the interval of `Run#total`, which equals the number of `Totals` when each test has the same number of epochs, and the interval of `PairedBootstrap` is the interval of its observed difference.
 
@@ -491,6 +503,8 @@ export class Ratio {
   readonly part: number;
   readonly whole: number;
   get value(): number;
+  /** part / whole, and undefined when the whole is 0: a ratio of no whole has no value. */
+  get quotient(): number | undefined;
   times(weight: number): Ratio;
 }
 
@@ -685,7 +699,8 @@ export class Bootstrap {
   });
   /** The level of its interval method, such as 0.95. */
   get level(): number;
-  interval(run: Run, name: string): ConfidenceInterval;
+  /** From the resamples whose tests have a whole, with their count; undefined when none has one. */
+  interval(run: Run, name: string): BootstrapInterval | undefined;
 }
 /** Columns and rows of cells, each a text with its tone (ADR 0008). */
 export class Table {

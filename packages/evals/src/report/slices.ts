@@ -7,7 +7,7 @@ import {
   type Section,
   Table,
 } from '../index.ts';
-import { fixed, withEnds } from './data-tables.ts';
+import { fixed, withEnds, withKept } from './data-tables.ts';
 import { measure } from './part.ts';
 import type { Score, Slice } from './summary.ts';
 
@@ -91,9 +91,7 @@ export class Slices<Answer, C> implements Section {
           rows.map((row) => [
             plain(row.key),
             plain(String(row.tests)),
-            ...row.scores.map(({ value, ends }) =>
-              plain(withEnds(value, ends)),
-            ),
+            ...row.scores.map((numbers) => plain(withKept(numbers))),
           ]),
         ),
     );

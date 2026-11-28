@@ -14,6 +14,13 @@ export class Ratio {
     return this.whole === 0 ? 0 : this.part / this.whole;
   }
 
+  // The part divided by the whole, and no value when the whole is 0: a ratio
+  // of no whole has no value, so a page shows none and a bootstrap leaves out
+  // a resample with none (#6267). value gives SOB's 0 there.
+  get quotient(): number | undefined {
+    return this.whole === 0 ? undefined : this.part / this.whole;
+  }
+
   // Ratio(value, 1).times(weight) is Ratio(value × weight, weight): the term
   // of a weighted mean.
   times(weight: number): Ratio {

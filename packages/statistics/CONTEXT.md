@@ -26,7 +26,7 @@ The bootstrap of independent items: each resample draws its items from all the i
 The number that a caller computes from the items of one resample, such as their mean.
 
 **Bootstrap distribution**:
-The statistic of each resample.
+The statistic of each resample that has one. A resample whose statistic has no value, such as a ratio of sums with no whole, is left out, as R boot's `boot.ci` keeps only the finite statistics, and the interval says how many resamples it kept.
 
 **Random index**:
 An index from 0 to n − 1 that the caller's random generator gives. One random index picks one item of a resample.

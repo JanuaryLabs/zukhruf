@@ -348,7 +348,7 @@ test('the ratio of sums of the samples is the number that promptfoo gives the ru
   assert.ok(prompt);
   // a states 1 of 2 values and b none of 3: 1 / 5.
   assert.deepEqual(
-    [interval.low, interval.high],
+    [interval?.low, interval?.high],
     [
       prompt.metrics.namedScores['recall'] ?? Number.NaN,
       prompt.metrics.namedScores['recall'] ?? Number.NaN,
@@ -357,7 +357,7 @@ test('the ratio of sums of the samples is the number that promptfoo gives the ru
         score / (prompt.metrics.namedScoreWeights['recall'] ?? Number.NaN),
     ),
   );
-  assert.equal(interval.low, 1 / 5);
+  assert.equal(interval?.low, 1 / 5);
 });
 
 test('the rows of two prompts are refused, since a run of two providers is two logs', async () => {

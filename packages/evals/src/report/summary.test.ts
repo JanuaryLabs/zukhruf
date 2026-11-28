@@ -97,7 +97,7 @@ test('the value and the interval of each score are Run#total and Bootstrap.inter
     const interval = expected.interval(run, name);
     return {
       value: run.total(name).value,
-      ends: { low: interval.low, high: interval.high },
+      ends: { low: interval?.low, high: interval?.high },
     };
   };
   const recall = numbers('recall');
@@ -147,6 +147,27 @@ test('the interval column names the level of the interval method of the bootstra
     'bar',
     'verdict',
   ]);
+});
+
+test('an interval from fewer resamples than the bootstrap drew says how many it kept, in the table that the bars carry', () => {
+  const log = new RunLog(info, [
+    sample('a', { recall: new Ratio(3, 4) }),
+    sample('b', { recall: new Ratio(0, 0) }),
+  ]);
+
+  const { table } = parts(
+    new Summary(log, {
+      scores: [{ name: 'recall', higherIsBetter: true }],
+      slices: [],
+      // [a, a], [b, b] and [a, b]: [b, b] has no whole and no value.
+      bootstrap: scripted(3, [0, 0, 1, 1, 0, 1]),
+    }),
+  );
+
+  assert.deepEqual(
+    table.rows.map((cells) => cells.map(({ text }) => text)),
+    [['recall', '0.750', '[0.750, 0.750] from 2 of 3 resamples', '', '']],
+  );
 });
 
 void test.each(
