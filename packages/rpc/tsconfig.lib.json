@@ -16,6 +16,9 @@
     },
     {
       "path": "../process/tsconfig.lib.json"
+    },
+    {
+      "path": "../parameterized-test/tsconfig.lib.json"
     }
   ]
 }

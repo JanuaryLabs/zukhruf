@@ -122,7 +122,7 @@ A call holds the link from its add until it is taken, so the process exits only 
 
 ## Carry errors across
 
-`new ErrorCodec(classes)` encodes a thrown value as `{ name, message, stack, fields, cause }`, and rebuilds it on the other end. `structuredClone` and `v8.serialize` rebuild every error as its native base class and drop own fields such as `code`. The codec rebuilds an error of a listed class, or of a native class (`Error`, `TypeError`, `RangeError` and the others that HTML's structured clone keeps), as an instance of that class with the peer's message, stack, cause and own fields. It does not run the class's constructor. An error of a class that the codec does not list arrives as a `ServerError` with the peer's name, message and fields. A thrown value that is not an error arrives as it is.
+`new ErrorCodec(classes)` encodes a thrown value as `{ name, message, stack, fields, cause }`, a `DOMException` as `{ domException: { name, message, stack, cause } }`, and rebuilds it on the other end. `structuredClone` and `v8.serialize` rebuild every error as its native base class and drop own fields such as `code`. The codec rebuilds an error of a listed class, or of a native class (`Error`, `TypeError`, `RangeError` and the others that HTML's structured clone keeps), as an instance of that class with the peer's message, stack, cause and own fields. It does not run the class's constructor. A `DOMException`, such as the `AbortError` of an aborted signal, arrives as a `DOMException` with its name, so with its `code`, and with its message, stack and cause, as the structured clone gives it; a subclass arrives as a plain `DOMException`, without its own fields. An error of a class that the codec does not list arrives as a `ServerError` with the peer's name, message and fields. A thrown value that is not an error arrives as it is.
 
 ## Share a channel with the application
 
@@ -167,6 +167,7 @@ A call holds the link from its add until it is taken, so the process exits only 
 | A remote error                  | Go `rpc.ServerError`; StreamJsonRpc `RemoteInvocationException`                                                                         |
 | The message shape               | [JSON-RPC 2.0](https://www.jsonrpc.org/specification), sections 4 and 5                                                                 |
 | The errors that survive a clone | HTML [structured clone](https://html.spec.whatwg.org/multipage/structured-data.html#structuredserializeinternal) of `[[ErrorData]]`     |
+| A `DOMException` that crosses | WebIDL [DOMException serialization steps](https://webidl.spec.whatwg.org/#idl-DOMException) |
 
 comlink 4.4.2, birpc 4.2.0 and vscode-jsonrpc 10.0.2 were probed on Node 26.13.1 (#4984, paper v2): each leaves a call pending after its thread exits, and each loses the `code` of a thrown error.
 
@@ -225,6 +226,11 @@ export class ErrorCodec {
   encode(reason: unknown): EncodedReason;
   decode(encoded: EncodedReason): unknown;
 }
+export type EncodedReason = EncodedError | EncodedDOMException | EncodedValue;
+export interface EncodedDOMException {
+  domException: { name: string; message: string; stack: string | undefined; cause?: EncodedReason };
+}
+export function isEncodedReason(value: unknown): value is EncodedReason;
 ````
 
 ## Documentation

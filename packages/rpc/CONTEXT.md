@@ -41,5 +41,5 @@ A function that a client gives for the answer of each method, and a server for t
 _Avoid_: Validator, schema, guard
 
 **Codec**:
-An `ErrorCodec`: it turns a thrown value into data that crosses, and back, as an instance of a listed or native class.
+An `ErrorCodec`: it turns a thrown value into data that crosses, and back, as an instance of a listed or native class, or as a `DOMException`.
 _Avoid_: Serializer, transformer

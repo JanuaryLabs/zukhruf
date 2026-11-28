@@ -396,7 +396,6 @@ describe('SqliteJobQueueThread', () => {
           message: Reflect.get(Object(reason), 'message'),
         }),
         expected: { message: 'This operation was aborted' },
-        todo: undefined,
       },
       {
         claim:
@@ -406,15 +405,10 @@ describe('SqliteJobQueueThread', () => {
           name: Reflect.get(Object(reason), 'name'),
         }),
         expected: { domException: true, name: 'AbortError' },
-        // @zukhruf/rpc's ErrorCodec encodes a DOMException as an error of the
-        // class 'DOMException', and its name is a getter of the prototype, so
-        // it arrives as a ServerError named 'DOMException' (reported in #4984
-        // step 2).
-        todo: '#4984 ErrorCodec loses the name of a DOMException',
       },
     ],
-    ({ claim, reasonOf, expected, todo }) =>
-      it(`when the engine gives up on a job, ${claim}`, { todo }, async (t) => {
+    ({ claim, reasonOf, expected }) =>
+      it(`when the engine gives up on a job, ${claim}`, async (t) => {
         // Arrange: the job may run for a second of the clock.
         await using dir = await new TemporaryFiles().directory('sqlite-queue-');
         const clock = new TestClock('2026-01-01T00:00:00.000Z');

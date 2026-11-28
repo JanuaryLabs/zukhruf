@@ -35,11 +35,13 @@ export {
 export { type Connector } from './connection/connector.ts';
 export { ConnectionLostError } from './error/connection-lost-error.ts';
 export {
+  type EncodedDOMException,
   type EncodedError,
   type EncodedReason,
   type EncodedValue,
   type ErrorClass,
   ErrorCodec,
+  isEncodedReason,
 } from './error/error-codec.ts';
 export { ServerError } from './error/server-error.ts';
 export { ServerWarning } from './error/server-warning.ts';

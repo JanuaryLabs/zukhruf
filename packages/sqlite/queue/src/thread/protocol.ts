@@ -10,7 +10,7 @@ import type {
   WorkOptions,
 } from 'pg-boss';
 
-import { type EncodedReason, ErrorCodec } from '@zukhruf/rpc';
+import { type EncodedReason, ErrorCodec, isEncodedReason } from '@zukhruf/rpc';
 import {
   DeniedError,
   MissingError,
@@ -176,9 +176,6 @@ export const threadParams = {
     params: readonly unknown[],
   ) => params is Parameters<ThreadMethods[M]>;
 };
-
-const isEncodedReason = (value: unknown): value is EncodedReason =>
-  isRecord(value) && ('value' in value || isString(value.name));
 
 /** The checks of what reaches the host. */
 export const hostParams = {

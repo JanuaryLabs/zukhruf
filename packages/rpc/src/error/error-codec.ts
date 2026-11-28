@@ -20,7 +20,24 @@ export interface EncodedValue {
   value: unknown;
 }
 
-export type EncodedReason = EncodedError | EncodedValue;
+/**
+ * A `DOMException` as it crosses: its name, which sets its `code`, its text
+ * and its cause. WebIDL serializes a DOMException by its name, message and
+ * stack, and so does the codec, with the cause, which the codec keeps for
+ * every error. A subclass crosses as a plain DOMException, as WebIDL's steps
+ * give it, and the own fields of a subclass, such as those of
+ * `QuotaExceededError`, stay behind.
+ */
+export interface EncodedDOMException {
+  domException: {
+    name: string;
+    message: string;
+    stack: string | undefined;
+    cause?: EncodedReason;
+  };
+}
+
+export type EncodedReason = EncodedError | EncodedDOMException | EncodedValue;
 
 /**
  * The native error classes, which the structured clone of HTML keeps by name
@@ -47,8 +64,9 @@ const carried = new Set(['message', 'stack', 'cause']);
  * them. It rebuilds an error of a listed class, or of a native class, as an
  * instance of that class, with the peer's message, stack, cause and own
  * fields. It never runs the class's constructor, so a constructor's arguments
- * and side effects do not matter. An error of any other class arrives as a
- * `ServerError` that keeps the peer's name and fields.
+ * and side effects do not matter. A `DOMException` arrives as a
+ * `DOMException` with its name, so its `code` too. An error of any other class
+ * arrives as a `ServerError` that keeps the peer's name and fields.
  */
 export class ErrorCodec {
   readonly #classes = new Map<string, ErrorClass>();
@@ -68,6 +86,19 @@ export class ErrorCodec {
   }
 
   encode(reason: unknown): EncodedReason {
+    if (isDOMException(reason)) {
+      const encoded: EncodedDOMException = {
+        domException: {
+          name: reason.name,
+          message: reason.message,
+          stack: reason.stack,
+        },
+      };
+      if (Object.hasOwn(reason, 'cause')) {
+        encoded.domException.cause = this.encode(reason.cause);
+      }
+      return encoded;
+    }
     if (!Error.isError(reason)) return { value: reason };
     const fields: Record<string, unknown> = {};
     for (const key of Object.getOwnPropertyNames(reason)) {
@@ -87,6 +118,15 @@ export class ErrorCodec {
 
   decode(encoded: EncodedReason): unknown {
     if ('value' in encoded) return encoded.value;
+    if ('domException' in encoded) {
+      const { name, message, stack, cause } = encoded.domException;
+      const error = new DOMException(
+        message,
+        cause ? { name, cause: this.decode(cause) } : { name },
+      );
+      define(error, 'stack', stack, false);
+      return error;
+    }
     const known = this.#classes.get(encoded.name);
     const error: Error = known
       ? Reflect.construct(nativeBaseOf(known), [encoded.message], known)
@@ -106,6 +146,17 @@ export class ErrorCodec {
 export function isEncodedReason(value: unknown): value is EncodedReason {
   if (!isRecord(value)) return false;
   if (Object.hasOwn(value, 'value')) return true;
+  if (Object.hasOwn(value, 'domException')) {
+    const { domException } = value;
+    return (
+      isRecord(domException) &&
+      typeof domException.name === 'string' &&
+      typeof domException.message === 'string' &&
+      (domException.stack === undefined ||
+        typeof domException.stack === 'string') &&
+      (domException.cause === undefined || isEncodedReason(domException.cause))
+    );
+  }
   return (
     typeof value.name === 'string' &&
     typeof value.message === 'string' &&
@@ -113,6 +164,22 @@ export function isEncodedReason(value: unknown): value is EncodedReason {
     isRecord(value.fields) &&
     (value.cause === undefined || isEncodedReason(value.cause))
   );
+}
+
+/**
+ * Whether `value` is a `DOMException`, by its brand: the getter of `name`
+ * refuses a receiver that is no DOMException (WebIDL, "attribute getter"),
+ * also an object made from its prototype, which `instanceof` takes. A
+ * DOMException is a native error too, so this is checked before the error.
+ */
+function isDOMException(value: unknown): value is DOMException {
+  try {
+    Reflect.get(DOMException.prototype, 'name', value);
+    return true;
+  } catch (refusal) {
+    if (refusal instanceof TypeError) return false;
+    throw refusal;
+  }
 }
 
 /** The name of the error's own class, or its `name` when its class has none. */
