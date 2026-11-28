@@ -122,17 +122,29 @@ async function sessionsAfterTheHostIsDisposed(
 }
 
 test("a disposed PostgresStore case host leaves no session of its pool on the server, so the fixture's drop cannot end a connection the pool still owns", async () => {
-  // Arrange: the case of the shared store suites. A session left behind is a race, so the cycle runs many times.
-  const cycles = 25;
-  for (let cycle = 1; cycle <= cycles; cycle++) {
-    // Act
-    const sessions = await sessionsAfterTheHostIsDisposed(postgresSubject);
+  // Arrange: the case of the shared store suites. A session left behind is a
+  // race, so the cycle runs 25 times, in 5 lanes at once: each cycle counts
+  // the sessions of its own database, and 5 lanes keep about 35 of the shared
+  // server's 100 connections in use.
+  const lanes = 5;
+  const cyclesOfLane = 5;
 
-    // Assert
-    assert.equal(
-      sessions,
-      0,
-      `Cycle ${cycle} of ${cycles}: ${sessions} session(s) of the disposed host's pool were still on the server`,
-    );
-  }
+  // Act
+  const sessions = (
+    await Promise.all(
+      Array.from({ length: lanes }, async () => {
+        const counts: number[] = [];
+        for (let cycle = 0; cycle < cyclesOfLane; cycle++)
+          counts.push(await sessionsAfterTheHostIsDisposed(postgresSubject));
+        return counts;
+      }),
+    )
+  ).flat();
+
+  // Assert
+  assert.deepEqual(
+    sessions,
+    sessions.map(() => 0),
+    "Each cycle's count of the sessions of the disposed host's pool that were still on the server",
+  );
 });
