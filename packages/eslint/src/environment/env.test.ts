@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { availableParallelism } from 'node:os';
+import { describe, test } from 'node:test';
 
 import { fixtureWorkspace } from '../testing/fixture-workspace.ts';
 import { fixtureConfig, lint } from '../testing/run-eslint.ts';
@@ -13,84 +14,88 @@ const tsconfig = JSON.stringify({
 
 const RULE = 'zukhruf/no-undeclared-process-env';
 
-test('zukhruf/env does not check a tool config file, which runs at build time without the startup schema', async () => {
-  // Arrange
-  await using workspace = await fixtureWorkspace({
-    'nx.json': '{}',
-    'tsconfig.json': tsconfig,
-    'eslint.config.mjs': fixtureConfig(`{
+// Each test starts processes of its own over a workspace of its own, so the
+// tests run at the same time, as many as this machine's processors.
+describe('env', { concurrency: availableParallelism() }, () => {
+  test('zukhruf/env does not check a tool config file, which runs at build time without the startup schema', async () => {
+    // Arrange
+    await using workspace = await fixtureWorkspace({
+      'nx.json': '{}',
+      'tsconfig.json': tsconfig,
+      'eslint.config.mjs': fixtureConfig(`{
       plugins: { zukhruf },
       extends: ['zukhruf/base', 'zukhruf/env'],
     }`),
-    'src/startup.ts': 'const env = z.object({ PORT: z.string() });\n',
-    'src/server.ts': 'export const secret = process.env.SECRET;\n',
-    'vite.config.ts': 'export const port = process.env.VITE_PORT;\n',
+      'src/startup.ts': 'const env = z.object({ PORT: z.string() });\n',
+      'src/server.ts': 'export const secret = process.env.SECRET;\n',
+      'vite.config.ts': 'export const port = process.env.VITE_PORT;\n',
+    });
+
+    // Act
+    const findings = await lint(workspace.root, ['.']);
+
+    // Assert
+    const envFindings = findings.filter(({ ruleId }) => ruleId === RULE);
+    assert.deepEqual(
+      envFindings.map(({ file }) => file),
+      [workspace.path('src/server.ts')],
+    );
   });
 
-  // Act
-  const findings = await lint(workspace.root, ['.']);
-
-  // Assert
-  const envFindings = findings.filter(({ ruleId }) => ruleId === RULE);
-  assert.deepEqual(
-    envFindings.map(({ file }) => file),
-    [workspace.path('src/server.ts')],
-  );
-});
-
-test('zukhruf/env with settings.env.startupFile does not check test files', async () => {
-  // Arrange: a repo whose startup file is not src/startup.ts.
-  await using workspace = await fixtureWorkspace({
-    'nx.json': '{}',
-    'tsconfig.json': tsconfig,
-    'eslint.config.mjs': fixtureConfig(`
+  test('zukhruf/env with settings.env.startupFile does not check test files', async () => {
+    // Arrange: a repo whose startup file is not src/startup.ts.
+    await using workspace = await fixtureWorkspace({
+      'nx.json': '{}',
+      'tsconfig.json': tsconfig,
+      'eslint.config.mjs': fixtureConfig(`
       { plugins: { zukhruf }, extends: ['zukhruf/base', 'zukhruf/env'] },
       { settings: { env: { startupFile: 'src/env.ts' } } },
     `),
-    'src/env.ts': 'const env = z.object({ PORT: z.string() });\n',
-    'src/server.test.ts': 'export const fixture = process.env.TEST_ONLY;\n',
+      'src/env.ts': 'const env = z.object({ PORT: z.string() });\n',
+      'src/server.test.ts': 'export const fixture = process.env.TEST_ONLY;\n',
+    });
+
+    // Act
+    const findings = await lint(workspace.root, ['.']);
+
+    // Assert
+    assert.deepEqual(
+      findings.filter(({ ruleId }) => ruleId === RULE),
+      [],
+    );
   });
 
-  // Act
-  const findings = await lint(workspace.root, ['.']);
-
-  // Assert
-  assert.deepEqual(
-    findings.filter(({ ruleId }) => ruleId === RULE),
-    [],
-  );
-});
-
-test('zukhruf/env with settings.env.startupFile reports an undeclared key against that file', async () => {
-  // Arrange
-  await using workspace = await fixtureWorkspace({
-    'nx.json': '{}',
-    'tsconfig.json': tsconfig,
-    'eslint.config.mjs': fixtureConfig(`
+  test('zukhruf/env with settings.env.startupFile reports an undeclared key against that file', async () => {
+    // Arrange
+    await using workspace = await fixtureWorkspace({
+      'nx.json': '{}',
+      'tsconfig.json': tsconfig,
+      'eslint.config.mjs': fixtureConfig(`
       { plugins: { zukhruf }, extends: ['zukhruf/base', 'zukhruf/env'] },
       { settings: { env: { startupFile: 'src/env.ts' } } },
     `),
-    'src/env.ts': 'const env = z.object({ PORT: z.string() });\n',
-    'src/server.ts': [
-      'export const port = process.env.PORT;',
-      'export const secret = process.env.SECRET;',
-    ].join('\n'),
+      'src/env.ts': 'const env = z.object({ PORT: z.string() });\n',
+      'src/server.ts': [
+        'export const port = process.env.PORT;',
+        'export const secret = process.env.SECRET;',
+      ].join('\n'),
+    });
+
+    // Act
+    const findings = await lint(workspace.root, ['.']);
+
+    // Assert
+    assert.deepEqual(
+      findings.filter(({ ruleId }) => ruleId === RULE),
+      [
+        {
+          file: workspace.path('src/server.ts'),
+          ruleId: RULE,
+          message:
+            'Declare SECRET in src/env.ts before using process.env.SECRET.',
+          line: 2,
+        },
+      ],
+    );
   });
-
-  // Act
-  const findings = await lint(workspace.root, ['.']);
-
-  // Assert
-  assert.deepEqual(
-    findings.filter(({ ruleId }) => ruleId === RULE),
-    [
-      {
-        file: workspace.path('src/server.ts'),
-        ruleId: RULE,
-        message:
-          'Declare SECRET in src/env.ts before using process.env.SECRET.',
-        line: 2,
-      },
-    ],
-  );
 });

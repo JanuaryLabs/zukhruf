@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { availableParallelism } from 'node:os';
+import { describe, test } from 'node:test';
 
 import { fixtureWorkspace } from '../testing/fixture-workspace.ts';
 import { fixtureConfig, lint } from '../testing/run-eslint.ts';
@@ -22,50 +23,54 @@ const requireAt = (findings: { ruleId: string | null; file: string }[]) =>
     .filter(({ ruleId }) => ruleId === '@typescript-eslint/no-require-imports')
     .map(({ file }) => file);
 
-test('a CommonJS file (.cjs or .cts) may call require(), its only import form', async () => {
-  // Arrange: an Electron Forge hook, which Forge loads with require().
-  await using workspace = await fixtureWorkspace({
-    'nx.json': '{}',
-    'tsconfig.json': tsconfig,
-    'eslint.config.mjs': fixtureConfig(
-      `{ plugins: { zukhruf }, extends: ['zukhruf/base'] }`,
-    ),
-    'src/signing-hook.cjs': [
-      `const { join } = require('node:path');`,
-      `module.exports = () => join('out', 'app.exe');`,
-      ``,
-    ].join('\n'),
-    'src/signing-hook.cts': [
-      `const { join } = require('node:path');`,
-      `module.exports = () => join('out', 'app.exe');`,
-      ``,
-    ].join('\n'),
+// Each test starts processes of its own over a workspace of its own, so the
+// tests run at the same time, as many as this machine's processors.
+describe('commonjs', { concurrency: availableParallelism() }, () => {
+  test('a CommonJS file (.cjs or .cts) may call require(), its only import form', async () => {
+    // Arrange: an Electron Forge hook, which Forge loads with require().
+    await using workspace = await fixtureWorkspace({
+      'nx.json': '{}',
+      'tsconfig.json': tsconfig,
+      'eslint.config.mjs': fixtureConfig(
+        `{ plugins: { zukhruf }, extends: ['zukhruf/base'] }`,
+      ),
+      'src/signing-hook.cjs': [
+        `const { join } = require('node:path');`,
+        `module.exports = () => join('out', 'app.exe');`,
+        ``,
+      ].join('\n'),
+      'src/signing-hook.cts': [
+        `const { join } = require('node:path');`,
+        `module.exports = () => join('out', 'app.exe');`,
+        ``,
+      ].join('\n'),
+    });
+
+    // Act
+    const findings = await lint(workspace.root, ['src']);
+
+    // Assert
+    assert.deepEqual(requireAt(findings), []);
   });
 
-  // Act
-  const findings = await lint(workspace.root, ['src']);
+  test('an ES module file still may not call require()', async () => {
+    // Arrange
+    await using workspace = await fixtureWorkspace({
+      'nx.json': '{}',
+      'tsconfig.json': tsconfig,
+      'eslint.config.mjs': fixtureConfig(
+        `{ plugins: { zukhruf }, extends: ['zukhruf/base'] }`,
+      ),
+      'src/paths.ts': [
+        `export const out = require('node:path').join('out');`,
+        ``,
+      ].join('\n'),
+    });
 
-  // Assert
-  assert.deepEqual(requireAt(findings), []);
-});
+    // Act
+    const findings = await lint(workspace.root, ['src']);
 
-test('an ES module file still may not call require()', async () => {
-  // Arrange
-  await using workspace = await fixtureWorkspace({
-    'nx.json': '{}',
-    'tsconfig.json': tsconfig,
-    'eslint.config.mjs': fixtureConfig(
-      `{ plugins: { zukhruf }, extends: ['zukhruf/base'] }`,
-    ),
-    'src/paths.ts': [
-      `export const out = require('node:path').join('out');`,
-      ``,
-    ].join('\n'),
+    // Assert
+    assert.deepEqual(requireAt(findings), [workspace.path('src/paths.ts')]);
   });
-
-  // Act
-  const findings = await lint(workspace.root, ['src']);
-
-  // Assert
-  assert.deepEqual(requireAt(findings), [workspace.path('src/paths.ts')]);
 });

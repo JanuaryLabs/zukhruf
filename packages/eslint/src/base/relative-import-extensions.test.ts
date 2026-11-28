@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { availableParallelism } from 'node:os';
+import { describe, test } from 'node:test';
 
 import { fixtureWorkspace } from '../testing/fixture-workspace.ts';
 import { fixtureConfig, lint } from '../testing/run-eslint.ts';
@@ -48,47 +49,55 @@ const extensionFindings = (
     .filter(({ ruleId }) => ruleId === 'import-x/extensions')
     .map(({ message }) => message);
 
-test('base reports a relative import and a relative type import that have no extension', async () => {
-  // Arrange: a declaration file that imports './deriver' fails under nodenext (TS2835).
-  await using workspace = await fixtureWorkspace({
-    ...files,
-    'src/main.ts': [
-      `import { a } from './a';`,
-      `import type { B } from './b';`,
-      `export const value: B = { b: a };`,
-      ``,
-    ].join('\n'),
-  });
+// Each test starts processes of its own over a workspace of its own, so the
+// tests run at the same time, as many as this machine's processors.
+describe(
+  'relative-import-extensions',
+  { concurrency: availableParallelism() },
+  () => {
+    test('base reports a relative import and a relative type import that have no extension', async () => {
+      // Arrange: a declaration file that imports './deriver' fails under nodenext (TS2835).
+      await using workspace = await fixtureWorkspace({
+        ...files,
+        'src/main.ts': [
+          `import { a } from './a';`,
+          `import type { B } from './b';`,
+          `export const value: B = { b: a };`,
+          ``,
+        ].join('\n'),
+      });
 
-  // Act
-  const findings = await lint(workspace.root, ['src']);
+      // Act
+      const findings = await lint(workspace.root, ['src']);
 
-  // Assert
-  assert.deepEqual(extensionFindings(findings), [
-    'Missing file extension for "./a", but it cannot be determined automatically. Add the extension manually or configure an import resolver.',
-    'Missing file extension for "./b", but it cannot be determined automatically. Add the extension manually or configure an import resolver.',
-  ]);
-});
+      // Assert
+      assert.deepEqual(extensionFindings(findings), [
+        'Missing file extension for "./a", but it cannot be determined automatically. Add the extension manually or configure an import resolver.',
+        'Missing file extension for "./b", but it cannot be determined automatically. Add the extension manually or configure an import resolver.',
+      ]);
+    });
 
-test('base accepts a relative import with .js or .ts, a package, a package subpath and a subpath import', async () => {
-  // Arrange
-  await using workspace = await fixtureWorkspace({
-    ...files,
-    'src/main.ts': [
-      `import { a } from './a.js';`,
-      `import type { B } from './b.ts';`,
-      `import { z } from 'zod';`,
-      `import { z as mini } from 'zod/mini';`,
-      `import { c } from '#lib/c';`,
-      `export const value: B = { b: a + c };`,
-      `export { z, mini };`,
-      ``,
-    ].join('\n'),
-  });
+    test('base accepts a relative import with .js or .ts, a package, a package subpath and a subpath import', async () => {
+      // Arrange
+      await using workspace = await fixtureWorkspace({
+        ...files,
+        'src/main.ts': [
+          `import { a } from './a.js';`,
+          `import type { B } from './b.ts';`,
+          `import { z } from 'zod';`,
+          `import { z as mini } from 'zod/mini';`,
+          `import { c } from '#lib/c';`,
+          `export const value: B = { b: a + c };`,
+          `export { z, mini };`,
+          ``,
+        ].join('\n'),
+      });
 
-  // Act
-  const findings = await lint(workspace.root, ['src']);
+      // Act
+      const findings = await lint(workspace.root, ['src']);
 
-  // Assert
-  assert.deepEqual(extensionFindings(findings), []);
-});
+      // Assert
+      assert.deepEqual(extensionFindings(findings), []);
+    });
+  },
+);

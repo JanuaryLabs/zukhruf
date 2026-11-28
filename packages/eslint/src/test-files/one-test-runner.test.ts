@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
+import { availableParallelism } from 'node:os';
 import { relative } from 'node:path';
-import { test } from 'node:test';
+import { describe, test } from 'node:test';
 
 import { fixtureWorkspace } from '../testing/fixture-workspace.ts';
 import { fixtureConfig, lint } from '../testing/run-eslint.ts';
@@ -41,38 +42,42 @@ async function findings(
     ]);
 }
 
-test('a node:test file in a Vitest project, by a vite.config that sets test or by a vitest.config, and a Vitest file in any other project, are reported', async () => {
-  // Act
-  const reported = await findings({
-    'packages/web/project.json': '{}',
-    'packages/web/vite.config.ts': `export default { plugins: [], test: { environment: 'happy-dom' } };\n`,
-    'packages/web/src/schema.test.ts': NODE_TEST,
-    'packages/lib/package.json': '{}',
-    'packages/lib/vitest.config.ts': `export default {};\n`,
-    'packages/lib/src/bare.test.ts': `import { test } from 'test';\ntest('x', () => {});\n`,
-    'packages/api/package.json': '{}',
-    'packages/api/src/route.test.ts': `import assert from 'node:assert/strict';\n${VITEST}`,
+// Each test starts processes of its own over a workspace of its own, so the
+// tests run at the same time, as many as this machine's processors.
+describe('one-test-runner', { concurrency: availableParallelism() }, () => {
+  test('a node:test file in a Vitest project, by a vite.config that sets test or by a vitest.config, and a Vitest file in any other project, are reported', async () => {
+    // Act
+    const reported = await findings({
+      'packages/web/project.json': '{}',
+      'packages/web/vite.config.ts': `export default { plugins: [], test: { environment: 'happy-dom' } };\n`,
+      'packages/web/src/schema.test.ts': NODE_TEST,
+      'packages/lib/package.json': '{}',
+      'packages/lib/vitest.config.ts': `export default {};\n`,
+      'packages/lib/src/bare.test.ts': `import { test } from 'test';\ntest('x', () => {});\n`,
+      'packages/api/package.json': '{}',
+      'packages/api/src/route.test.ts': `import assert from 'node:assert/strict';\n${VITEST}`,
+    });
+
+    // Assert
+    assert.deepEqual(reported, [
+      ['packages/api/src/route.test.ts', 2, 'its tests with node --test'],
+      ['packages/lib/src/bare.test.ts', 1, 'Vitest'],
+      ['packages/web/src/schema.test.ts', 1, 'Vitest'],
+    ]);
   });
 
-  // Assert
-  assert.deepEqual(reported, [
-    ['packages/api/src/route.test.ts', 2, 'its tests with node --test'],
-    ['packages/lib/src/bare.test.ts', 1, 'Vitest'],
-    ['packages/web/src/schema.test.ts', 1, 'Vitest'],
-  ]);
-});
+  test("each file importing its project's runner, a type-only import of the other, and a vite.config whose only test is a plugin's regex filter, are not reported", async () => {
+    // Act
+    const reported = await findings({
+      'packages/web/project.json': '{}',
+      'packages/web/vite.config.ts': `export default { test: { environment: 'happy-dom' } };\n`,
+      'packages/web/src/view.test.ts': `import type { TestContext } from 'node:test';\n${VITEST}`,
+      'packages/api/package.json': '{}',
+      'packages/api/vite.config.ts': `export default { plugins: [svg({ test: /\\.svg$/ })] };\ndeclare function svg(options: object): object;\n`,
+      'packages/api/src/route.test.ts': NODE_TEST,
+    });
 
-test("each file importing its project's runner, a type-only import of the other, and a vite.config whose only test is a plugin's regex filter, are not reported", async () => {
-  // Act
-  const reported = await findings({
-    'packages/web/project.json': '{}',
-    'packages/web/vite.config.ts': `export default { test: { environment: 'happy-dom' } };\n`,
-    'packages/web/src/view.test.ts': `import type { TestContext } from 'node:test';\n${VITEST}`,
-    'packages/api/package.json': '{}',
-    'packages/api/vite.config.ts': `export default { plugins: [svg({ test: /\\.svg$/ })] };\ndeclare function svg(options: object): object;\n`,
-    'packages/api/src/route.test.ts': NODE_TEST,
+    // Assert
+    assert.deepEqual(reported, []);
   });
-
-  // Assert
-  assert.deepEqual(reported, []);
 });

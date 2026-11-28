@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import { availableParallelism } from 'node:os';
 import { relative } from 'node:path';
 
-import { test } from '@zukhruf/parameterized-test';
+import { describe, test } from '@zukhruf/parameterized-test';
 
 import zukhruf from '../plugin.ts';
 import { fixtureWorkspace } from '../testing/fixture-workspace.ts';
@@ -39,86 +40,23 @@ const kitFindings = (
     )
     .map(({ file, ruleId }) => `${relative(root, file)}: ${ruleId}`);
 
-test('a file that imports @zukhruf/shadcn under a config with the React community preset and base only is reported', async () => {
-  // Arrange: the community preset, then base, as Meddit's web app had it.
-  await using workspace = await fixtureWorkspace({
-    'nx.json': '{}',
-    'tsconfig.json': tsconfig,
-    'eslint.config.mjs': [
-      `import react from ${JSON.stringify(import.meta.resolve('@zukhruf/eslint/react'))};`,
-      fixtureConfig(
-        `...react, { plugins: { zukhruf }, extends: ['zukhruf/base'] }`,
-      ),
-    ].join('\n'),
-    'src/open.tsx': dialog,
-  });
-
-  // Act
-  const findings = await lint(workspace.root, ['src']);
-
-  // Assert
-  assert.deepEqual(kitFindings(workspace.root, findings), [
-    'src/open.tsx: zukhruf/require-shadcn-config',
-  ]);
-  assert.match(
-    findings.find(({ ruleId }) => ruleId === 'zukhruf/require-shadcn-config')
-      ?.message ?? '',
-    /extends: \['zukhruf\/shadcn'\]/,
-  );
-});
-
-void test.each(
-  [
-    {
-      name: 'by extends',
-      shadcn: `{ plugins: { zukhruf }, extends: ['zukhruf/base', 'zukhruf/shadcn'] }`,
-    },
-    {
-      name: 'by spread',
-      shadcn: `...zukhruf.configs['base'], ...zukhruf.configs['shadcn']`,
-    },
-  ],
-  ({ name, shadcn }) =>
-    test(`the shadcn config, ${name}, runs the kit rules and satisfies the guard`, async () => {
-      // Arrange
+// Each test starts processes of its own over a workspace of its own, so the
+// tests run at the same time, as many as this machine's processors.
+describe(
+  'require-shadcn-config',
+  { concurrency: availableParallelism() },
+  () => {
+    test('a file that imports @zukhruf/shadcn under a config with the React community preset and base only is reported', async () => {
+      // Arrange: the community preset, then base, as Meddit's web app had it.
       await using workspace = await fixtureWorkspace({
         'nx.json': '{}',
         'tsconfig.json': tsconfig,
-        'eslint.config.mjs': fixtureConfig(shadcn),
-        'src/open.tsx': dialog,
-        'src/kit.ts': `export { cn } from '@zukhruf/shadcn';\nimport type { ButtonProps } from '@zukhruf/shadcn';\nexport type Props = ButtonProps;\n`,
-      });
-
-      // Act
-      const findings = await lint(workspace.root, ['src']);
-
-      // Assert
-      assert.deepEqual(
-        kitFindings(workspace.root, findings),
-        ['src/open.tsx: zukhruf/no-as-child'],
-        shadcn,
-      );
-    }),
-);
-
-void test.each(
-  [
-    {
-      name: 'by extends',
-      react: `{ plugins: { zukhruf }, extends: ['zukhruf/base', 'zukhruf/react'] }`,
-    },
-    {
-      name: 'by spread',
-      react: `...zukhruf.configs['base'], ...zukhruf.configs['react']`,
-    },
-  ],
-  ({ name, react }) =>
-    test(`the deprecated react name, ${name}, still runs the kit rules and satisfies the guard`, async () => {
-      // Arrange
-      await using workspace = await fixtureWorkspace({
-        'nx.json': '{}',
-        'tsconfig.json': tsconfig,
-        'eslint.config.mjs': fixtureConfig(react),
+        'eslint.config.mjs': [
+          `import react from ${JSON.stringify(import.meta.resolve('@zukhruf/eslint/react'))};`,
+          fixtureConfig(
+            `...react, { plugins: { zukhruf }, extends: ['zukhruf/base'] }`,
+          ),
+        ].join('\n'),
         'src/open.tsx': dialog,
       });
 
@@ -126,52 +64,124 @@ void test.each(
       const findings = await lint(workspace.root, ['src']);
 
       // Assert
-      assert.deepEqual(
-        kitFindings(workspace.root, findings),
-        ['src/open.tsx: zukhruf/no-as-child'],
-        react,
+      assert.deepEqual(kitFindings(workspace.root, findings), [
+        'src/open.tsx: zukhruf/require-shadcn-config',
+      ]);
+      assert.match(
+        findings.find(
+          ({ ruleId }) => ruleId === 'zukhruf/require-shadcn-config',
+        )?.message ?? '',
+        /extends: \['zukhruf\/shadcn'\]/,
       );
-    }),
-);
+    });
 
-test('reading the react config warns that it is deprecated and names shadcn', async () => {
-  // Arrange
-  const warned = once(process, 'warning');
+    void test.each(
+      [
+        {
+          name: 'by extends',
+          shadcn: `{ plugins: { zukhruf }, extends: ['zukhruf/base', 'zukhruf/shadcn'] }`,
+        },
+        {
+          name: 'by spread',
+          shadcn: `...zukhruf.configs['base'], ...zukhruf.configs['shadcn']`,
+        },
+      ],
+      ({ name, shadcn }) =>
+        test(`the shadcn config, ${name}, runs the kit rules and satisfies the guard`, async () => {
+          // Arrange
+          await using workspace = await fixtureWorkspace({
+            'nx.json': '{}',
+            'tsconfig.json': tsconfig,
+            'eslint.config.mjs': fixtureConfig(shadcn),
+            'src/open.tsx': dialog,
+            'src/kit.ts': `export { cn } from '@zukhruf/shadcn';\nimport type { ButtonProps } from '@zukhruf/shadcn';\nexport type Props = ButtonProps;\n`,
+          });
 
-  // Act
-  const react = zukhruf.configs['react'];
+          // Act
+          const findings = await lint(workspace.root, ['src']);
 
-  // Assert
-  const [warning] = await warned;
-  assert.equal(react, zukhruf.configs['shadcn']);
-  assert.ok(Error.isError(warning));
-  assert.equal(warning.name, 'DeprecationWarning');
-  assert.match(warning.message, /zukhruf\/shadcn/);
-  assert.deepEqual(
-    Object.keys(zukhruf.configs).filter((name) => name === 'react'),
-    [],
-  );
-});
+          // Assert
+          assert.deepEqual(
+            kitFindings(workspace.root, findings),
+            ['src/open.tsx: zukhruf/no-as-child'],
+            shadcn,
+          );
+        }),
+    );
 
-test('the shadcn config scoped to some folders leaves a kit import outside them reported', async () => {
-  // Arrange: the shape of zukhruf's own root config, `extends` under `files`.
-  await using workspace = await fixtureWorkspace({
-    'nx.json': '{}',
-    'tsconfig.json': tsconfig,
-    'eslint.config.mjs': fixtureConfig(`
+    void test.each(
+      [
+        {
+          name: 'by extends',
+          react: `{ plugins: { zukhruf }, extends: ['zukhruf/base', 'zukhruf/react'] }`,
+        },
+        {
+          name: 'by spread',
+          react: `...zukhruf.configs['base'], ...zukhruf.configs['react']`,
+        },
+      ],
+      ({ name, react }) =>
+        test(`the deprecated react name, ${name}, still runs the kit rules and satisfies the guard`, async () => {
+          // Arrange
+          await using workspace = await fixtureWorkspace({
+            'nx.json': '{}',
+            'tsconfig.json': tsconfig,
+            'eslint.config.mjs': fixtureConfig(react),
+            'src/open.tsx': dialog,
+          });
+
+          // Act
+          const findings = await lint(workspace.root, ['src']);
+
+          // Assert
+          assert.deepEqual(
+            kitFindings(workspace.root, findings),
+            ['src/open.tsx: zukhruf/no-as-child'],
+            react,
+          );
+        }),
+    );
+
+    test('reading the react config warns that it is deprecated and names shadcn', async () => {
+      // Arrange
+      const warned = once(process, 'warning');
+
+      // Act
+      const react = zukhruf.configs['react'];
+
+      // Assert
+      const [warning] = await warned;
+      assert.equal(react, zukhruf.configs['shadcn']);
+      assert.ok(Error.isError(warning));
+      assert.equal(warning.name, 'DeprecationWarning');
+      assert.match(warning.message, /zukhruf\/shadcn/);
+      assert.deepEqual(
+        Object.keys(zukhruf.configs).filter((name) => name === 'react'),
+        [],
+      );
+    });
+
+    test('the shadcn config scoped to some folders leaves a kit import outside them reported', async () => {
+      // Arrange: the shape of zukhruf's own root config, `extends` under `files`.
+      await using workspace = await fixtureWorkspace({
+        'nx.json': '{}',
+        'tsconfig.json': tsconfig,
+        'eslint.config.mjs': fixtureConfig(`
       { plugins: { zukhruf }, extends: ['zukhruf/base'] },
       { files: ['packages/ui/**'], plugins: { zukhruf }, extends: ['zukhruf/shadcn'] },
     `),
-    'packages/ui/src/open.tsx': dialog,
-    'apps/web/src/open.tsx': dialog,
-  });
+        'packages/ui/src/open.tsx': dialog,
+        'apps/web/src/open.tsx': dialog,
+      });
 
-  // Act
-  const findings = await lint(workspace.root, ['packages', 'apps']);
+      // Act
+      const findings = await lint(workspace.root, ['packages', 'apps']);
 
-  // Assert
-  assert.deepEqual(kitFindings(workspace.root, findings).sort(), [
-    'apps/web/src/open.tsx: zukhruf/require-shadcn-config',
-    'packages/ui/src/open.tsx: zukhruf/no-as-child',
-  ]);
-});
+      // Assert
+      assert.deepEqual(kitFindings(workspace.root, findings).sort(), [
+        'apps/web/src/open.tsx: zukhruf/require-shadcn-config',
+        'packages/ui/src/open.tsx: zukhruf/no-as-child',
+      ]);
+    });
+  },
+);

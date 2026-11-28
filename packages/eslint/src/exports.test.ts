@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { findPackageJSON } from 'node:module';
+import { availableParallelism } from 'node:os';
 import { basename, dirname, join, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { workspaceRoot } from '@nx/devkit';
 
-import { test } from '@zukhruf/parameterized-test';
+import { describe, test } from '@zukhruf/parameterized-test';
+import { Command, ExitError } from '@zukhruf/process';
 
 import { isRecord } from './unknown-values.ts';
 
@@ -50,18 +51,13 @@ process.stdout.write(
 );
 `;
 
-function loadsOf(specifier: string): Load[] {
-  const run = spawnSync(
+async function loadsOf(specifier: string): Promise<Load[]> {
+  const run = await new Command(
     process.execPath,
     ['--input-type=module', '--eval', recorder, import.meta.resolve(specifier)],
-    // ESLint's module graph prints past spawnSync's 1 MiB default.
-    { encoding: 'utf8', maxBuffer: Infinity },
-  );
-  if (run.status !== 0) {
-    throw new Error(`import(${specifier}) failed:\n${run.stderr}`, {
-      cause: run.error,
-    });
-  }
+    { env: process.env, clock: globalThis, name: `import(${specifier})` },
+  ).run();
+  if (run.exitCode !== 0) throw new ExitError(`import(${specifier})`, run);
   const loads: unknown = JSON.parse(run.stdout);
   if (!Array.isArray(loads)) throw new Error('The child printed no loads.');
   return loads.filter(isRecord).map((load) => ({
@@ -150,52 +146,56 @@ const workspaceRules = existsSync(workspaceRulesPath)
   ? realpathSync(workspaceRulesPath)
   : null;
 
-void test.each(specifiers, (specifier) =>
-  test(`${specifier} loads only packages that @zukhruf/eslint reaches over declared edges`, () => {
-    // Arrange
-    const closure = declaredClosure(packageRoot);
+// Each test starts processes of its own over a workspace of its own, so the
+// tests run at the same time, as many as this machine's processors.
+describe('exports', { concurrency: availableParallelism() }, () => {
+  void test.each(specifiers, (specifier) =>
+    test(`${specifier} loads only packages that @zukhruf/eslint reaches over declared edges`, async () => {
+      // Arrange
+      const closure = declaredClosure(packageRoot);
 
+      // Act
+      const loads = await loadsOf(specifier);
+
+      // Assert
+      const undeclared = new Map<string, string>();
+      for (const { url, parentURL } of loads) {
+        if (!url.startsWith('file:')) continue;
+        const folder = packageFolderOf(url);
+        if (folder === null || closure.has(folder)) continue;
+        const loader = parentURL === null ? null : packageFolderOf(parentURL);
+        if (loader === folder || undeclared.has(folder)) continue;
+        if (folder === workspaceRules) continue;
+        undeclared.set(
+          folder,
+          `${nameOf(folder)} (loaded by ${parentURL === null ? 'the entry' : nameOf(loader)})`,
+        );
+      }
+      assert.ok(loads.length > 0, `${specifier} loaded no modules`);
+      assert.deepEqual([...undeclared.values()], []);
+    }),
+  );
+
+  test('@zukhruf/eslint loads neither plugin of modern-node, so a repo that does not use it does not need them', async () => {
     // Act
-    const loads = loadsOf(specifier);
+    const names = (await loadsOf('@zukhruf/eslint'))
+      .filter(({ url }) => url.startsWith('file:'))
+      .map(({ url }) => nameOf(packageFolderOf(url)));
 
     // Assert
-    const undeclared = new Map<string, string>();
-    for (const { url, parentURL } of loads) {
-      if (!url.startsWith('file:')) continue;
-      const folder = packageFolderOf(url);
-      if (folder === null || closure.has(folder)) continue;
-      const loader = parentURL === null ? null : packageFolderOf(parentURL);
-      if (loader === folder || undeclared.has(folder)) continue;
-      if (folder === workspaceRules) continue;
-      undeclared.set(
-        folder,
-        `${nameOf(folder)} (loaded by ${parentURL === null ? 'the entry' : nameOf(loader)})`,
-      );
-    }
-    assert.ok(loads.length > 0, `${specifier} loaded no modules`);
-    assert.deepEqual([...undeclared.values()], []);
-  }),
-);
+    assert.ok(names.length > 0, '@zukhruf/eslint loaded no modules');
+    assert.equal(names.includes('@e18e/eslint-plugin'), false);
+    assert.equal(names.includes('eslint-plugin-unicorn'), false);
+  });
 
-test('@zukhruf/eslint loads neither plugin of modern-node, so a repo that does not use it does not need them', () => {
-  // Act
-  const names = loadsOf('@zukhruf/eslint')
-    .filter(({ url }) => url.startsWith('file:'))
-    .map(({ url }) => nameOf(packageFolderOf(url)));
+  test('@zukhruf/eslint loads no @shadcn/lint, so a host that does not opt into shadcn-strict does not need it', async () => {
+    // Act
+    const names = (await loadsOf('@zukhruf/eslint'))
+      .filter(({ url }) => url.startsWith('file:'))
+      .map(({ url }) => nameOf(packageFolderOf(url)));
 
-  // Assert
-  assert.ok(names.length > 0, '@zukhruf/eslint loaded no modules');
-  assert.equal(names.includes('@e18e/eslint-plugin'), false);
-  assert.equal(names.includes('eslint-plugin-unicorn'), false);
-});
-
-test('@zukhruf/eslint loads no @shadcn/lint, so a host that does not opt into shadcn-strict does not need it', () => {
-  // Act
-  const names = loadsOf('@zukhruf/eslint')
-    .filter(({ url }) => url.startsWith('file:'))
-    .map(({ url }) => nameOf(packageFolderOf(url)));
-
-  // Assert
-  assert.ok(names.length > 0, '@zukhruf/eslint loaded no modules');
-  assert.equal(names.includes('@shadcn/lint'), false);
+    // Assert
+    assert.ok(names.length > 0, '@zukhruf/eslint loaded no modules');
+    assert.equal(names.includes('@shadcn/lint'), false);
+  });
 });

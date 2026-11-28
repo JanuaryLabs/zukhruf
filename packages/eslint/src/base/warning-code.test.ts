@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { availableParallelism } from 'node:os';
+import { describe, test } from 'node:test';
 
 import { fixtureWorkspace } from '../testing/fixture-workspace.ts';
 import { nodeTypeRoots } from '../testing/node-type-roots.ts';
@@ -28,30 +29,34 @@ const giveBack = [
   ``,
 ].join('\n');
 
-test('base reports a process warning with no code in shipped code, tests and test helpers', async () => {
-  // Arrange
-  await using workspace = await fixtureWorkspace({
-    'nx.json': '{}',
-    'tsconfig.json': tsconfig,
-    'eslint.config.mjs': fixtureConfig(
-      `{ plugins: { zukhruf }, extends: ['zukhruf/base'] }`,
-    ),
-    'src/give-back.ts': giveBack,
-    'src/give-back.test.ts': giveBack,
-    'src/testing/give-back.ts': giveBack,
+// Each test starts processes of its own over a workspace of its own, so the
+// tests run at the same time, as many as this machine's processors.
+describe('warning-code', { concurrency: availableParallelism() }, () => {
+  test('base reports a process warning with no code in shipped code, tests and test helpers', async () => {
+    // Arrange
+    await using workspace = await fixtureWorkspace({
+      'nx.json': '{}',
+      'tsconfig.json': tsconfig,
+      'eslint.config.mjs': fixtureConfig(
+        `{ plugins: { zukhruf }, extends: ['zukhruf/base'] }`,
+      ),
+      'src/give-back.ts': giveBack,
+      'src/give-back.test.ts': giveBack,
+      'src/testing/give-back.ts': giveBack,
+    });
+
+    // Act
+    const findings = await lint(workspace.root, ['src']);
+
+    // Assert
+    const reported = findings
+      .filter(({ ruleId }) => ruleId === 'zukhruf/require-warning-code')
+      .map(({ file }) => file.slice(workspace.root.length + 1))
+      .toSorted();
+    assert.deepEqual(reported, [
+      'src/give-back.test.ts',
+      'src/give-back.ts',
+      'src/testing/give-back.ts',
+    ]);
   });
-
-  // Act
-  const findings = await lint(workspace.root, ['src']);
-
-  // Assert
-  const reported = findings
-    .filter(({ ruleId }) => ruleId === 'zukhruf/require-warning-code')
-    .map(({ file }) => file.slice(workspace.root.length + 1))
-    .toSorted();
-  assert.deepEqual(reported, [
-    'src/give-back.test.ts',
-    'src/give-back.ts',
-    'src/testing/give-back.ts',
-  ]);
 });

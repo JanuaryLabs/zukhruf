@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { availableParallelism } from 'node:os';
+import { describe, test } from 'node:test';
 
 import { fixtureWorkspace } from '../testing/fixture-workspace.ts';
 import { fixtureConfig, lint, printConfig } from '../testing/run-eslint.ts';
@@ -15,35 +16,38 @@ const tsconfig = JSON.stringify({
 const ruleIds = (findings: { ruleId: string | null }[]) =>
   findings.map(({ ruleId }) => ruleId);
 
-test('a later config that sets no-restricted-syntax cannot silence the package’s checks', async () => {
-  // Arrange: a framework preset after the package's configs, setting the one
-  // key every hand-written ban used to share (Nx's React preset sets exactly this).
-  await using workspace = await fixtureWorkspace({
-    'nx.json': '{}',
-    'tsconfig.json': tsconfig,
-    'eslint.config.mjs': fixtureConfig(`
+// Each test starts processes of its own over a workspace of its own, so the
+// tests run at the same time, as many as this machine's processors.
+describe('composition', { concurrency: availableParallelism() }, () => {
+  test('a later config that sets no-restricted-syntax cannot silence the package’s checks', async () => {
+    // Arrange: a framework preset after the package's configs, setting the one
+    // key every hand-written ban used to share (Nx's React preset sets exactly this).
+    await using workspace = await fixtureWorkspace({
+      'nx.json': '{}',
+      'tsconfig.json': tsconfig,
+      'eslint.config.mjs': fixtureConfig(`
       { plugins: { zukhruf }, extends: ['zukhruf/base', 'zukhruf/tests'] },
       { rules: { 'no-restricted-syntax': ['warn', 'WithStatement'] } },
     `),
-    'src/color.ts': 'export enum Color { Red }\n',
-    'src/color.test.ts': 'beforeEach(() => {});\n',
+      'src/color.ts': 'export enum Color { Red }\n',
+      'src/color.test.ts': 'beforeEach(() => {});\n',
+    });
+
+    // Act
+    const findings = await lint(workspace.root, ['src']);
+
+    // Assert
+    assert.ok(ruleIds(findings).includes('zukhruf/no-enum'));
+    assert.ok(ruleIds(findings).includes('zukhruf/no-test-lifecycle-hooks'));
   });
 
-  // Act
-  const findings = await lint(workspace.root, ['src']);
-
-  // Assert
-  assert.ok(ruleIds(findings).includes('zukhruf/no-enum'));
-  assert.ok(ruleIds(findings).includes('zukhruf/no-test-lifecycle-hooks'));
-});
-
-test('a project config that re-exports the root config still applies path-scoped checks', async () => {
-  // Arrange: `nx lint` runs ESLint from the project folder, and the project's
-  // own config re-exports the root one, which resolves root globs from there.
-  await using workspace = await fixtureWorkspace({
-    'nx.json': '{}',
-    'tsconfig.json': tsconfig,
-    'eslint.config.mjs': fixtureConfig(`
+  test('a project config that re-exports the root config still applies path-scoped checks', async () => {
+    // Arrange: `nx lint` runs ESLint from the project folder, and the project's
+    // own config re-exports the root one, which resolves root globs from there.
+    await using workspace = await fixtureWorkspace({
+      'nx.json': '{}',
+      'tsconfig.json': tsconfig,
+      'eslint.config.mjs': fixtureConfig(`
       {
         plugins: { zukhruf, island },
         extends: ['zukhruf/base', 'island/recommended', 'zukhruf/packaged-app'],
@@ -55,191 +59,195 @@ test('a project config that re-exports the root config still applies path-scoped
         },
       },
     `),
-    'packages/lib/project.json': '{}',
-    'packages/lib/eslint.config.mjs': `export { default } from '../../eslint.config.mjs';\n`,
-    'packages/lib/src/index.ts': `console.log('loaded');\n`,
-    'apps/desktop/project.json': '{}',
-    'apps/desktop/eslint.config.mjs': `export { default } from '../../eslint.config.mjs';\n`,
-    'apps/desktop/src/main.ts': `import { spawn } from 'node:child_process';\nspawn('git', ['status']);\n`,
-    'apps/web/project.json': '{}',
-    'apps/web/eslint.config.mjs': `export { default } from '../../eslint.config.mjs';\n`,
-    'apps/web/src/main.ts': `import { spawn } from 'node:child_process';\nconsole.log('ok');\nspawn('git', ['status']);\n`,
+      'packages/lib/project.json': '{}',
+      'packages/lib/eslint.config.mjs': `export { default } from '../../eslint.config.mjs';\n`,
+      'packages/lib/src/index.ts': `console.log('loaded');\n`,
+      'apps/desktop/project.json': '{}',
+      'apps/desktop/eslint.config.mjs': `export { default } from '../../eslint.config.mjs';\n`,
+      'apps/desktop/src/main.ts': `import { spawn } from 'node:child_process';\nspawn('git', ['status']);\n`,
+      'apps/web/project.json': '{}',
+      'apps/web/eslint.config.mjs': `export { default } from '../../eslint.config.mjs';\n`,
+      'apps/web/src/main.ts': `import { spawn } from 'node:child_process';\nconsole.log('ok');\nspawn('git', ['status']);\n`,
+    });
+
+    // Act
+    const library = await lint(workspace.path('packages/lib'), ['src']);
+    const desktop = await lint(workspace.path('apps/desktop'), ['src']);
+    const web = await lint(workspace.path('apps/web'), ['src']);
+
+    // Assert: in scope by settings or by roots, and out of scope elsewhere.
+    assert.ok(ruleIds(library).includes('island/no-console'));
+    assert.ok(ruleIds(desktop).includes('zukhruf/no-bare-spawn'));
+    assert.deepEqual(ruleIds(web), []);
   });
 
-  // Act
-  const library = await lint(workspace.path('packages/lib'), ['src']);
-  const desktop = await lint(workspace.path('apps/desktop'), ['src']);
-  const web = await lint(workspace.path('apps/web'), ['src']);
+  test('the typed-lint root is the workspace, found from the folder ESLint runs in', async () => {
+    // Arrange: the package is installed (its build under node_modules), and
+    // ESLint runs from a project two folders below the workspace root.
+    await using workspace = await fixtureWorkspace({
+      'nx.json': '{}',
+      'tsconfig.json': tsconfig,
+      'eslint.config.mjs': fixtureConfig(
+        `{ plugins: { zukhruf }, extends: ['zukhruf/base'] }`,
+      ),
+      'apps/api/project.json': '{}',
+      'apps/api/src/main.ts': 'export const port = 1;\n',
+    });
 
-  // Assert: in scope by settings or by roots, and out of scope elsewhere.
-  assert.ok(ruleIds(library).includes('island/no-console'));
-  assert.ok(ruleIds(desktop).includes('zukhruf/no-bare-spawn'));
-  assert.deepEqual(ruleIds(web), []);
-});
+    // Act
+    const config = await printConfig(workspace.path('apps/api'), 'src/main.ts');
 
-test('the typed-lint root is the workspace, found from the folder ESLint runs in', async () => {
-  // Arrange: the package is installed (its build under node_modules), and
-  // ESLint runs from a project two folders below the workspace root.
-  await using workspace = await fixtureWorkspace({
-    'nx.json': '{}',
-    'tsconfig.json': tsconfig,
-    'eslint.config.mjs': fixtureConfig(
-      `{ plugins: { zukhruf }, extends: ['zukhruf/base'] }`,
-    ),
-    'apps/api/project.json': '{}',
-    'apps/api/src/main.ts': 'export const port = 1;\n',
+    // Assert
+    const languageOptions = isRecord(config)
+      ? config['languageOptions']
+      : undefined;
+    const parserOptions = isRecord(languageOptions)
+      ? languageOptions['parserOptions']
+      : undefined;
+    assert.ok(isRecord(parserOptions));
+    assert.equal(parserOptions['tsconfigRootDir'], workspace.root);
   });
 
-  // Act
-  const config = await printConfig(workspace.path('apps/api'), 'src/main.ts');
+  test('the tests config checks a test helper in src/testing as a test file', async () => {
+    // Arrange: a helper outside any *.test.* file, in the folder that holds the
+    // test helpers (docs/adr/0001 of the workspace).
+    await using workspace = await fixtureWorkspace({
+      'nx.json': '{}',
+      'tsconfig.json': tsconfig,
+      'eslint.config.mjs': fixtureConfig(
+        `{ plugins: { zukhruf }, extends: ['zukhruf/base', 'zukhruf/tests'] }`,
+      ),
+      'src/testing/server.ts':
+        'beforeEach(() => {});\nexport const port = 1;\n',
+    });
 
-  // Assert
-  const languageOptions = isRecord(config)
-    ? config['languageOptions']
-    : undefined;
-  const parserOptions = isRecord(languageOptions)
-    ? languageOptions['parserOptions']
-    : undefined;
-  assert.ok(isRecord(parserOptions));
-  assert.equal(parserOptions['tsconfigRootDir'], workspace.root);
-});
+    // Act
+    const findings = await lint(workspace.root, ['src']);
 
-test('the tests config checks a test helper in src/testing as a test file', async () => {
-  // Arrange: a helper outside any *.test.* file, in the folder that holds the
-  // test helpers (docs/adr/0001 of the workspace).
-  await using workspace = await fixtureWorkspace({
-    'nx.json': '{}',
-    'tsconfig.json': tsconfig,
-    'eslint.config.mjs': fixtureConfig(
-      `{ plugins: { zukhruf }, extends: ['zukhruf/base', 'zukhruf/tests'] }`,
-    ),
-    'src/testing/server.ts': 'beforeEach(() => {});\nexport const port = 1;\n',
+    // Assert
+    assert.ok(ruleIds(findings).includes('zukhruf/no-test-lifecycle-hooks'));
   });
 
-  // Act
-  const findings = await lint(workspace.root, ['src']);
+  test('the Docker global setup in src/testing may write process.env, and another test helper may not', async () => {
+    // Arrange: the global setup that the test target of @zukhruf/nx passes to
+    // --test-global-setup runs before any test process, and hands each one its
+    // connection through process.env.
+    const setup =
+      "export async function globalSetup() {\n  process.env['DATABASE_URL'] = 'postgres://localhost';\n}\n";
+    await using workspace = await fixtureWorkspace({
+      'nx.json': '{}',
+      'tsconfig.json': tsconfig,
+      'eslint.config.mjs': fixtureConfig(
+        `{ plugins: { zukhruf }, extends: ['zukhruf/base', 'zukhruf/tests'] }`,
+      ),
+      'src/testing/docker-global-setup.ts': setup,
+      'src/testing/database.ts': setup,
+    });
 
-  // Assert
-  assert.ok(ruleIds(findings).includes('zukhruf/no-test-lifecycle-hooks'));
-});
+    // Act
+    const findings = await lint(workspace.root, ['src']);
 
-test('the Docker global setup in src/testing may write process.env, and another test helper may not', async () => {
-  // Arrange: the global setup that the test target of @zukhruf/nx passes to
-  // --test-global-setup runs before any test process, and hands each one its
-  // connection through process.env.
-  const setup =
-    "export async function globalSetup() {\n  process.env['DATABASE_URL'] = 'postgres://localhost';\n}\n";
-  await using workspace = await fixtureWorkspace({
-    'nx.json': '{}',
-    'tsconfig.json': tsconfig,
-    'eslint.config.mjs': fixtureConfig(
-      `{ plugins: { zukhruf }, extends: ['zukhruf/base', 'zukhruf/tests'] }`,
-    ),
-    'src/testing/docker-global-setup.ts': setup,
-    'src/testing/database.ts': setup,
+    // Assert
+    const envWrites = findings.filter(
+      ({ ruleId }) => ruleId === 'zukhruf/no-process-env-write',
+    );
+    assert.deepEqual(
+      envWrites.map(({ file }) => file),
+      [workspace.path('src/testing/database.ts')],
+    );
   });
 
-  // Act
-  const findings = await lint(workspace.root, ['src']);
+  test('a config that skips test files also skips a test helper in src/testing', async () => {
+    // Arrange: the same module-scope `let` in shipped source and in a test
+    // helper (docs/adr/0001 of the workspace: a file in src/testing is a test file).
+    const counter = 'let count = 0;\nexport const next = () => ++count;\n';
+    await using workspace = await fixtureWorkspace({
+      'nx.json': '{}',
+      'tsconfig.json': tsconfig,
+      'eslint.config.mjs': fixtureConfig(
+        `{ plugins: { zukhruf }, extends: ['zukhruf/base'] }`,
+      ),
+      'src/counter.ts': counter,
+      'src/testing/counter.ts': counter,
+    });
 
-  // Assert
-  const envWrites = findings.filter(
-    ({ ruleId }) => ruleId === 'zukhruf/no-process-env-write',
-  );
-  assert.deepEqual(
-    envWrites.map(({ file }) => file),
-    [workspace.path('src/testing/database.ts')],
-  );
-});
+    // Act
+    const findings = await lint(workspace.root, ['src']);
 
-test('a config that skips test files also skips a test helper in src/testing', async () => {
-  // Arrange: the same module-scope `let` in shipped source and in a test
-  // helper (docs/adr/0001 of the workspace: a file in src/testing is a test file).
-  const counter = 'let count = 0;\nexport const next = () => ++count;\n';
-  await using workspace = await fixtureWorkspace({
-    'nx.json': '{}',
-    'tsconfig.json': tsconfig,
-    'eslint.config.mjs': fixtureConfig(
-      `{ plugins: { zukhruf }, extends: ['zukhruf/base'] }`,
-    ),
-    'src/counter.ts': counter,
-    'src/testing/counter.ts': counter,
+    // Assert
+    const noLet = findings.filter(
+      ({ ruleId }) => ruleId === 'functional/no-let',
+    );
+    assert.deepEqual(
+      noLet.map(({ file }) => file),
+      [workspace.path('src/counter.ts')],
+    );
   });
 
-  // Act
-  const findings = await lint(workspace.root, ['src']);
-
-  // Assert
-  const noLet = findings.filter(({ ruleId }) => ruleId === 'functional/no-let');
-  assert.deepEqual(
-    noLet.map(({ file }) => file),
-    [workspace.path('src/counter.ts')],
-  );
-});
-
-test('a repo turns on a base plugin’s rule in a scope that base skips', async () => {
-  // Arrange: base skips src/testing for functional/no-let; the repo's own
-  // block turns the rule on there with its own options.
-  await using workspace = await fixtureWorkspace({
-    'nx.json': '{}',
-    'tsconfig.json': tsconfig,
-    'eslint.config.mjs': fixtureConfig(`
+  test('a repo turns on a base plugin’s rule in a scope that base skips', async () => {
+    // Arrange: base skips src/testing for functional/no-let; the repo's own
+    // block turns the rule on there with its own options.
+    await using workspace = await fixtureWorkspace({
+      'nx.json': '{}',
+      'tsconfig.json': tsconfig,
+      'eslint.config.mjs': fixtureConfig(`
       { plugins: { zukhruf }, extends: ['zukhruf/base'] },
       {
         files: ['**/src/testing/**'],
         rules: { 'functional/no-let': ['error', { allowInForLoopInit: true }] },
       },
     `),
-    'src/testing/counter.ts':
-      'let count = 0;\nexport const next = () => ++count;\n',
+      'src/testing/counter.ts':
+        'let count = 0;\nexport const next = () => ++count;\n',
+    });
+
+    // Act
+    const findings = await lint(workspace.root, ['src']);
+
+    // Assert
+    assert.deepEqual(ruleIds(findings), ['functional/no-let']);
   });
 
-  // Act
-  const findings = await lint(workspace.root, ['src']);
-
-  // Assert
-  assert.deepEqual(ruleIds(findings), ['functional/no-let']);
-});
-
-test('a repo that extends the better-auth and hono configs gets their HTTP error checks', async () => {
-  // Arrange: one file for each mistake, in a server that uses both packages.
-  await using workspace = await fixtureWorkspace({
-    'nx.json': '{}',
-    'tsconfig.json': tsconfig,
-    'eslint.config.mjs': fixtureConfig(`{
+  test('a repo that extends the better-auth and hono configs gets their HTTP error checks', async () => {
+    // Arrange: one file for each mistake, in a server that uses both packages.
+    await using workspace = await fixtureWorkspace({
+      'nx.json': '{}',
+      'tsconfig.json': tsconfig,
+      'eslint.config.mjs': fixtureConfig(`{
       plugins: { zukhruf },
       extends: ['zukhruf/base', 'zukhruf/better-auth', 'zukhruf/hono'],
     }`),
-    'src/auth.ts': [
-      `import { APIError } from 'better-auth/api';`,
-      `export const options = { onAPIError: { throw: true } };`,
-      `export const isAuthError = (error: unknown) => error instanceof APIError;`,
-    ].join('\n'),
-    'src/errors.ts': [
-      `import { HTTPException } from 'hono/http-exception';`,
-      `export const invalidSource = (detail: string) =>`,
-      `  new HTTPException(400, { cause: { code: 'invalid_source', detail } });`,
-    ].join('\n'),
-    'src/middleware.ts': [
-      `import { createMiddleware } from 'hono/factory';`,
-      `export const translate = createMiddleware(async (c, next) => {`,
-      `  try {`,
-      `    await next();`,
-      `  } catch {`,
-      `    c.status(500);`,
-      `  }`,
-      `});`,
-    ].join('\n'),
+      'src/auth.ts': [
+        `import { APIError } from 'better-auth/api';`,
+        `export const options = { onAPIError: { throw: true } };`,
+        `export const isAuthError = (error: unknown) => error instanceof APIError;`,
+      ].join('\n'),
+      'src/errors.ts': [
+        `import { HTTPException } from 'hono/http-exception';`,
+        `export const invalidSource = (detail: string) =>`,
+        `  new HTTPException(400, { cause: { code: 'invalid_source', detail } });`,
+      ].join('\n'),
+      'src/middleware.ts': [
+        `import { createMiddleware } from 'hono/factory';`,
+        `export const translate = createMiddleware(async (c, next) => {`,
+        `  try {`,
+        `    await next();`,
+        `  } catch {`,
+        `    c.status(500);`,
+        `  }`,
+        `});`,
+      ].join('\n'),
+    });
+
+    // Act
+    const findings = await lint(workspace.root, ['src']);
+
+    // Assert
+    assert.deepEqual(ruleIds(findings).toSorted(), [
+      'zukhruf/no-api-error-instanceof',
+      'zukhruf/no-catch-around-next',
+      'zukhruf/no-http-exception-factory',
+      'zukhruf/no-on-api-error-throw',
+    ]);
   });
-
-  // Act
-  const findings = await lint(workspace.root, ['src']);
-
-  // Assert
-  assert.deepEqual(ruleIds(findings).toSorted(), [
-    'zukhruf/no-api-error-instanceof',
-    'zukhruf/no-catch-around-next',
-    'zukhruf/no-http-exception-factory',
-    'zukhruf/no-on-api-error-throw',
-  ]);
 });

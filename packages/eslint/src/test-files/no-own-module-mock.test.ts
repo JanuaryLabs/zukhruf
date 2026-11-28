@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { availableParallelism } from 'node:os';
+import { describe, test } from 'node:test';
 
 import { fixtureWorkspace } from '../testing/fixture-workspace.ts';
 import { fixtureConfig, lint } from '../testing/run-eslint.ts';
@@ -45,52 +46,56 @@ async function findings(lines: string[]): Promise<[number, string][]> {
     });
 }
 
-test('a module mock of a relative path or of a package of the same workspace is reported, in each mock API of Vitest, Jest and node:test', async () => {
-  // Act
-  const reported = await findings([
-    `import { mock } from 'node:test';`,
-    `declare const vi: any, jest: any, t: any;`,
-    `vi.mock('./api.ts', () => ({}));`,
-    `vi.doMock('../lib/store.ts', () => ({}));`,
-    `vi.mock(import('./api.ts'));`,
-    `jest.mock('@acme/ui');`,
-    `jest.doMock('@acme/data/hooks', () => ({}));`,
-    `jest.unstable_mockModule('@acme/ui/button', () => ({}));`,
-    `mock.module('./api.ts', { namedExports: {} });`,
-    `t.mock.module('@acme/data', { namedExports: {} });`,
-  ]);
+// Each test starts processes of its own over a workspace of its own, so the
+// tests run at the same time, as many as this machine's processors.
+describe('no-own-module-mock', { concurrency: availableParallelism() }, () => {
+  test('a module mock of a relative path or of a package of the same workspace is reported, in each mock API of Vitest, Jest and node:test', async () => {
+    // Act
+    const reported = await findings([
+      `import { mock } from 'node:test';`,
+      `declare const vi: any, jest: any, t: any;`,
+      `vi.mock('./api.ts', () => ({}));`,
+      `vi.doMock('../lib/store.ts', () => ({}));`,
+      `vi.mock(import('./api.ts'));`,
+      `jest.mock('@acme/ui');`,
+      `jest.doMock('@acme/data/hooks', () => ({}));`,
+      `jest.unstable_mockModule('@acme/ui/button', () => ({}));`,
+      `mock.module('./api.ts', { namedExports: {} });`,
+      `t.mock.module('@acme/data', { namedExports: {} });`,
+    ]);
 
-  // Assert
-  assert.deepEqual(reported, [
-    [3, './api.ts'],
-    [4, '../lib/store.ts'],
-    [5, './api.ts'],
-    [6, '@acme/ui'],
-    [7, '@acme/data/hooks'],
-    [8, '@acme/ui/button'],
-    [9, './api.ts'],
-    [10, '@acme/data'],
-  ]);
-});
+    // Assert
+    assert.deepEqual(reported, [
+      [3, './api.ts'],
+      [4, '../lib/store.ts'],
+      [5, './api.ts'],
+      [6, '@acme/ui'],
+      [7, '@acme/data/hooks'],
+      [8, '@acme/ui/button'],
+      [9, './api.ts'],
+      [10, '@acme/data'],
+    ]);
+  });
 
-test('a module mock of a package outside the workspace, of a name that only starts like a workspace package, and calls that are not module mocks (a computed method among them), are not reported', async () => {
-  // Act
-  const reported = await findings([
-    `declare const vi: any, jest: any, t: any, api: any, specifier: string, store: any;`,
-    `t.mock.module('@napi-rs/keyring', { namedExports: {} });`,
-    `vi.mock('electron');`,
-    `jest.mock('node:fs');`,
-    `vi.mock('@acme/uikit');`,
-    `vi.mock('@acme/source');`,
-    `vi.mock(specifier);`,
-    `vi.spyOn(api, 'fetch');`,
-    `t.mock.method(api, 'fetch');`,
-    `store.mock('./api.ts');`,
-    `vi.unmock('./api.ts');`,
-    `declare const doMock: string;`,
-    `vi[doMock]('./api.ts');`,
-  ]);
+  test('a module mock of a package outside the workspace, of a name that only starts like a workspace package, and calls that are not module mocks (a computed method among them), are not reported', async () => {
+    // Act
+    const reported = await findings([
+      `declare const vi: any, jest: any, t: any, api: any, specifier: string, store: any;`,
+      `t.mock.module('@napi-rs/keyring', { namedExports: {} });`,
+      `vi.mock('electron');`,
+      `jest.mock('node:fs');`,
+      `vi.mock('@acme/uikit');`,
+      `vi.mock('@acme/source');`,
+      `vi.mock(specifier);`,
+      `vi.spyOn(api, 'fetch');`,
+      `t.mock.method(api, 'fetch');`,
+      `store.mock('./api.ts');`,
+      `vi.unmock('./api.ts');`,
+      `declare const doMock: string;`,
+      `vi[doMock]('./api.ts');`,
+    ]);
 
-  // Assert
-  assert.deepEqual(reported, []);
+    // Assert
+    assert.deepEqual(reported, []);
+  });
 });

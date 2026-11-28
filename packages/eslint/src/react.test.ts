@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { availableParallelism } from 'node:os';
+import { describe, test } from 'node:test';
 
 import { fixtureWorkspace } from './testing/fixture-workspace.ts';
 import { fixtureConfig, lint } from './testing/run-eslint.ts';
@@ -25,251 +26,255 @@ const reactProjectConfig = [
   ),
 ].join('\n');
 
-test('./react lints a .tsx file on ESLint 10 with type information and reports a number that renders as text', async () => {
-  // Arrange
-  await using workspace = await fixtureWorkspace({
-    'nx.json': '{}',
-    'tsconfig.json': tsconfig,
-    'eslint.config.mjs': reactProjectConfig,
-    'src/count.tsx': [
-      `export const Count = ({ count }: { count: number }) => (`,
-      `  <div>{count && <span>{count}</span>}</div>`,
-      `);`,
-      ``,
-    ].join('\n'),
-  });
+// Each test starts processes of its own over a workspace of its own, so the
+// tests run at the same time, as many as this machine's processors.
+describe('react', { concurrency: availableParallelism() }, () => {
+  test('./react lints a .tsx file on ESLint 10 with type information and reports a number that renders as text', async () => {
+    // Arrange
+    await using workspace = await fixtureWorkspace({
+      'nx.json': '{}',
+      'tsconfig.json': tsconfig,
+      'eslint.config.mjs': reactProjectConfig,
+      'src/count.tsx': [
+        `export const Count = ({ count }: { count: number }) => (`,
+        `  <div>{count && <span>{count}</span>}</div>`,
+        `);`,
+        ``,
+      ].join('\n'),
+    });
 
-  // Act
-  const findings = await lint(workspace.root, ['src']);
+    // Act
+    const findings = await lint(workspace.root, ['src']);
 
-  // Assert
-  assert.ok(
-    findings.some(
-      ({ ruleId }) =>
-        ruleId === '@eslint-react/no-leaked-conditional-rendering',
-    ),
-    JSON.stringify(findings),
-  );
-});
-
-test('./react reports a list item that has no key', async () => {
-  // Arrange
-  await using workspace = await fixtureWorkspace({
-    'nx.json': '{}',
-    'tsconfig.json': tsconfig,
-    'eslint.config.mjs': reactProjectConfig,
-    'src/list.tsx': [
-      `export const List = ({ items }: { items: string[] }) => (`,
-      `  <ul>{items.map((item) => <li>{item}</li>)}</ul>`,
-      `);`,
-      ``,
-    ].join('\n'),
-  });
-
-  // Act
-  const findings = await lint(workspace.root, ['src']);
-
-  // Assert
-  assert.ok(
-    findings.some(({ ruleId }) => ruleId === '@eslint-react/no-missing-key'),
-    JSON.stringify(findings),
-  );
-});
-
-test('./react reports a hook called in a condition one time, from @eslint-react', async () => {
-  // Arrange
-  await using workspace = await fixtureWorkspace({
-    'nx.json': '{}',
-    'tsconfig.json': tsconfig,
-    'eslint.config.mjs': reactProjectConfig,
-    'src/toggle.tsx': [
-      `import { useState } from 'react';`,
-      `export function Toggle({ on }: { on: boolean }) {`,
-      `  if (on) {`,
-      `    useState(0);`,
-      `  }`,
-      `  return <div />;`,
-      `}`,
-      ``,
-    ].join('\n'),
-  });
-
-  // Act
-  const findings = await lint(workspace.root, ['src']);
-
-  // Assert
-  const hookRules = findings
-    .map(({ ruleId }) => ruleId)
-    .filter((ruleId) => ruleId?.endsWith('rules-of-hooks'));
-  assert.deepEqual(hookRules, ['@eslint-react/rules-of-hooks']);
-});
-
-test('./react reports a React Compiler finding from eslint-plugin-react-hooks', async () => {
-  // Arrange: react-hook-form's watch() is on the compiler's list of
-  // incompatible library APIs.
-  await using workspace = await fixtureWorkspace({
-    'nx.json': '{}',
-    'tsconfig.json': tsconfig,
-    'eslint.config.mjs': reactProjectConfig,
-    'src/form.tsx': [
-      `import { useForm } from 'react-hook-form';`,
-      `export function Form() {`,
-      `  const { watch } = useForm();`,
-      `  return <p>{watch('name')}</p>;`,
-      `}`,
-      ``,
-    ].join('\n'),
-  });
-
-  // Act
-  const findings = await lint(workspace.root, ['src']);
-
-  // Assert
-  assert.ok(
-    findings.some(
-      ({ ruleId }) => ruleId === 'react-hooks/incompatible-library',
-    ),
-    JSON.stringify(findings),
-  );
-});
-
-test('./react reports an image that has no alt text', async () => {
-  // Arrange
-  await using workspace = await fixtureWorkspace({
-    'nx.json': '{}',
-    'tsconfig.json': tsconfig,
-    'eslint.config.mjs': reactProjectConfig,
-    'src/logo.tsx': 'export const Logo = () => <img src="logo.png" />;\n',
-  });
-
-  // Act
-  const findings = await lint(workspace.root, ['src']);
-
-  // Assert
-  assert.ok(
-    findings.some(({ ruleId }) => ruleId === 'jsx-a11y-x/alt-text'),
-    JSON.stringify(findings),
-  );
-});
-
-test('./react leaves a package.json to manifest/recommended, also when a script holds &&', async () => {
-  // Arrange: no-leaked-conditional-rendering reads type information only when
-  // the text has "&&", and jsonc-eslint-parser gives none.
-  await using workspace = await fixtureWorkspace({
-    'nx.json': '{}',
-    'tsconfig.json': tsconfig,
-    'eslint.config.mjs': [
-      `import react from ${JSON.stringify(import.meta.resolve('@zukhruf/eslint/react'))};`,
-      fixtureConfig(
-        `...react, { plugins: { zukhruf }, extends: ['zukhruf/base'] }, { plugins: { manifest }, extends: ['manifest/recommended'] }`,
+    // Assert
+    assert.ok(
+      findings.some(
+        ({ ruleId }) =>
+          ruleId === '@eslint-react/no-leaked-conditional-rendering',
       ),
-    ].join('\n'),
-    // A project's manifest: the workspace root keeps no script but prepare.
-    'apps/fx/package.json': JSON.stringify({
-      name: 'fx',
-      private: true,
-      scripts: { start: 'npm run build && node dist/main.js' },
-    }),
+      JSON.stringify(findings),
+    );
   });
 
-  // Act
-  const findings = await lint(workspace.root, ['apps/fx/package.json']);
+  test('./react reports a list item that has no key', async () => {
+    // Arrange
+    await using workspace = await fixtureWorkspace({
+      'nx.json': '{}',
+      'tsconfig.json': tsconfig,
+      'eslint.config.mjs': reactProjectConfig,
+      'src/list.tsx': [
+        `export const List = ({ items }: { items: string[] }) => (`,
+        `  <ul>{items.map((item) => <li>{item}</li>)}</ul>`,
+        `);`,
+        ``,
+      ].join('\n'),
+    });
 
-  // Assert
-  assert.deepEqual(findings, []);
-});
+    // Act
+    const findings = await lint(workspace.root, ['src']);
 
-test('./react takes a control of @zukhruf/shadcn that a <label> wraps as the label control', async () => {
-  // Arrange: Base UI names the Checkbox from its parent <label>.
-  await using workspace = await fixtureWorkspace({
-    'nx.json': '{}',
-    'tsconfig.json': tsconfig,
-    'eslint.config.mjs': reactProjectConfig,
-    'src/terms.tsx': [
-      `import { Checkbox } from '@zukhruf/shadcn';`,
-      `export const Terms = () => (`,
-      `  <label>`,
-      `    <Checkbox name="terms" />`,
-      `    Accept the terms`,
-      `  </label>`,
-      `);`,
-      ``,
-    ].join('\n'),
+    // Assert
+    assert.ok(
+      findings.some(({ ruleId }) => ruleId === '@eslint-react/no-missing-key'),
+      JSON.stringify(findings),
+    );
   });
 
-  // Act
-  const findings = await lint(workspace.root, ['src']);
+  test('./react reports a hook called in a condition one time, from @eslint-react', async () => {
+    // Arrange
+    await using workspace = await fixtureWorkspace({
+      'nx.json': '{}',
+      'tsconfig.json': tsconfig,
+      'eslint.config.mjs': reactProjectConfig,
+      'src/toggle.tsx': [
+        `import { useState } from 'react';`,
+        `export function Toggle({ on }: { on: boolean }) {`,
+        `  if (on) {`,
+        `    useState(0);`,
+        `  }`,
+        `  return <div />;`,
+        `}`,
+        ``,
+      ].join('\n'),
+    });
 
-  // Assert
-  assert.deepEqual(
-    findings.filter(
-      ({ ruleId }) => ruleId === 'jsx-a11y-x/label-has-associated-control',
-    ),
-    [],
-  );
-});
+    // Act
+    const findings = await lint(workspace.root, ['src']);
 
-test("./react finds the text of shadcn's choice card, a <label> around a Field with a Checkbox", async () => {
-  // Arrange: the text is 4 levels below the <label>.
-  await using workspace = await fixtureWorkspace({
-    'nx.json': '{}',
-    'tsconfig.json': tsconfig,
-    'eslint.config.mjs': reactProjectConfig,
-    'src/plan.tsx': [
-      `import { Checkbox, Field, FieldContent, FieldTitle } from '@zukhruf/shadcn';`,
-      `export const Plan = () => (`,
-      `  <label htmlFor="pro">`,
-      `    <Field orientation="horizontal">`,
-      `      <Checkbox id="pro" />`,
-      `      <FieldContent>`,
-      `        <FieldTitle>Pro plan</FieldTitle>`,
-      `      </FieldContent>`,
-      `    </Field>`,
-      `  </label>`,
-      `);`,
-      ``,
-    ].join('\n'),
+    // Assert
+    const hookRules = findings
+      .map(({ ruleId }) => ruleId)
+      .filter((ruleId) => ruleId?.endsWith('rules-of-hooks'));
+    assert.deepEqual(hookRules, ['@eslint-react/rules-of-hooks']);
   });
 
-  // Act
-  const findings = await lint(workspace.root, ['src']);
+  test('./react reports a React Compiler finding from eslint-plugin-react-hooks', async () => {
+    // Arrange: react-hook-form's watch() is on the compiler's list of
+    // incompatible library APIs.
+    await using workspace = await fixtureWorkspace({
+      'nx.json': '{}',
+      'tsconfig.json': tsconfig,
+      'eslint.config.mjs': reactProjectConfig,
+      'src/form.tsx': [
+        `import { useForm } from 'react-hook-form';`,
+        `export function Form() {`,
+        `  const { watch } = useForm();`,
+        `  return <p>{watch('name')}</p>;`,
+        `}`,
+        ``,
+      ].join('\n'),
+    });
 
-  // Assert
-  assert.deepEqual(
-    findings.filter(
-      ({ ruleId }) => ruleId === 'jsx-a11y-x/label-has-associated-control',
-    ),
-    [],
-  );
-});
+    // Act
+    const findings = await lint(workspace.root, ['src']);
 
-test('./react reports a <label> whose only content is a control of @zukhruf/shadcn, as it has no text', async () => {
-  // Arrange
-  await using workspace = await fixtureWorkspace({
-    'nx.json': '{}',
-    'tsconfig.json': tsconfig,
-    'eslint.config.mjs': reactProjectConfig,
-    'src/terms.tsx': [
-      `import { Checkbox } from '@zukhruf/shadcn';`,
-      `export const Terms = () => (`,
-      `  <label>`,
-      `    <Checkbox name="terms" />`,
-      `  </label>`,
-      `);`,
-      ``,
-    ].join('\n'),
+    // Assert
+    assert.ok(
+      findings.some(
+        ({ ruleId }) => ruleId === 'react-hooks/incompatible-library',
+      ),
+      JSON.stringify(findings),
+    );
   });
 
-  // Act
-  const findings = await lint(workspace.root, ['src']);
+  test('./react reports an image that has no alt text', async () => {
+    // Arrange
+    await using workspace = await fixtureWorkspace({
+      'nx.json': '{}',
+      'tsconfig.json': tsconfig,
+      'eslint.config.mjs': reactProjectConfig,
+      'src/logo.tsx': 'export const Logo = () => <img src="logo.png" />;\n',
+    });
 
-  // Assert
-  assert.deepEqual(
-    findings
-      .filter(
+    // Act
+    const findings = await lint(workspace.root, ['src']);
+
+    // Assert
+    assert.ok(
+      findings.some(({ ruleId }) => ruleId === 'jsx-a11y-x/alt-text'),
+      JSON.stringify(findings),
+    );
+  });
+
+  test('./react leaves a package.json to manifest/recommended, also when a script holds &&', async () => {
+    // Arrange: no-leaked-conditional-rendering reads type information only when
+    // the text has "&&", and jsonc-eslint-parser gives none.
+    await using workspace = await fixtureWorkspace({
+      'nx.json': '{}',
+      'tsconfig.json': tsconfig,
+      'eslint.config.mjs': [
+        `import react from ${JSON.stringify(import.meta.resolve('@zukhruf/eslint/react'))};`,
+        fixtureConfig(
+          `...react, { plugins: { zukhruf }, extends: ['zukhruf/base'] }, { plugins: { manifest }, extends: ['manifest/recommended'] }`,
+        ),
+      ].join('\n'),
+      // A project's manifest: the workspace root keeps no script but prepare.
+      'apps/fx/package.json': JSON.stringify({
+        name: 'fx',
+        private: true,
+        scripts: { start: 'npm run build && node dist/main.js' },
+      }),
+    });
+
+    // Act
+    const findings = await lint(workspace.root, ['apps/fx/package.json']);
+
+    // Assert
+    assert.deepEqual(findings, []);
+  });
+
+  test('./react takes a control of @zukhruf/shadcn that a <label> wraps as the label control', async () => {
+    // Arrange: Base UI names the Checkbox from its parent <label>.
+    await using workspace = await fixtureWorkspace({
+      'nx.json': '{}',
+      'tsconfig.json': tsconfig,
+      'eslint.config.mjs': reactProjectConfig,
+      'src/terms.tsx': [
+        `import { Checkbox } from '@zukhruf/shadcn';`,
+        `export const Terms = () => (`,
+        `  <label>`,
+        `    <Checkbox name="terms" />`,
+        `    Accept the terms`,
+        `  </label>`,
+        `);`,
+        ``,
+      ].join('\n'),
+    });
+
+    // Act
+    const findings = await lint(workspace.root, ['src']);
+
+    // Assert
+    assert.deepEqual(
+      findings.filter(
         ({ ruleId }) => ruleId === 'jsx-a11y-x/label-has-associated-control',
-      )
-      .map(({ message }) => message),
-    ['A form label must have accessible text.'],
-  );
+      ),
+      [],
+    );
+  });
+
+  test("./react finds the text of shadcn's choice card, a <label> around a Field with a Checkbox", async () => {
+    // Arrange: the text is 4 levels below the <label>.
+    await using workspace = await fixtureWorkspace({
+      'nx.json': '{}',
+      'tsconfig.json': tsconfig,
+      'eslint.config.mjs': reactProjectConfig,
+      'src/plan.tsx': [
+        `import { Checkbox, Field, FieldContent, FieldTitle } from '@zukhruf/shadcn';`,
+        `export const Plan = () => (`,
+        `  <label htmlFor="pro">`,
+        `    <Field orientation="horizontal">`,
+        `      <Checkbox id="pro" />`,
+        `      <FieldContent>`,
+        `        <FieldTitle>Pro plan</FieldTitle>`,
+        `      </FieldContent>`,
+        `    </Field>`,
+        `  </label>`,
+        `);`,
+        ``,
+      ].join('\n'),
+    });
+
+    // Act
+    const findings = await lint(workspace.root, ['src']);
+
+    // Assert
+    assert.deepEqual(
+      findings.filter(
+        ({ ruleId }) => ruleId === 'jsx-a11y-x/label-has-associated-control',
+      ),
+      [],
+    );
+  });
+
+  test('./react reports a <label> whose only content is a control of @zukhruf/shadcn, as it has no text', async () => {
+    // Arrange
+    await using workspace = await fixtureWorkspace({
+      'nx.json': '{}',
+      'tsconfig.json': tsconfig,
+      'eslint.config.mjs': reactProjectConfig,
+      'src/terms.tsx': [
+        `import { Checkbox } from '@zukhruf/shadcn';`,
+        `export const Terms = () => (`,
+        `  <label>`,
+        `    <Checkbox name="terms" />`,
+        `  </label>`,
+        `);`,
+        ``,
+      ].join('\n'),
+    });
+
+    // Act
+    const findings = await lint(workspace.root, ['src']);
+
+    // Assert
+    assert.deepEqual(
+      findings
+        .filter(
+          ({ ruleId }) => ruleId === 'jsx-a11y-x/label-has-associated-control',
+        )
+        .map(({ message }) => message),
+      ['A form label must have accessible text.'],
+    );
+  });
 });

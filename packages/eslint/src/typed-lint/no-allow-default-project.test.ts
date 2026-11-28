@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
+import { availableParallelism } from 'node:os';
 import { relative } from 'node:path';
-import { test } from 'node:test';
+import { describe, test } from 'node:test';
 
 import { fixtureWorkspace } from '../testing/fixture-workspace.ts';
 import { fixtureConfig, lint } from '../testing/run-eslint.ts';
@@ -40,39 +41,47 @@ async function findings(
   );
 }
 
-test('a non-empty allowDefaultProject is reported on each file whose parser options carry it, with what to do', async () => {
-  // Act
-  const reported = await findings(
-    `{
+// Each test starts processes of its own over a workspace of its own, so the
+// tests run at the same time, as many as this machine's processors.
+describe(
+  'no-allow-default-project',
+  { concurrency: availableParallelism() },
+  () => {
+    test('a non-empty allowDefaultProject is reported on each file whose parser options carry it, with what to do', async () => {
+      // Act
+      const reported = await findings(
+        `{
       files: ['*.config.ts'],
       languageOptions: {
         parserOptions: { projectService: { allowDefaultProject: ['*.config.ts'] } },
       },
     }`,
-    ['vite.config.ts', 'src/index.ts'],
-  );
+        ['vite.config.ts', 'src/index.ts'],
+      );
 
-  // Assert
-  assert.deepEqual(reported, [
-    [
-      'vite.config.ts',
-      "allowDefaultProject ['*.config.ts'] lets typed lint parse a file that no tsconfig includes through typescript-eslint's default project, so lint passes while tsc never type-checks the file and Nx's typecheck inputs leave it out. Include the file in a tsconfig that the project's tsconfig.json references, such as a type-check-only tsconfig.scripts.json, then remove allowDefaultProject.",
-    ],
-  ]);
-});
+      // Assert
+      assert.deepEqual(reported, [
+        [
+          'vite.config.ts',
+          "allowDefaultProject ['*.config.ts'] lets typed lint parse a file that no tsconfig includes through typescript-eslint's default project, so lint passes while tsc never type-checks the file and Nx's typecheck inputs leave it out. Include the file in a tsconfig that the project's tsconfig.json references, such as a type-check-only tsconfig.scripts.json, then remove allowDefaultProject.",
+        ],
+      ]);
+    });
 
-test('an empty allowDefaultProject, the projectService: true of zukhruf/base, and a file with no projectService are not reported', async () => {
-  // Act
-  const empty = await findings(
-    `{
+    test('an empty allowDefaultProject, the projectService: true of zukhruf/base, and a file with no projectService are not reported', async () => {
+      // Act
+      const empty = await findings(
+        `{
       files: ['**/*.ts'],
       languageOptions: { parserOptions: { projectService: { allowDefaultProject: [] } } },
     }`,
-    ['src/index.ts'],
-  );
-  const base = await findings('', ['src/index.ts', 'src/tool.js']);
+        ['src/index.ts'],
+      );
+      const base = await findings('', ['src/index.ts', 'src/tool.js']);
 
-  // Assert
-  assert.deepEqual(empty, []);
-  assert.deepEqual(base, []);
-});
+      // Assert
+      assert.deepEqual(empty, []);
+      assert.deepEqual(base, []);
+    });
+  },
+);

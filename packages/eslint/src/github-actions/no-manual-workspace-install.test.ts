@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { availableParallelism } from 'node:os';
+import { describe, test } from 'node:test';
 
 import { fixtureWorkspace } from '../testing/fixture-workspace.ts';
 import { fixtureConfig, lint } from '../testing/run-eslint.ts';
@@ -11,11 +12,17 @@ const config = fixtureConfig(`{
 
 const RULE = 'zukhruf/no-manual-workspace-install';
 
-test('a job that sets up Node with actions/setup-node and runs npm ci is reported', async () => {
-  // Arrange
-  await using workspace = await fixtureWorkspace({
-    'eslint.config.mjs': config,
-    '.github/workflows/ci.yml': `on: push
+// Each test starts processes of its own over a workspace of its own, so the
+// tests run at the same time, as many as this machine's processors.
+describe(
+  'no-manual-workspace-install',
+  { concurrency: availableParallelism() },
+  () => {
+    test('a job that sets up Node with actions/setup-node and runs npm ci is reported', async () => {
+      // Arrange
+      await using workspace = await fixtureWorkspace({
+        'eslint.config.mjs': config,
+        '.github/workflows/ci.yml': `on: push
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -28,24 +35,24 @@ jobs:
       - run: npm ci
       - run: npx nx affected -t test
 `,
-  });
+      });
 
-  // Act
-  const findings = await lint(workspace.root, ['.']);
+      // Act
+      const findings = await lint(workspace.root, ['.']);
 
-  // Assert
-  assert.deepEqual(
-    findings.map(({ file, ruleId }) => ({ file, ruleId })),
-    [{ file: workspace.path('.github/workflows/ci.yml'), ruleId: RULE }],
-  );
-  assert.match(findings[0]?.message ?? '', /setup-workspace/);
-});
+      // Assert
+      assert.deepEqual(
+        findings.map(({ file, ruleId }) => ({ file, ruleId })),
+        [{ file: workspace.path('.github/workflows/ci.yml'), ruleId: RULE }],
+      );
+      assert.match(findings[0]?.message ?? '', /setup-workspace/);
+    });
 
-test('a composite action whose block script runs npm ci after actions/setup-node is reported', async () => {
-  // Arrange
-  await using workspace = await fixtureWorkspace({
-    'eslint.config.mjs': config,
-    '.github/actions/gate/action.yaml': `name: Gate
+    test('a composite action whose block script runs npm ci after actions/setup-node is reported', async () => {
+      // Arrange
+      await using workspace = await fixtureWorkspace({
+        'eslint.config.mjs': config,
+        '.github/actions/gate/action.yaml': `name: Gate
 runs:
   using: composite
   steps:
@@ -59,28 +66,28 @@ runs:
         echo installing
         npm ci --no-audit --no-fund
 `,
-  });
+      });
 
-  // Act
-  const findings = await lint(workspace.root, ['.']);
+      // Act
+      const findings = await lint(workspace.root, ['.']);
 
-  // Assert
-  assert.deepEqual(
-    findings.map(({ file, ruleId }) => ({ file, ruleId })),
-    [
-      {
-        file: workspace.path('.github/actions/gate/action.yaml'),
-        ruleId: RULE,
-      },
-    ],
-  );
-});
+      // Assert
+      assert.deepEqual(
+        findings.map(({ file, ruleId }) => ({ file, ruleId })),
+        [
+          {
+            file: workspace.path('.github/actions/gate/action.yaml'),
+            ruleId: RULE,
+          },
+        ],
+      );
+    });
 
-test('a job that installs the workspace with the setup-workspace action passes', async () => {
-  // Arrange
-  await using workspace = await fixtureWorkspace({
-    'eslint.config.mjs': config,
-    '.github/workflows/ci.yml': `on: push
+    test('a job that installs the workspace with the setup-workspace action passes', async () => {
+      // Arrange
+      await using workspace = await fixtureWorkspace({
+        'eslint.config.mjs': config,
+        '.github/workflows/ci.yml': `on: push
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -89,20 +96,20 @@ jobs:
       - uses: JanuaryLabs/zukhruf/.github/actions/setup-workspace@main
       - run: npx nx affected -t test
 `,
-  });
+      });
 
-  // Act
-  const findings = await lint(workspace.root, ['.']);
+      // Act
+      const findings = await lint(workspace.root, ['.']);
 
-  // Assert
-  assert.deepEqual(findings, []);
-});
+      // Assert
+      assert.deepEqual(findings, []);
+    });
 
-test('actions/setup-node in a job that does not run npm ci passes, though another job of the workflow runs npm ci', async () => {
-  // Arrange: a job that only needs Node, such as one that installs a CLI.
-  await using workspace = await fixtureWorkspace({
-    'eslint.config.mjs': config,
-    '.github/workflows/deploy.yml': `on: push
+    test('actions/setup-node in a job that does not run npm ci passes, though another job of the workflow runs npm ci', async () => {
+      // Arrange: a job that only needs Node, such as one that installs a CLI.
+      await using workspace = await fixtureWorkspace({
+        'eslint.config.mjs': config,
+        '.github/workflows/deploy.yml': `on: push
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -117,11 +124,13 @@ jobs:
       - uses: JanuaryLabs/zukhruf/.github/actions/setup-workspace@main
       - run: npm ci --prefix tools/probe
 `,
-  });
+      });
 
-  // Act
-  const findings = await lint(workspace.root, ['.']);
+      // Act
+      const findings = await lint(workspace.root, ['.']);
 
-  // Assert
-  assert.deepEqual(findings, []);
-});
+      // Assert
+      assert.deepEqual(findings, []);
+    });
+  },
+);

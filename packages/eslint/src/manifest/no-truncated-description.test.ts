@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { availableParallelism } from 'node:os';
+import { describe, test } from 'node:test';
 
 import { fixtureWorkspace } from '../testing/fixture-workspace.ts';
 import { fixtureConfig, lint } from '../testing/run-eslint.ts';
@@ -37,80 +38,88 @@ async function lintManifest(manifest: Record<string, unknown>) {
   );
 }
 
-test('a published manifest whose description is longer than 255 characters is reported with its length and the limit', async () => {
-  // Arrange
-  const description = 'a'.repeat(256);
+// Each test starts processes of its own over a workspace of its own, so the
+// tests run at the same time, as many as this machine's processors.
+describe(
+  'no-truncated-description',
+  { concurrency: availableParallelism() },
+  () => {
+    test('a published manifest whose description is longer than 255 characters is reported with its length and the limit', async () => {
+      // Arrange
+      const description = 'a'.repeat(256);
 
-  // Act
-  const findings = await lintManifest({ description });
+      // Act
+      const findings = await lintManifest({ description });
 
-  // Assert
-  assert.deepEqual(
-    findings.map(({ ruleId }) => ruleId),
-    ['manifest/no-truncated-description'],
-  );
-  assert.match(findings[0]?.message ?? '', /\b256 characters\b/);
-  assert.match(findings[0]?.message ?? '', /\bat most 255\b/);
-});
+      // Assert
+      assert.deepEqual(
+        findings.map(({ ruleId }) => ruleId),
+        ['manifest/no-truncated-description'],
+      );
+      assert.match(findings[0]?.message ?? '', /\b256 characters\b/);
+      assert.match(findings[0]?.message ?? '', /\bat most 255\b/);
+    });
 
-test('a published manifest whose description has exactly 255 characters is not reported', async () => {
-  // Arrange
-  const description = 'a'.repeat(255);
+    test('a published manifest whose description has exactly 255 characters is not reported', async () => {
+      // Arrange
+      const description = 'a'.repeat(255);
 
-  // Act
-  const findings = await lintManifest({ description });
+      // Act
+      const findings = await lintManifest({ description });
 
-  // Assert
-  assert.deepEqual(findings, []);
-});
+      // Assert
+      assert.deepEqual(findings, []);
+    });
 
-test('a private manifest is not reported, because npm does not publish it', async () => {
-  // Arrange
-  const description = 'a'.repeat(300);
+    test('a private manifest is not reported, because npm does not publish it', async () => {
+      // Arrange
+      const description = 'a'.repeat(300);
 
-  // Act
-  const findings = await lintManifest({ private: true, description });
+      // Act
+      const findings = await lintManifest({ private: true, description });
 
-  // Assert
-  assert.deepEqual(findings, []);
-});
+      // Assert
+      assert.deepEqual(findings, []);
+    });
 
-test('a manifest with two description keys is reported when the last one is longer than 255 characters, because JSON.parse keeps the last', async () => {
-  // Arrange
-  const source = `{"name":"@fx/greet","version":"0.0.0","repository":${JSON.stringify(REPOSITORY)},"description":"short","description":"${'a'.repeat(256)}"}`;
+    test('a manifest with two description keys is reported when the last one is longer than 255 characters, because JSON.parse keeps the last', async () => {
+      // Arrange
+      const source = `{"name":"@fx/greet","version":"0.0.0","repository":${JSON.stringify(REPOSITORY)},"description":"short","description":"${'a'.repeat(256)}"}`;
 
-  // Act
-  const findings = await lintManifestSource(source);
+      // Act
+      const findings = await lintManifestSource(source);
 
-  // Assert
-  assert.deepEqual(
-    findings.map(({ ruleId }) => ruleId),
-    ['manifest/no-truncated-description'],
-  );
-  assert.match(findings[0]?.message ?? '', /\b256 characters\b/);
-});
+      // Assert
+      assert.deepEqual(
+        findings.map(({ ruleId }) => ruleId),
+        ['manifest/no-truncated-description'],
+      );
+      assert.match(findings[0]?.message ?? '', /\b256 characters\b/);
+    });
 
-test('a manifest with two description keys is not reported when the last one is short, because JSON.parse keeps the last', async () => {
-  // Arrange
-  const source = `{"name":"@fx/greet","version":"0.0.0","repository":${JSON.stringify(REPOSITORY)},"description":"${'a'.repeat(256)}","description":"short"}`;
+    test('a manifest with two description keys is not reported when the last one is short, because JSON.parse keeps the last', async () => {
+      // Arrange
+      const source = `{"name":"@fx/greet","version":"0.0.0","repository":${JSON.stringify(REPOSITORY)},"description":"${'a'.repeat(256)}","description":"short"}`;
 
-  // Act
-  const findings = await lintManifestSource(source);
+      // Act
+      const findings = await lintManifestSource(source);
 
-  // Assert
-  assert.deepEqual(findings, []);
-});
+      // Assert
+      assert.deepEqual(findings, []);
+    });
 
-test('a manifest with two private keys is reported when the last one is false, because npm publishes it', async () => {
-  // Arrange
-  const source = `{"name":"@fx/greet","version":"0.0.0","repository":${JSON.stringify(REPOSITORY)},"private":true,"private":false,"description":"${'a'.repeat(256)}"}`;
+    test('a manifest with two private keys is reported when the last one is false, because npm publishes it', async () => {
+      // Arrange
+      const source = `{"name":"@fx/greet","version":"0.0.0","repository":${JSON.stringify(REPOSITORY)},"private":true,"private":false,"description":"${'a'.repeat(256)}"}`;
 
-  // Act
-  const findings = await lintManifestSource(source);
+      // Act
+      const findings = await lintManifestSource(source);
 
-  // Assert
-  assert.deepEqual(
-    findings.map(({ ruleId }) => ruleId),
-    ['manifest/no-truncated-description'],
-  );
-});
+      // Assert
+      assert.deepEqual(
+        findings.map(({ ruleId }) => ruleId),
+        ['manifest/no-truncated-description'],
+      );
+    });
+  },
+);

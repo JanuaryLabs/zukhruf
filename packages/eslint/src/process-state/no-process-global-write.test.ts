@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { availableParallelism } from 'node:os';
+import { describe, test } from 'node:test';
 
 import { fixtureWorkspace } from '../testing/fixture-workspace.ts';
 import { fixtureConfig, lint } from '../testing/run-eslint.ts';
@@ -37,53 +38,61 @@ async function reportedLines(file: string, lines: string[]): Promise<number[]> {
   return own.map(({ line }) => line);
 }
 
-test('shipped code that replaces console or one of its methods is reported: an assignment, also through the global object, and Object.assign or defineProperty on it', async () => {
-  // Act
-  const lines = await reportedLines('logger.ts', [
-    `declare let console: Console;`,
-    `declare const send: (args: unknown[]) => void, other: Console;`,
-    `console.error = (...args: unknown[]) => send(args);`,
-    `console['warn'] = (...args: unknown[]) => send(args);`,
-    `console = other;`,
-    `globalThis.console = other;`,
-    `globalThis.console.log = (...args: unknown[]) => send(args);`,
-    `window.console.info ??= () => undefined;`,
-    `Object.assign(console, { debug: () => undefined });`,
-    `Object.defineProperty(globalThis.console, 'trace', { value: () => undefined });`,
-    `Object.defineProperties(console, {});`,
-  ]);
+// Each test starts processes of its own over a workspace of its own, so the
+// tests run at the same time, as many as this machine's processors.
+describe(
+  'no-process-global-write',
+  { concurrency: availableParallelism() },
+  () => {
+    test('shipped code that replaces console or one of its methods is reported: an assignment, also through the global object, and Object.assign or defineProperty on it', async () => {
+      // Act
+      const lines = await reportedLines('logger.ts', [
+        `declare let console: Console;`,
+        `declare const send: (args: unknown[]) => void, other: Console;`,
+        `console.error = (...args: unknown[]) => send(args);`,
+        `console['warn'] = (...args: unknown[]) => send(args);`,
+        `console = other;`,
+        `globalThis.console = other;`,
+        `globalThis.console.log = (...args: unknown[]) => send(args);`,
+        `window.console.info ??= () => undefined;`,
+        `Object.assign(console, { debug: () => undefined });`,
+        `Object.defineProperty(globalThis.console, 'trace', { value: () => undefined });`,
+        `Object.defineProperties(console, {});`,
+      ]);
 
-  // Assert
-  assert.deepEqual(lines, [3, 4, 5, 6, 7, 8, 9, 10, 11]);
-});
+      // Assert
+      assert.deepEqual(lines, [3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    });
 
-test('a test that swaps console.error by hand is reported too', async () => {
-  // Act
-  const lines = await reportedLines('logger.test.ts', [
-    `const original = console.error;`,
-    `console.error = () => undefined;`,
-    `console.error = original;`,
-  ]);
+    test('a test that swaps console.error by hand is reported too', async () => {
+      // Act
+      const lines = await reportedLines('logger.test.ts', [
+        `const original = console.error;`,
+        `console.error = () => undefined;`,
+        `console.error = original;`,
+      ]);
 
-  // Assert
-  assert.deepEqual(lines, [2, 3]);
-});
+      // Assert
+      assert.deepEqual(lines, [2, 3]);
+    });
 
-test('reading console, also into an assignment, calling it, mocking it for one test, and writing a console field of another object are not reported', async () => {
-  // Act
-  const lines = await reportedLines('logger.test.ts', [
-    `declare const t: { mock: { method(target: object, name: string): void } };`,
-    `declare const logger: { console: Console };`,
-    `console.log('ready');`,
-    `const { warn } = console;`,
-    `const copy = Object.assign({}, console);`,
-    `t.mock.method(console, 'error');`,
-    `logger.console = copy;`,
-    `logger.console.log = warn;`,
-    `let current: unknown;`,
-    `current = console.warn;`,
-  ]);
+    test('reading console, also into an assignment, calling it, mocking it for one test, and writing a console field of another object are not reported', async () => {
+      // Act
+      const lines = await reportedLines('logger.test.ts', [
+        `declare const t: { mock: { method(target: object, name: string): void } };`,
+        `declare const logger: { console: Console };`,
+        `console.log('ready');`,
+        `const { warn } = console;`,
+        `const copy = Object.assign({}, console);`,
+        `t.mock.method(console, 'error');`,
+        `logger.console = copy;`,
+        `logger.console.log = warn;`,
+        `let current: unknown;`,
+        `current = console.warn;`,
+      ]);
 
-  // Assert
-  assert.deepEqual(lines, []);
-});
+      // Assert
+      assert.deepEqual(lines, []);
+    });
+  },
+);

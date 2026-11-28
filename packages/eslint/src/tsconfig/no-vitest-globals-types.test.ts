@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
+import { availableParallelism } from 'node:os';
 import { relative } from 'node:path';
-import { test } from 'node:test';
+import { describe, test } from 'node:test';
 
 import { fixtureWorkspace } from '../testing/fixture-workspace.ts';
 import { fixtureConfig, lint } from '../testing/run-eslint.ts';
@@ -31,32 +32,40 @@ async function findings(
     .map(({ file, line }) => [relative(workspace.root, file), line]);
 }
 
-test("'vitest/globals' in compilerOptions.types is reported, in a tsconfig with comments as TypeScript allows", async () => {
-  // Act
-  const reported = await findings({
-    'packages/web/package.json': JSON.stringify({ name: '@acme/web' }),
-    'packages/web/tsconfig.spec.json': `{\n  // Nx writes this for a Vitest project.\n  "compilerOptions": {\n    "types": [\n      "vitest/globals",\n      "vitest/importMeta",\n    ],\n  },\n}\n`,
-  });
+// Each test starts processes of its own over a workspace of its own, so the
+// tests run at the same time, as many as this machine's processors.
+describe(
+  'no-vitest-globals-types',
+  { concurrency: availableParallelism() },
+  () => {
+    test("'vitest/globals' in compilerOptions.types is reported, in a tsconfig with comments as TypeScript allows", async () => {
+      // Act
+      const reported = await findings({
+        'packages/web/package.json': JSON.stringify({ name: '@acme/web' }),
+        'packages/web/tsconfig.spec.json': `{\n  // Nx writes this for a Vitest project.\n  "compilerOptions": {\n    "types": [\n      "vitest/globals",\n      "vitest/importMeta",\n    ],\n  },\n}\n`,
+      });
 
-  // Assert
-  assert.deepEqual(reported, [['packages/web/tsconfig.spec.json', 5]]);
-});
+      // Assert
+      assert.deepEqual(reported, [['packages/web/tsconfig.spec.json', 5]]);
+    });
 
-test("the Vitest types other than 'vitest/globals' pass", async () => {
-  // Act
-  const reported = await findings({
-    'packages/web/package.json': JSON.stringify({ name: '@acme/web' }),
-    'packages/web/tsconfig.spec.json': JSON.stringify({
-      compilerOptions: {
-        types: [
-          'vitest',
-          'vitest/importMeta',
-          '@testing-library/jest-dom/vitest',
-        ],
-      },
-    }),
-  });
+    test("the Vitest types other than 'vitest/globals' pass", async () => {
+      // Act
+      const reported = await findings({
+        'packages/web/package.json': JSON.stringify({ name: '@acme/web' }),
+        'packages/web/tsconfig.spec.json': JSON.stringify({
+          compilerOptions: {
+            types: [
+              'vitest',
+              'vitest/importMeta',
+              '@testing-library/jest-dom/vitest',
+            ],
+          },
+        }),
+      });
 
-  // Assert
-  assert.deepEqual(reported, []);
-});
+      // Assert
+      assert.deepEqual(reported, []);
+    });
+  },
+);

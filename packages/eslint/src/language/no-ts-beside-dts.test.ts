@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
+import { availableParallelism } from 'node:os';
 import { relative } from 'node:path';
-import { test } from 'node:test';
+import { describe, test } from 'node:test';
 
 import { fixtureWorkspace } from '../testing/fixture-workspace.ts';
 import { fixtureConfig, lint } from '../testing/run-eslint.ts';
@@ -52,42 +53,46 @@ async function findings(
     });
 }
 
-test('a .ts or .tsx beside a .d.ts, and a .mts beside a .d.mts, of the same base name are reported', async () => {
-  // Act
-  const reported = await findings(
-    {
-      'env.ts': MODULE,
-      'env.d.ts': GLOBALS,
-      'view.tsx': MODULE,
-      'view.d.ts': GLOBALS,
-      'loader.mts': MODULE,
-      'loader.d.mts': GLOBALS,
-    },
-    ['env.ts', 'view.tsx', 'loader.mts'],
-  );
+// Each test starts processes of its own over a workspace of its own, so the
+// tests run at the same time, as many as this machine's processors.
+describe('no-ts-beside-dts', { concurrency: availableParallelism() }, () => {
+  test('a .ts or .tsx beside a .d.ts, and a .mts beside a .d.mts, of the same base name are reported', async () => {
+    // Act
+    const reported = await findings(
+      {
+        'env.ts': MODULE,
+        'env.d.ts': GLOBALS,
+        'view.tsx': MODULE,
+        'view.d.ts': GLOBALS,
+        'loader.mts': MODULE,
+        'loader.d.mts': GLOBALS,
+      },
+      ['env.ts', 'view.tsx', 'loader.mts'],
+    );
 
-  // Assert
-  assert.deepEqual(reported, [
-    ['src/env.ts', 'env.d.ts'],
-    ['src/loader.mts', 'loader.d.mts'],
-    ['src/view.tsx', 'view.d.ts'],
-  ]);
-});
+    // Assert
+    assert.deepEqual(reported, [
+      ['src/env.ts', 'env.d.ts'],
+      ['src/loader.mts', 'loader.d.mts'],
+      ['src/view.tsx', 'view.d.ts'],
+    ]);
+  });
 
-test('a declaration file alone, one of another base name, a .mts beside a .d.ts and a .cts beside a .d.cts, which TypeScript all load, are not reported', async () => {
-  // Act
-  const reported = await findings(
-    {
-      'vite-env.d.ts': GLOBALS,
-      'env.ts': MODULE,
-      'loader.mts': MODULE,
-      'loader.d.ts': GLOBALS,
-      'legacy.cts': MODULE,
-      'legacy.d.cts': GLOBALS,
-    },
-    ['vite-env.d.ts', 'env.ts', 'loader.mts', 'loader.d.ts', 'legacy.cts'],
-  );
+  test('a declaration file alone, one of another base name, a .mts beside a .d.ts and a .cts beside a .d.cts, which TypeScript all load, are not reported', async () => {
+    // Act
+    const reported = await findings(
+      {
+        'vite-env.d.ts': GLOBALS,
+        'env.ts': MODULE,
+        'loader.mts': MODULE,
+        'loader.d.ts': GLOBALS,
+        'legacy.cts': MODULE,
+        'legacy.d.cts': GLOBALS,
+      },
+      ['vite-env.d.ts', 'env.ts', 'loader.mts', 'loader.d.ts', 'legacy.cts'],
+    );
 
-  // Assert
-  assert.deepEqual(reported, []);
+    // Assert
+    assert.deepEqual(reported, []);
+  });
 });

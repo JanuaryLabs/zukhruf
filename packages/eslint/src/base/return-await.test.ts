@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { availableParallelism } from 'node:os';
+import { describe, test } from 'node:test';
 
 import { fixtureWorkspace } from '../testing/fixture-workspace.ts';
 import { fixtureConfig, lint } from '../testing/run-eslint.ts';
@@ -30,24 +31,28 @@ const runner = (returned: string) =>
     ``,
   ].join('\n');
 
-test('base reports a promise returned without await inside an await using scope, and passes it awaited', async () => {
-  // Arrange
-  await using workspace = await fixtureWorkspace({
-    'nx.json': '{}',
-    'tsconfig.json': tsconfig,
-    'eslint.config.mjs': fixtureConfig(
-      `{ plugins: { zukhruf }, extends: ['zukhruf/base'] }`,
-    ),
-    'src/unawaited.ts': runner('work()'),
-    'src/awaited.ts': runner('await work()'),
+// Each test starts processes of its own over a workspace of its own, so the
+// tests run at the same time, as many as this machine's processors.
+describe('return-await', { concurrency: availableParallelism() }, () => {
+  test('base reports a promise returned without await inside an await using scope, and passes it awaited', async () => {
+    // Arrange
+    await using workspace = await fixtureWorkspace({
+      'nx.json': '{}',
+      'tsconfig.json': tsconfig,
+      'eslint.config.mjs': fixtureConfig(
+        `{ plugins: { zukhruf }, extends: ['zukhruf/base'] }`,
+      ),
+      'src/unawaited.ts': runner('work()'),
+      'src/awaited.ts': runner('await work()'),
+    });
+
+    // Act
+    const findings = await lint(workspace.root, ['src']);
+
+    // Assert
+    const returnAwait = findings
+      .filter(({ ruleId }) => ruleId === '@typescript-eslint/return-await')
+      .map(({ file }) => file.split('/').pop());
+    assert.deepEqual(returnAwait, ['unawaited.ts']);
   });
-
-  // Act
-  const findings = await lint(workspace.root, ['src']);
-
-  // Assert
-  const returnAwait = findings
-    .filter(({ ruleId }) => ruleId === '@typescript-eslint/return-await')
-    .map(({ file }) => file.split('/').pop());
-  assert.deepEqual(returnAwait, ['unawaited.ts']);
 });
