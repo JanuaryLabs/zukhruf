@@ -2,7 +2,7 @@
 
 A program sends jobs to a queue, and workers do the jobs later, also after the program restarts. [pg-boss](https://github.com/timgit/pg-boss) is a job queue that keeps its jobs in Postgres. A program that has no Postgres server, for example a desktop app or a CLI, cannot use it. This package keeps the jobs in one SQLite file through `node:sqlite`, and gives the API of pg-boss: the same method names, the same options, the same results and the same errors. The API is a declared subset of pg-boss: 19 methods of `PgBoss`.
 
-Zero divergence is the contract. A parity suite runs each scenario on real pg-boss 12.39.0 over PGlite, and on this package. Then it compares what each engine returned, stored and emitted. A test passes only when the two are equal. Thus a program can change from one engine to the other and keep its code.
+Zero divergence is the contract. A parity suite runs each scenario on real pg-boss 12.39.0 over PGlite, then on this package on the main thread and on `SqliteJobQueueThread`. Then it compares what each form returned, stored and emitted with what pg-boss did. A test passes only when each form is equal to pg-boss. Thus a program can change from one engine to the other and keep its code.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
