@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { Ratio } from '../aggregation/ratio.ts';
 import type { Sample, Usage } from '../scoring/run-log.ts';
 import type { CaseReader, Weighted } from '../scoring/scorecard-scorer.ts';
-import { ThrownAssertionError } from './thrown-assertion-error.ts';
+import { UnscoredAnswerError } from './unscored-answer-error.ts';
 
 // The part of promptfoo's EvaluateResult that the samples read (promptfoo
 // 0.126.0, dist/src/index.d.ts). The rows of an afterAll extension
@@ -63,8 +63,9 @@ export type PromptfooReaders<Answer, C extends Weighted> = {
 // failed sample (ADR 0005): a row whose response holds FailedCall's `failed`
 // reason, or an error row that an afterEach hook graded on the answer null,
 // with the error of the row. An error row with no named scores was neither
-// retried nor graded, and is a RangeError. A row whose assertion threw has no
-// score to read, and is a ThrownAssertionError.
+// retried nor graded, and is a RangeError. A row that promptfoo graded as
+// failed with no named score has no score to read, and is an
+// UnscoredAnswerError.
 export class PromptfooSamples<Answer, C extends Weighted> implements Iterable<
   Sample<Answer, C>
 > {
@@ -98,12 +99,14 @@ export class PromptfooSamples<Answer, C extends Weighted> implements Iterable<
       );
     // promptfoo 0.126.0 grades an assertion that throws as a failed
     // component with no named scores (scriptFailure,
-    // dist/src/evaluator-5tUcjTs8.js:5593-5598, 5613-5616), so its row fails
-    // with ASSERT (applyGradingResult, 7292-7300) and its gradingResult has
-    // no namedScoreWeights, which promptfoo writes only when an assertion
-    // scored a name (1558-1565). An assertion that fails on its scores
-    // writes them with their weights.
-    const thrown = latest.flatMap((result) => {
+    // dist/src/evaluator-5tUcjTs8.js:5593-5598, 5613-5616), and one that
+    // returns false the same way, but for its reason
+    // (normalizeScriptAssertionResult, 1313-1324). Such a row fails with
+    // ASSERT (applyGradingResult, 7292-7300) and its gradingResult has no
+    // namedScoreWeights, which promptfoo writes only when an assertion scored
+    // a name (1558-1565). An assertion that fails on its scores writes them
+    // with their weights.
+    const unscored = latest.flatMap((result) => {
       const grading = result.gradingResult;
       if (
         result.failureReason !== assertFailureReason ||
@@ -119,7 +122,7 @@ export class PromptfooSamples<Answer, C extends Weighted> implements Iterable<
         },
       ];
     });
-    if (thrown.length > 0) throw new ThrownAssertionError(thrown);
+    if (unscored.length > 0) throw new UnscoredAnswerError(unscored);
     this.#samples = latest
       .toSorted((a, b) => a.testIdx - b.testIdx)
       .map((result) => PromptfooSamples.#sample(result, readers));

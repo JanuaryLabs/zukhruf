@@ -21,7 +21,7 @@ import {
   type PromptfooReaders,
   type PromptfooResult,
   PromptfooSamples,
-  ThrownAssertionError,
+  UnscoredAnswerError,
 } from './index.ts';
 
 const execFileAsync = promisify(execFile);
@@ -537,7 +537,7 @@ test('a run whose error rows were neither retried nor graded is refused, and the
   );
 });
 
-test('a run in which an assertion threw is refused with a ThrownAssertionError that holds each test and epoch it threw on, with the reason promptfoo wrote', async () => {
+test('a run in which an assertion threw is refused with an UnscoredAnswerError that holds each test and epoch it threw on, with the reason promptfoo wrote', async () => {
   await using folder = await new TemporaryFiles().directory('samples-');
   const exported = await evaluate(folder.path, {
     callApi: `return { output: '{"a": 1}' };`,
@@ -552,10 +552,10 @@ test('a run in which an assertion threw is refused with a ThrownAssertionError t
 
   const read = () => new PromptfooSamples(exported.results.results, readers);
 
-  assert.throws(read, ThrownAssertionError);
+  assert.throws(read, UnscoredAnswerError);
   assert.throws(read, {
     message:
-      'A run in which an assertion threw has no score for its test; fix the assertion and run promptfoo eval again. Threw: b (epoch 0): Custom function threw error: the scorer broke, b (epoch 1): Custom function threw error: the scorer broke',
+      'A run with answers that no assertion scored has no score for their tests: an assertion threw or failed without a score; fix the assertion and run promptfoo eval again. Unscored: b (epoch 0): Custom function threw error: the scorer broke, b (epoch 1): Custom function threw error: the scorer broke',
     tests: [
       {
         test: 'b',
@@ -566,6 +566,32 @@ test('a run in which an assertion threw is refused with a ThrownAssertionError t
         test: 'b',
         epoch: 1,
         reason: 'Custom function threw error: the scorer broke',
+      },
+    ],
+  });
+});
+
+test('a run in which an assertion returned false with no score is refused with an UnscoredAnswerError that holds the test, with the reason promptfoo wrote', async () => {
+  await using folder = await new TemporaryFiles().directory('samples-');
+  const exported = await evaluate(folder.path, {
+    callApi: `return { output: '{"a": 1}' };`,
+    assertion: `if (context.vars['q'] === 'b') return false;
+  return grade(output, context);`,
+    tests: [
+      { q: 'a', expected: { a: 1 } },
+      { q: 'b', expected: { a: 1 } },
+    ],
+  });
+
+  const read = () => new PromptfooSamples(exported.results.results, readers);
+
+  assert.throws(read, UnscoredAnswerError);
+  assert.throws(read, {
+    tests: [
+      {
+        test: 'b',
+        epoch: 0,
+        reason: 'Custom function returned false\nfile://assertion.ts',
       },
     ],
   });

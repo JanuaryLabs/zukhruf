@@ -152,8 +152,9 @@ A failure that each call would have, such as a 401. It is not a failed call. The
 **Error result**:
 A promptfoo result whose `failureReason` is `ResultFailureReason.ERROR`. promptfoo does not grade it, so its case adds nothing to the wholes. The word is promptfoo's. An error result that an `afterEach` hook graded on the answer null is a failed call, and `PromptfooSamples` reads it as one; an error result with no named scores was neither retried nor graded, and refuses the run (ADR 0009).
 
-**Thrown assertion**:
-An assertion that threw while it graded a result. It is a defect of the scorer, not a failed call, so the score of its test is unknown, not the score of the answer null. promptfoo 0.126.0 records it as a failed assertion with no named scores, and `PromptfooSamples` refuses the run with a `ThrownAssertionError` that holds each such test and epoch (ADR 0009).
+**Unscored answer**:
+An answer that no assertion scored: promptfoo graded its result as failed with no named score, because an assertion threw or failed without a score. A thrown assertion is a defect of the scorer, not a failed call, so the score of its test is unknown, not the score of the answer null. promptfoo 0.126.0 writes a thrown assertion and one that returned `false` the same way, but for the reason, and `PromptfooSamples` refuses the run with an `UnscoredAnswerError` that holds each such test and epoch with promptfoo's reason (ADR 0009).
+_Avoid_: thrown assertion (the reader cannot tell a throw from a failure)
 
 ### Classification
 

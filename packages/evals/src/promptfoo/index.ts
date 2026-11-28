@@ -16,4 +16,4 @@ export {
   type PromptfooResult,
   PromptfooSamples,
 } from './promptfoo-samples.ts';
-export { ThrownAssertionError } from './thrown-assertion-error.ts';
+export { UnscoredAnswerError } from './unscored-answer-error.ts';
