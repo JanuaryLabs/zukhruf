@@ -37,6 +37,11 @@ type Lead = (Tested & { readonly result: Result }) | Untested;
 type Corrected =
   (Tested & { readonly holm: number; readonly result: Result }) | Untested;
 
+// The labels of the two runs of the pair, as TestsMoved heads its columns
+// with them: a claim of better or worse names the run that is better or
+// worse, and the run it is compared with.
+type Labels = { readonly baseline: string; readonly change: string };
+
 // The verdict cell of each result: an inconclusive test reads "no
 // difference" on the page.
 const cells: Readonly<Record<Result | 'untested', Cell>> = {
@@ -69,11 +74,12 @@ const total = (run: Run, name: string) =>
 // score, chosen before the runs, is tested alone at 0.05; the p-values of the
 // other scores are adjusted together with Holm, so the chance of one false
 // "better" or "worse" among them stays at 0.05 (report ADR 0004, point 3, as
-// mteb's report does). The claim leads with the primary score and counts the
-// others (report ADR 0002). A score that no resample gave a whole in both
-// runs is untested, as Summary shows a bar it could not test: its row has no
-// difference and no p, and Holm corrects only the scores that have a p, so an
-// untested score neither joins the family nor widens its correction.
+// mteb's report does). The claim leads with the primary score, naming the
+// change and the baseline by their labels when it is better or worse, and
+// counts the others (report ADR 0002). A score that no resample gave a whole
+// in both runs is untested, as Summary shows a bar it could not test: its row
+// has no difference and no p, and Holm corrects only the scores that have a p,
+// so an untested score neither joins the family nor widens its correction.
 export class Verdicts<Answer, C> implements Section {
   readonly id = 'verdicts';
   readonly claim: string;
@@ -152,7 +158,10 @@ export class Verdicts<Answer, C> implements Section {
           ]),
       cells[entry.result],
     ];
-    this.claim = Verdicts.#claim(lead, others);
+    this.claim = Verdicts.#claim(lead, others, {
+      baseline: pair.baseline.info.label,
+      change: pair.change.info.label,
+    });
     this.primitives = [
       new Table(
         ['score', 'baseline', 'change', 'difference', 'p', 'Holm p', 'verdict'],
@@ -166,8 +175,12 @@ export class Verdicts<Answer, C> implements Section {
     ];
   }
 
-  static #claim(lead: Lead, others: readonly Corrected[]): string {
-    const led = Verdicts.#led(lead);
+  static #claim(
+    lead: Lead,
+    others: readonly Corrected[],
+    labels: Labels,
+  ): string {
+    const led = Verdicts.#led(lead, labels);
     if (others.length === 0) return led;
     const count = (counted: Result | 'untested') =>
       others.filter((other) => other.result === counted).length;
@@ -182,12 +195,12 @@ export class Verdicts<Answer, C> implements Section {
     return `${led}; of the other ${scores}, after Holm, ${tally}`;
   }
 
-  static #led(lead: Lead): string {
+  static #led(lead: Lead, { baseline, change }: Labels): string {
     const { score } = lead;
     if (lead.result === 'untested')
       return `${score.name} is untested: no resample gave it a whole in both runs`;
     if (lead.result === 'inconclusive')
       return `No difference beyond chance on ${score.name} (${difference(lead.verdict)})`;
-    return `${score.name} is ${lead.result} beyond chance: ${difference(lead.verdict)}`;
+    return `${change} is ${lead.result} than ${baseline} beyond chance on ${score.name}: ${difference(lead.verdict)}`;
   }
 }

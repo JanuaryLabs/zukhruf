@@ -2,6 +2,8 @@
 
 Status: proposed (2026-11-27, #6108). Design for review: no code yet.
 
+Status, 2026-11-28 (#6402): a claim of a run pair names the runs by their labels, as `TestsMoved` heads its columns with them. When the primary score is better or worse beyond chance, `Verdicts` reads "deepseek is better than haiku beyond chance on values_f1: +0.500 [+0.500, +0.500]", the change first and the baseline after "than", as the title of the context above names both runs; a claim of no difference and of an untested score names no run, since neither run is better.
+
 ## Context
 
 `@zukhruf/mteb/report` writes each section title as a claim that comes from the numbers below it, and Ezz approved that page (#3471). A title such as "Scores" makes the reader find the answer; a title such as "DeepSeek is better than Haiku on values_recall" gives it, and the chart below shows why. Braintrust grades a comparison (improvement, regression, trade-off, tie) for the same reason.

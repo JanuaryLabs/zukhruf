@@ -65,7 +65,8 @@ const shapes = {
 
 type Shape = keyof typeof shapes;
 
-// The pair of two runs on a and b, with the shape of each score.
+// The pair of two runs on a and b, haiku the baseline and deepseek the
+// change, with the shape of each score.
 const pairOf = (scores: Record<string, Shape>) => {
   const side = (index: 0 | 1, testId: 'a' | 'b') =>
     sample(
@@ -78,8 +79,8 @@ const pairOf = (scores: Record<string, Shape>) => {
       ),
     );
   return new RunPair(
-    log('baseline', [side(0, 'a'), side(0, 'b')]),
-    log('change', [side(1, 'a'), side(1, 'b')]),
+    log('haiku', [side(0, 'a'), side(0, 'b')]),
+    log('deepseek', [side(1, 'a'), side(1, 'b')]),
   );
 };
 
@@ -341,14 +342,15 @@ void test.each(
       name: 'a primary score better beyond chance, with no other score',
       scores: { values_f1: 'rises' },
       against: [0],
-      claim: 'values_f1 is better beyond chance: +0.500 [+0.500, +0.500]',
+      claim:
+        'deepseek is better than haiku beyond chance on values_f1: +0.500 [+0.500, +0.500]',
     },
     {
       name: 'a primary score worse beyond chance, and two other scores',
       scores: { values_f1: 'falls', recall: 'rises', precision: 'rises' },
       against: [0, 0, 50],
       claim:
-        'values_f1 is worse beyond chance: -0.500 [-0.500, -0.500]; of the other 2 scores, after Holm, 1 better and 0 worse',
+        'deepseek is worse than haiku beyond chance on values_f1: -0.500 [-0.500, -0.500]; of the other 2 scores, after Holm, 1 better and 0 worse',
     },
     {
       name: 'a primary score with no difference, and one other score',
@@ -375,7 +377,7 @@ void test.each(
       scores: { values_f1: 'rises', recall: 'empty' },
       against: [0, 0],
       claim:
-        'values_f1 is better beyond chance: +0.500 [+0.500, +0.500]; the other score is untested',
+        'deepseek is better than haiku beyond chance on values_f1: +0.500 [+0.500, +0.500]; the other score is untested',
     },
     {
       name: 'every score untested',
@@ -467,7 +469,7 @@ test('verdicts render as HTML and Markdown with their claim and with no NaN', ()
       html: { claim: true, nan: false },
       markdown: {
         heading:
-          'values_f1 is better beyond chance: +0.500 [+0.500, +0.500]; of the other 1 score, after Holm, 0 better and 0 worse',
+          'deepseek is better than haiku beyond chance on values_f1: +0.500 [+0.500, +0.500]; of the other 1 score, after Holm, 0 better and 0 worse',
         nan: false,
       },
     },
