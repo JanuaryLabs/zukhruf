@@ -581,7 +581,11 @@ export class SqliteJobQueue
       return;
     }
     try {
-      await route.notifications.unlisten(notifyChannel);
+      // A TestClock waits for this I/O before it fires a timer, as a stop
+      // clears its intervals only after it (manager.js:1126-1129).
+      await this.#activity.track(() =>
+        route.notifications.unlisten(notifyChannel),
+      );
     } catch (error) {
       this.emit('error', toError(error));
     }

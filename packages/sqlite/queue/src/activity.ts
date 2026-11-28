@@ -61,6 +61,13 @@ export class Activity {
     });
   }
 
+  // Counted while in flight, as a statement is: the engine's own I/O that is
+  // no statement, such as the close of its listener on a file, which a stop
+  // awaits before it clears its intervals (#4984).
+  track<T>(work: () => Promise<T>): Promise<T> {
+    return this.#counted(work);
+  }
+
   // Counted while in flight (activity.js:18-33).
   async #counted<T>(work: () => Promise<T>): Promise<T> {
     this.#inFlight++;

@@ -405,6 +405,50 @@ describe('SqliteJobQueue', () => {
   // listen (attorney.js:641, 655): longer than the test runner lets a test run
   // (--test-timeout), so only the notification can run the second job before
   // the test ends.
+  // stop() awaits the close of the listener before it clears its intervals
+  // (manager.js:1126-1129). On a file that close is I/O of
+  // @zukhruf/sqlite-notify, so a TestClock must wait for it, or it fires the
+  // wip interval that the stop is about to clear (#4984).
+  it('clears the wip interval of a graceful stop on a file before the clock fires it', async () => {
+    await using dir = await new TemporaryFiles().directory('sqlite-queue-');
+    const clock = new TestClock('2026-01-01T00:00:00.000Z');
+    const queue = new SqliteJobQueue({
+      path: join(dir.path, 'queue.db'),
+      schedule: false,
+      supervise: false,
+      clock,
+      useListenNotify: true,
+    });
+    const wip: string[][] = [];
+    queue.on('wip', (workers) => {
+      wip.push(workers.map((worker) => worker.state));
+    });
+    const release = Promise.withResolvers<void>();
+    await queue.start();
+    try {
+      await queue.createQueue('jobs');
+      await queue.work(
+        'jobs',
+        { pollingIntervalSeconds: 2.5 },
+        () => release.promise,
+      );
+      await queue.send('jobs', null, { id: id(1) });
+      await clock.tick(2500);
+
+      const stopping = queue.stop({ graceful: true, close: false });
+      await clock.tick(3600);
+      release.resolve();
+      await stopping;
+
+      // The batch's start, then its end from a worker now stopping, and no
+      // emit of the interval at 6000 between them.
+      assert.deepStrictEqual(wip, [['active'], ['stopping']]);
+    } finally {
+      release.resolve();
+      await queue.stop({ graceful: false, close: true });
+    }
+  });
+
   it('wakes its own waiting worker when it sends to a notify queue on a file', async (t) => {
     await using dir = await new TemporaryFiles().directory('sqlite-queue-');
     const queue = new SqliteJobQueue({
