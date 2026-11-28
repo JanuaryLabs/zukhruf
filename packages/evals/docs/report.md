@@ -62,7 +62,7 @@ const log = new RunLog(
 );
 ```
 
-`PromptfooSamples` is an iterable of samples. It keeps the newest result of each test and epoch, so a run after `--retry-errors` has one sample per answer ([core ADR 0009](adr/0009-the-promptfoo-adapter-gives-the-samples-of-a-run-with-the-latest-result-of-each-answer.md)). The ratio of each name is `namedScores[name] × namedScoreWeights[name]` over `namedScoreWeights[name]`, so `Totals` of the log gives the number that promptfoo's column header shows. A failed call is a sample whose answer is null, with its error ([ADR 0005](adr/0005-a-failed-call-is-the-answer-null.md)). `RunLog` takes any iterable of samples, so a reader of another runner gives its own.
+`PromptfooSamples` is an iterable of samples. It keeps the newest result of each test and epoch, so a run after `--retry-errors` has one sample per answer ([core ADR 0009](adr/0009-the-promptfoo-adapter-gives-the-samples-of-a-run-with-the-latest-result-of-each-answer.md)). The ratio of each name is `namedScores[name] × namedScoreWeights[name]` over `namedScoreWeights[name]`, the ratio as the scorer gave it, and each sample has the weight of its case, which `Run` applies once. So when every case weighs 1, `Run#total` is the number that promptfoo's column header shows; promptfoo's own metric does not weigh the cases. A failed call is a sample whose answer is null, with its error ([ADR 0005](adr/0005-a-failed-call-is-the-answer-null.md)). `RunLog` takes any iterable of samples, so a reader of another runner gives its own.
 
 ## A page of one run
 

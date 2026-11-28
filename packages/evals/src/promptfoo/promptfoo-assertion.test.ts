@@ -52,7 +52,7 @@ test('grade gives each ratio as a named score with its whole as the weight, the 
   ]);
 });
 
-test('the weight of a row weighs its named scores, and a row without one weighs 1', () => {
+test('the weight of a row leaves its named scores and their weights as the scorer gave them, since Run applies the weight of the case', () => {
   const grade = new PromptfooAssertion(
     new ScorerSet(
       {
@@ -62,17 +62,28 @@ test('the weight of a row weighs its named scores, and a row without one weighs 
     ),
     new TextVarsCase(),
   ).grade;
-  const config = { expected: '{"a": "x"}', schema: { type: 'object' } };
+  const config = {
+    expected: '{"a": "x", "b": "y"}',
+    schema: { type: 'object' },
+  };
 
-  const weights = [undefined, 2, 3].map(
-    (weight) =>
-      grade(
-        { a: 'x' },
-        { config: weight === undefined ? config : { ...config, weight } },
-      ).namedScoreWeights?.['leaf exact match'],
-  );
+  const graded = [undefined, 2, 3].map((weight) => {
+    const result = grade(
+      { a: 'x' },
+      { config: weight === undefined ? config : { ...config, weight } },
+    );
+    return [
+      result.namedScores?.['leaf exact match'],
+      result.namedScoreWeights?.['leaf exact match'],
+    ];
+  });
 
-  assert.deepEqual(weights, [1, 2, 3]);
+  // One of the two expected values is stated: 1/2, of the whole 2.
+  assert.deepEqual(graded, [
+    [0.5, 2],
+    [0.5, 2],
+    [0.5, 2],
+  ]);
 });
 
 test('a row without config.expected fails with a message that names it', () => {

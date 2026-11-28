@@ -318,7 +318,7 @@ export default new PromptfooAssertion(
 }
 ```
 
-The assertion passes when the scorecard passes. Each ratio becomes a named score, with its whole as the weight. promptfoo adds the value × the weight, so the column header shows the same ratio of sums as `Totals`.
+The assertion passes when the scorecard passes. Each ratio becomes a named score, with its whole as the weight, as the scorer gave it. promptfoo adds the value × the weight, so the column header shows the same ratio of sums as `Totals` of cases of weight 1. The weight of the case stays out of the stored weight, and `Run` applies it once ([core ADR 0009](adr/0009-the-promptfoo-adapter-gives-the-samples-of-a-run-with-the-latest-result-of-each-answer.md)).
 
 `ScorerAssertion` of `@zukhruf/evals/promptfoo` adapts one scorer. It reads the case from the vars of the test, because an assertion that `defaultTest` shares gets only the vars of each test. `weight` sets how much its value counts in the score of the test, and `threshold` sets when it passes. `comparer` compares the answer with the case, and `cases` reads the case. All four are required:
 

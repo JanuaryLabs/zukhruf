@@ -16,6 +16,7 @@ import { TemporaryFiles } from '@zukhruf/fs';
 import { Linear, PercentileInterval } from '@zukhruf/statistics';
 
 import { Bootstrap, Ratio, RunLog } from '../index.ts';
+import { TextVarsCase } from '../structured/index.ts';
 import {
   type PromptfooReaders,
   type PromptfooResult,
@@ -366,6 +367,136 @@ test('the ratio of sums of the samples is the number that promptfoo gives the ru
     ),
   );
   assert.equal(interval?.low, 1 / 5);
+});
+
+test('each writer stores the whole that its scorer gave, and Run weighs each test by the weight of its case once', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('samples-');
+  const source = (path: string) => new URL(path, import.meta.url).href;
+  await writeFile(
+    join(folder.path, 'assertion.ts'),
+    `import { Recall, ScorerSet } from '${source('../index.ts')}';
+import { ExactMatch, TextVarsCase, TreeWalk, ValueMatches } from '${source('../structured/index.ts')}';
+import { AssertionModule, PromptfooAssertion, ScorerAssertion } from '${source('./index.ts')}';
+
+const cases = new TextVarsCase();
+const grade = new PromptfooAssertion(
+  new ScorerSet({ recall: new Recall(new ValueMatches()) }, { comparer: new TreeWalk() }),
+  cases,
+).grade;
+export const module = new AssertionModule(import.meta.url, {
+  exact: new ScorerAssertion(new ExactMatch(), { weight: 1, threshold: 0, comparer: new TreeWalk(), cases }),
+});
+export default {
+  grade: (output: unknown, context: { vars: Record<string, unknown> }) => grade(output, { config: context.vars }),
+  ...module.functions,
+};
+`,
+  );
+  await writeFile(
+    join(folder.path, 'provider.ts'),
+    `export default class {
+  id() {
+    return 'provider';
+  }
+  async callApi(prompt: string) {
+    return { output: prompt === 'one' ? '{"a": 1}' : '{"a": 1, "b": 9}' };
+  }
+}
+`,
+  );
+  await writeFile(
+    join(folder.path, 'promptfooconfig.ts'),
+    `import { module } from './assertion.ts';
+
+export default {
+  prompts: ['{{q}}'],
+  providers: ['file://provider.ts'],
+  defaultTest: {
+    assert: [
+      { type: 'javascript', value: 'file://assertion.ts:grade' },
+      ...module.assert('exact'),
+    ],
+  },
+  tests: [
+    { vars: { q: 'one', expected: '{"a": 1}', weight: 1 } },
+    { vars: { q: 'three', expected: '{"a": 1, "b": 2}', weight: 3 } },
+  ],
+};
+`,
+  );
+  const manifest = findPackageJSON('promptfoo', import.meta.url);
+  assert.ok(manifest, 'promptfoo is a devDependency of the package');
+  const { bin }: { bin: { promptfoo: string } } = JSON.parse(
+    await readFile(manifest, 'utf8'),
+  );
+  await execFileAsync(
+    process.execPath,
+    [
+      join(manifest, '..', bin.promptfoo),
+      'eval',
+      '-c',
+      'promptfooconfig.ts',
+      '--no-cache',
+      '--no-table',
+      '--no-progress-bar',
+      '-o',
+      'out.json',
+    ],
+    {
+      cwd: folder.path,
+      timeout: 120_000,
+      env: {
+        ...process.env,
+        PROMPTFOO_CONFIG_DIR: join(folder.path, 'promptfoo'),
+        PROMPTFOO_DISABLE_TELEMETRY: '1',
+        PROMPTFOO_DISABLE_UPDATE: '1',
+        PROMPTFOO_DISABLE_SHARING: 'true',
+        PROMPTFOO_PASS_RATE_THRESHOLD: '0',
+      },
+    },
+  ).catch((cause: unknown) => {
+    // promptfoo exits 100 when a test fails; the export is written.
+    if (
+      typeof cause === 'object' &&
+      cause !== null &&
+      'code' in cause &&
+      cause.code === 100
+    )
+      return;
+    throw cause;
+  });
+  const exported: Exported = JSON.parse(
+    await readFile(join(folder.path, 'out.json'), 'utf8'),
+  );
+
+  // Act
+  const run = new RunLog(
+    { id: 'eval', label: 'provider', createdAt: new Date(0) },
+    new PromptfooSamples(exported.results.results, {
+      test: (result) => String(result.vars['q']),
+      cases: new TextVarsCase(),
+      answer: (output) => output,
+    }),
+  ).run();
+
+  // Assert
+  assert.deepEqual(
+    exported.results.results
+      .toSorted((a, b) => a.testIdx - b.testIdx)
+      .map((row) => row.gradingResult?.namedScoreWeights),
+    [
+      { recall: 1, exact: 1 },
+      { recall: 2, exact: 1 },
+    ],
+    'Each stored weight must be the whole of the scorer, with no case weight',
+  );
+  // one states 1 of 1 value at weight 1, three 1 of 2 at weight 3:
+  // (1·1 + 1·3) / (1·1 + 2·3) = 4/7. The exact match: (1·1 + 0·3) / (1 + 3).
+  assert.deepEqual(
+    [run.total('recall').ratio, run.total('exact').ratio],
+    [new Ratio(4, 7), new Ratio(1, 4)],
+  );
 });
 
 test('the rows of two prompts are refused, since a run of two providers is two logs', async () => {

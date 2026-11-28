@@ -23,10 +23,12 @@ export type AssertionContext = {
 };
 
 // Adapts a scorer to a promptfoo javascript assertion (ADR 0004). Each ratio
-// of the scorecard becomes a named score with its whole as the weight:
-// promptfoo adds value × weight over the rows and divides by the weights
-// (namedMetrics.ts, accumulateNamedMetric), which is the ratio of sums.
-// promptfoo calls a function, so a module exports `grade`.
+// of the scorecard becomes a named score with its whole as the weight, as the
+// scorer gave it: promptfoo adds value × weight over the rows and divides by
+// the weights (namedMetrics.ts, accumulateNamedMetric), which is the ratio of
+// sums. The weight of the case belongs to the case, and Run applies it once
+// (ADR 0009, #6359), so the stored weight is not multiplied by it. promptfoo
+// calls a function, so a module exports `grade`.
 export class PromptfooAssertion<Case extends Weighted> {
   readonly #scorer: ScorecardScorer<Case>;
   readonly #cases: CaseReader<Case>;
@@ -42,9 +44,7 @@ export class PromptfooAssertion<Case extends Weighted> {
   ): GradingResult => {
     const testCase = this.#cases.from(context.config ?? {});
     const scorecard = this.#scorer.score(output, testCase);
-    const ratios = [...scorecard.ratios].map(
-      ([name, ratio]) => [name, ratio.times(testCase.weight)] as const,
-    );
+    const ratios = [...scorecard.ratios];
     return {
       pass: scorecard.passed,
       score: scorecard.score,

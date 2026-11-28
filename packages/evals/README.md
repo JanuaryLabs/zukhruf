@@ -356,7 +356,7 @@ A label outside the class set counts in no class, as scikit-learn gives it when 
 
 `ScorerAssertion` is in `./promptfoo`. It takes the comparer and the case reader of a family. The sample below scores labels. [docs/structured.md](docs/structured.md) has a structured sample.
 
-`PromptfooAssertion` adapts a scorer set to a per-row assertion. Each ratio becomes a named score with its whole as the weight, so the column header shows the same ratio of sums as `Totals`. It reads the case from the config of the assertion.
+`PromptfooAssertion` adapts a scorer set to a per-row assertion. Each ratio becomes a named score with its whole as the weight, as the scorer gave it, so the column header shows the same ratio of sums as `Totals` of cases of weight 1. The weight of the case is not in the stored weight: `Run` applies it once (ADR 0009). It reads the case from the config of the assertion.
 
 `ScorerAssertion` holds one scorer with its `weight` (how much it counts in the score of the test) and its `threshold` (when it passes). Both numbers are required. It reads the case from the vars of the test.
 
