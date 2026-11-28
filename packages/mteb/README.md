@@ -558,9 +558,9 @@ console.log(verdict);
 }
 ```
 
-`observed` is the mean of (change - baseline) over the queries. `low` and `high` are the bounds of its 95% interval. The test draws as many queries as there are, with replacement, 2000 times, and takes the mean difference of each draw (a paired bootstrap test, Efron and Tibshirani 1993). The result is `better` when `low` is above 0, `worse` when `high` is below 0, and `inconclusive` when the interval contains 0. The output above is for the 20 queries of the BM25 fixture (`src/models/model-implementations/fixtures/bm25/`), not for a real task.
+`observed` is the mean of (change - baseline) over the queries. `low` and `high` are the bounds of its 95% interval. The test draws as many queries as there are, with replacement, 2000 times, and takes the mean difference of each draw (a paired bootstrap test, Efron and Tibshirani 1993). The output above is for the 20 queries of the BM25 fixture (`src/models/model-implementations/fixtures/bm25/`), not for a real task.
 
-`p` is the two-sided p-value of the same 2000 means (Efron and Tibshirani 1993). It is two times the smaller share of the means that are at or below 0, or at or above 0, and it is at most 1. Thus `p` is below 0.05 when the interval does not contain 0, but for the interpolation of the interval bounds.
+`p` is the two-sided p-value of the same 2000 means (Efron and Tibshirani 1993). It is two times the smaller share of the means that are at or below 0, or at or above 0, and it is at most 1. The result is `decide(p, observed)`: `better` or `worse` by the sign of `observed` when `p` is at most 0.05, as a level-0.05 test rejects, and `inconclusive` when `p` is above 0.05. A report decides its verdicts by the same `decide`. With 2000 means, the interval lies beyond 0 when `p` is below 0.05 and contains 0 when `p` is above 0.05. At `p` = 0.05 exactly, 50 of the 2000 means are on one side of 0, and the bound interpolates between the 50th and the 51st mean, so the interval can still contain 0 while the result is `better` or `worse`.
 
 When you compare more than one change, some changes are `better` or `worse` by chance. `Holm` of `@zukhruf/statistics` corrects the p-values of all the comparisons together (Holm 1979). A comparison is significant at the 5% level when its corrected p-value is 0.05 or less. `Holm` gives the values of `multipletests(pvals, method="holm")` of statsmodels 0.15.0, in the order of the p-values that you give it:
 
@@ -737,6 +737,8 @@ function pairedBootstrapTest(
   change: ReadonlyMap<string, number>,
   options?: { readonly replicates?: number; readonly seed?: number }, // default: 2000, 31957
 ): ChangeVerdict;
+
+const decide: (p: number, observed: number) => ChangeVerdict['result'];
 
 // The other exports of @zukhruf/mteb.
 export {
@@ -998,8 +1000,6 @@ type Verdict = Omit<ChangeVerdict, 'result'> & {
   readonly decidingP: number; // p of the primary comparison, else the Holm-corrected p
   readonly result: ChangeVerdict['result'];
 };
-
-const decide: (p: number, observed: number) => ChangeVerdict['result'];
 
 function verdicts(options: {
   readonly task: AbsTaskRetrieval;

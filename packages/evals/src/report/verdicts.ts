@@ -9,29 +9,13 @@ import {
   type Section,
   Table,
   type TestedVerdict,
-  type Tone,
   type UntestedVerdict,
+  decide,
 } from '../index.ts';
 import { fixed, kept } from './data-tables.ts';
 import type { Score } from './summary.ts';
 
-// The level at or below which a deciding p-value counts, as in mteb's report.
-const ALPHA = 0.05;
-
-type Result = 'better' | 'worse' | 'no difference';
-
-// The result of a test from the p-value that decides it, read in the
-// direction of its score: a difference counts when p is at most 0.05, the
-// rule of Holm of @zukhruf/statistics, and its sign says better or worse
-// (mteb's `decide`, docs/copied-code.md).
-const decide = (
-  p: number,
-  observed: number,
-  higherIsBetter: boolean,
-): Result => {
-  if (p > ALPHA) return 'no difference';
-  return observed * (higherIsBetter ? 1 : -1) > 0 ? 'better' : 'worse';
-};
+type Result = TestedVerdict['result'];
 
 // A score with its tested verdict. A Lead adds the result that its raw p
 // gives (the primary score, tested alone); a Corrected adds its Holm-adjusted
@@ -53,11 +37,13 @@ type Lead = (Tested & { readonly result: Result }) | Untested;
 type Corrected =
   (Tested & { readonly holm: number; readonly result: Result }) | Untested;
 
-const tones: Readonly<Record<Result | 'untested', Tone>> = {
-  better: 'good',
-  worse: 'bad',
-  'no difference': 'neutral',
-  untested: 'neutral',
+// The verdict cell of each result: an inconclusive test reads "no
+// difference" on the page.
+const cells: Readonly<Record<Result | 'untested', Cell>> = {
+  better: { text: 'better', tone: 'good' },
+  worse: { text: 'worse', tone: 'bad' },
+  inconclusive: { text: 'no difference', tone: 'neutral' },
+  untested: { text: 'untested', tone: 'neutral' },
 };
 
 const { format: signed } = new Intl.NumberFormat('en', {
@@ -164,7 +150,7 @@ export class Verdicts<Answer, C> implements Section {
             plain(fixed(entry.verdict.p)),
             plain(holm),
           ]),
-      { text: entry.result, tone: tones[entry.result] },
+      cells[entry.result],
     ];
     this.claim = Verdicts.#claim(lead, others);
     this.primitives = [
@@ -200,7 +186,7 @@ export class Verdicts<Answer, C> implements Section {
     const { score } = lead;
     if (lead.result === 'untested')
       return `${score.name} is untested: no resample gave it a whole in both runs`;
-    if (lead.result === 'no difference')
+    if (lead.result === 'inconclusive')
       return `No difference beyond chance on ${score.name} (${difference(lead.verdict)})`;
     return `${score.name} is ${lead.result} beyond chance: ${difference(lead.verdict)}`;
   }

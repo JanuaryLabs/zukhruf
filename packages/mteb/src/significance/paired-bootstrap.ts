@@ -34,13 +34,31 @@ const PERCENTILES = new PercentileInterval({
   method: new Linear(),
 });
 
+// The level at or below which a deciding p-value counts.
+const ALPHA = 0.05;
+
+// The result of a test from the p-value that decides it: a difference counts
+// when p is at most 0.05, as a level-0.05 test rejects (Casella and Berger
+// 2002, Definition 8.3.26; the rule of Holm of @zukhruf/statistics), and its
+// sign says better or worse.
+export const decide = (
+  p: number,
+  observed: number,
+): ChangeVerdict['result'] => {
+  if (p > ALPHA) return 'inconclusive';
+  return observed > 0 ? 'better' : 'worse';
+};
+
 // The paired bootstrap test over queries (Efron and Tibshirani 1993; Sakai
 // 2006 for retrieval): each replicate draws as many queries as there are,
-// with replacement, and takes the mean of their differences. The change is
-// better when the whole interval is above 0, worse when it is below 0, and
-// inconclusive else. p is twice the smaller share of replicate means at or
-// below 0 and at or above 0, at most 1, so p < 0.05 agrees with the 95%
-// interval but for its interpolation. The differences are in the order of the
+// with replacement, and takes the mean of their differences. p is twice the
+// smaller share of replicate means at or below 0 and at or above 0, at most
+// 1, and the result is decide(p, observed). With 2000 replicates, the 95%
+// interval lies beyond 0 when p is below 0.05 and reaches 0 when p is above
+// it; at p = 0.05 exactly (50 of 2000 on one side) its bound interpolates
+// between the 50th and 51st means, one on each side of 0, so it can lie
+// beyond 0 or reach it. The result follows p, not the interval, and a
+// report decides by the same p. The differences are in the order of the
 // sorted query ids, and the replicates are those of
 // numpy.random.default_rng(seed).
 export function pairedBootstrapTest(
@@ -80,12 +98,10 @@ export function pairedBootstrapTest(
         share((value) => value >= 0),
       ),
   );
-  let result: ChangeVerdict['result'] = 'inconclusive';
-  if (interval.isAbove(0)) result = 'better';
-  else if (interval.isBelow(0)) result = 'worse';
+  const observed = mean(differences);
   return {
-    result,
-    observed: mean(differences),
+    result: decide(p, observed),
+    observed,
     low: interval.low,
     high: interval.high,
     p,

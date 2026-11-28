@@ -122,7 +122,7 @@ The bootstrap of two runs on the same tests: each resample draws the tests with 
 For one name, the ratio of sums over the change run minus the ratio of sums over the baseline run, on the same tests (Koehn 2004). When each whole and each weight is 1, it is the mean of the differences of the tests.
 
 **Difference interval**:
-The confidence interval of the paired difference over the resamples, with the observed paired difference: `DifferenceInterval` of @zukhruf/statistics. The verdict is better when the whole interval is on the better side of 0, by the direction of the name, worse when it is on the worse side, and inconclusive when it holds 0 (ADR 0004).
+The confidence interval of the paired difference over the resamples, with the observed paired difference: `DifferenceInterval` of @zukhruf/statistics. The verdict does not read it: it follows p (`decide`: inconclusive when p is above 0.05, else better or worse by the sign of the observed difference in the direction of the name, ADR 0004).
 
 **Verdict**:
 The result of a paired bootstrap for one name: better, worse or inconclusive, with the paired difference, its difference interval, a p-value and the counts of the tests; or untested, with the counts of the tests only, when no resample gives the name a whole in both runs (#6267). The words better, worse and inconclusive are mteb's `ChangeVerdict.result`. The p-value has no correction: a caller that tests many names corrects it, such as with Holm.

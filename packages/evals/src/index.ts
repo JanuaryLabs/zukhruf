@@ -28,6 +28,7 @@ export {
   type TestedVerdict,
   type UntestedVerdict,
   type Verdict,
+  decide,
 } from './scoring/paired-bootstrap.ts';
 export {
   Bars,

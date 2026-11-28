@@ -96,9 +96,9 @@ precision: inconclusive, difference 0.037 in [-0.064, 0.137], p 0.4732
 
 ## What the output shows
 
-- **Recall is better.** The paired difference is 0.214: the change run has 34 hits of 42 expected offers, and the baseline run has 25 of 42. So 34/42 − 25/42 = 9/42. It is a ratio of sums over all the tests, as `Totals` gives it, not a mean of the values of the tests. The whole interval is above 0, so the verdict is better.
-- **Precision is inconclusive.** The change run states more offers, so it has more hits and more misses. The paired difference is 0.037 (34/44 − 25/34), but the interval holds 0. Three tests are regressions. The program cannot say that the change is better for precision, and it cannot say that it is worse.
-- **The counts are not the verdict.** Precision has 6 improvements and 3 regressions, and its verdict is still inconclusive. The verdict reads the interval of the resample differences.
+- **Recall is better.** The paired difference is 0.214: the change run has 34 hits of 42 expected offers, and the baseline run has 25 of 42. So 34/42 − 25/42 = 9/42. It is a ratio of sums over all the tests, as `Totals` gives it, not a mean of the values of the tests. p is below 0.05 and the difference is above 0, so the verdict is better; the whole interval is above 0 too.
+- **Precision is inconclusive.** The change run states more offers, so it has more hits and more misses. The paired difference is 0.037 (34/44 − 25/34), but p is 0.4732, above 0.05, and the interval holds 0. Three tests are regressions. The program cannot say that the change is better for precision, and it cannot say that it is worse.
+- **The counts are not the verdict.** Precision has 6 improvements and 3 regressions, and its verdict is still inconclusive. The verdict reads the p of the resample differences.
 
 ## Why it works
 

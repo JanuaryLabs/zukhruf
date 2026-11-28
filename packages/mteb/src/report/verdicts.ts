@@ -4,6 +4,7 @@ import type { MTEBModels } from '../abstasks/abstask.ts';
 import type { AbsTaskRetrieval } from '../abstasks/retrieval.ts';
 import {
   type ChangeVerdict,
+  decide,
   pairedBootstrapTest,
 } from '../significance/paired-bootstrap.ts';
 import { perQueryScores } from '../significance/per-query-scores.ts';
@@ -11,15 +12,6 @@ import { perQueryScores } from '../significance/per-query-scores.ts';
 // Not from MTEB. Says, for each pair of models and each tested score, if the
 // difference on a split is more than chance: a paired bootstrap test over the
 // queries (pairedBootstrapTest), on the predictions that evaluate wrote.
-
-// The level at or below which a deciding p-value counts.
-const ALPHA = 0.05;
-
-// The result of a test from the p-value that decides it: a difference counts
-// when p is at most 0.05, the rule of Holm of @zukhruf/statistics, and its
-// sign says better or worse.
-export const decide = (p: number, observed: number): ChangeVerdict['result'] =>
-  p > ALPHA ? 'inconclusive' : observed > 0 ? 'better' : 'worse';
 
 // A pair of models: the change against its baseline.
 export type Comparison = readonly [baseline: MTEBModels, change: MTEBModels];

@@ -11,6 +11,5 @@ export {
   type Comparison,
   type PrimaryComparison,
   type Verdict,
-  decide,
   verdicts,
 } from './verdicts.ts';

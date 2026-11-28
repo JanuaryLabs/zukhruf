@@ -25,6 +25,9 @@
 #   kept statistics;
 # - p: min(1, 2 * min(share <= 0, share >= 0)), as mteb's pairedBootstrapTest,
 #   each share of the kept statistics;
+# - the result: inconclusive when p is above 0.05, else better or worse by the
+#   sign of the observed statistic in the direction of the name, as mteb's
+#   decide (#6367);
 # - the counts by the sign of (change value - baseline value), with the
 #   direction.
 # Never edit expected.json by hand: run this script again.
@@ -92,9 +95,9 @@ def verdict(case, baseline_adds, change_adds, name, higher_is_better, seed):
     share_at_or_below = sum(1 for item in distribution if item <= 0) / len(distribution)
     share_at_or_above = sum(1 for item in distribution if item >= 0) / len(distribution)
     p = min(1.0, 2 * min(share_at_or_below, share_at_or_above))
-    above, below = low > 0, high < 0
-    better, worse = (above, below) if higher_is_better else (below, above)
-    signs = [(value(*c) - value(*b)) * (1 if higher_is_better else -1) for b, c, _ in pairs]
+    observed = statistic(pairs)
+    direction = 1 if higher_is_better else -1
+    signs = [(value(*c) - value(*b)) * direction for b, c, _ in pairs]
     return {
         "case": case,
         "name": name,
@@ -105,8 +108,8 @@ def verdict(case, baseline_adds, change_adds, name, higher_is_better, seed):
         "change": change_adds,
         "verdict": {
             "name": name,
-            "result": "better" if better else "worse" if worse else "inconclusive",
-            "difference": {"observed": statistic(pairs), "low": low, "high": high},
+            "result": "inconclusive" if p > 0.05 else "better" if observed * direction > 0 else "worse",
+            "difference": {"observed": observed, "low": low, "high": high},
             "p": p,
             "resamples": len(distribution),
             "nResamples": N_RESAMPLES,
@@ -194,7 +197,7 @@ cases.append(verdict(
     "kind", True, 7,
 ))
 
-# Brier again, with a change that is worse: lower is better, so the interval
+# Brier again, with a change that is worse: lower is better, so a difference
 # above 0 is worse.
 cases.append(verdict(
     "brier: lower is better and the change is worse, 1 epoch",
@@ -203,8 +206,8 @@ cases.append(verdict(
     "brier", False, 99,
 ))
 
-# A change with the answers of the baseline: each difference is 0, so the
-# interval is [0, 0], which is neither above nor below 0.
+# A change with the answers of the baseline: each difference is 0, so each
+# resample is at or below 0 and at or above 0, and p is 1: inconclusive.
 same = {page: float(data.random() < 0.9) for page in pages}
 cases.append(verdict(
     "page kinds: the change has the answers of the baseline",

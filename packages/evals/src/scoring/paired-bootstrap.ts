@@ -8,11 +8,12 @@ import { RatioOfSums } from '../aggregation/ratio-of-sums.ts';
 import type { Ratio } from '../aggregation/ratio.ts';
 import { type Run, pairTests, runTests, testUnit } from './run.ts';
 
-// The verdict of a name on two runs. A tested verdict reads the interval of
-// the differences of the kept resamples against 0; an untested verdict has
-// no difference, no interval and no p, since no resample, or not the two runs
-// themselves, gave the name a whole in both runs (#6267). Both count the
-// tests that the change improves, regresses and ties.
+// The verdict of a name on two runs. A tested verdict's result comes from its
+// p and the sign of its observed difference (decide), and its interval is
+// there to read; an untested verdict has no difference, no interval and no p,
+// since no resample, or not the two runs themselves, gave the name a whole in
+// both runs (#6267). Both count the tests that the change improves, regresses
+// and ties.
 export type Verdict = TestedVerdict | UntestedVerdict;
 
 type Counts = {
@@ -37,6 +38,23 @@ export type TestedVerdict = Counts & {
 
 export type UntestedVerdict = Counts & { readonly result: 'untested' };
 
+// The level at or below which a deciding p-value counts.
+const ALPHA = 0.05;
+
+// The result of a test from the p-value that decides it, read in the
+// direction of its score: a difference counts when p is at most 0.05, as a
+// level-0.05 test rejects (Casella and Berger 2002, Definition 8.3.26; the
+// rule of Holm of @zukhruf/statistics), and its sign says better or worse
+// (mteb's decide, docs/copied-code.md).
+export const decide = (
+  p: number,
+  observed: number,
+  higherIsBetter: boolean,
+): TestedVerdict['result'] => {
+  if (p > ALPHA) return 'inconclusive';
+  return observed * (higherIsBetter ? 1 : -1) > 0 ? 'better' : 'worse';
+};
+
 // One test in the two runs: its unit in each run, the mean of its epochs
 // times the weight of its case (testUnit).
 type Pair = {
@@ -47,14 +65,15 @@ type Pair = {
 // The paired bootstrap of two runs on the same tests (Koehn 2004): each
 // resample draws as many tests as there are, with replacement, and gives the
 // ratio of sums of the name over the change minus the same over the baseline,
-// on the same tests. The verdict reads the interval of these differences
-// against 0, in the direction of the name (ADR 0004). A resample where either
-// run has no whole has no difference and is left out, as Bootstrap leaves it
-// out (#6267): the interval and p come from the resamples that have one, and
-// p divides by their count. Two runs with no such resample, or with no whole
-// in either run on all the tests, give an untested verdict. The generator
-// keeps its state between calls, so the order of the calls is the order of the
-// draws.
+// on the same tests. The result is decide(p, observed), in the direction of
+// the name (ADR 0004), not the side of 0 that the interval lies on: at
+// p = 0.05 exactly (50 of 2000 resamples on one side) a percentile bound can
+// reach 0 while p counts (#6367). A resample where either run has no whole
+// has no difference and is left out, as Bootstrap leaves it out (#6267): the
+// interval and p come from the resamples that have one, and p divides by
+// their count. Two runs with no such resample, or with no whole in either run
+// on all the tests, give an untested verdict. The generator keeps its state
+// between calls, so the order of the calls is the order of the draws.
 export class PairedBootstrap {
   readonly #bootstrap: IidBootstrap;
   readonly #interval: ConfidenceIntervalMethod;
@@ -107,6 +126,7 @@ export class PairedBootstrap {
     if (observed === undefined || distribution.length === 0)
       return { ...counts, result: 'untested' };
     const interval = this.#interval.of(distribution);
+    const p = PairedBootstrap.#p(distribution);
     const difference = new DifferenceInterval(
       interval.low,
       interval.high,
@@ -114,9 +134,9 @@ export class PairedBootstrap {
     );
     return {
       ...counts,
-      result: PairedBootstrap.#result(difference, higherIsBetter),
+      result: decide(p, observed, higherIsBetter),
       difference,
-      p: PairedBootstrap.#p(distribution),
+      p,
       resamples: distribution.length,
       nResamples: this.#nResamples,
     };
@@ -136,18 +156,6 @@ export class PairedBootstrap {
           share((value) => value >= 0),
         ),
     );
-  }
-
-  static #result(
-    difference: DifferenceInterval,
-    higherIsBetter: boolean,
-  ): TestedVerdict['result'] {
-    const [better, worse] = higherIsBetter
-      ? [difference.isAbove(0), difference.isBelow(0)]
-      : [difference.isBelow(0), difference.isAbove(0)];
-    if (better) return 'better';
-    if (worse) return 'worse';
-    return 'inconclusive';
   }
 
   // No value when either run has no whole on the pairs.

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 
 import { Holm } from '@zukhruf/statistics';
 
-import { decide } from './index.ts';
+import { decide } from '../index.ts';
 
 // A bootstrap p is a share of resamples: 25 of 2000 against a change give
 // p = 2 · 25 / 2000 = 0.025, which Holm doubles in a family of two to 0.05

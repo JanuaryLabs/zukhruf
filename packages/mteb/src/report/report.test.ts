@@ -579,6 +579,97 @@ class InOrder implements SearchProtocol {
   }
 }
 
+// The reverse order ranks d3 first and d1 third, so a query whose relevant
+// document is d3 gains 0.5 of nDCG@10 against the corpus order, one whose
+// relevant document is d1 loses 0.5, and d2 ties. Six gains, a loss and a
+// tie give p = 0.05 exactly (50 of the 2000 means at or below 0), and
+// Recall@10 ties on each query (p = 1), so Holm doubles 0.05 to 0.1.
+test('a comparison whose own p is exactly 0.05 but whose Holm-adjusted p is above it is dashed on the page, with its p alone', async () => {
+  const relevant = ['d3', 'd3', 'd3', 'd3', 'd3', 'd3', 'd1', 'd2'];
+  await using folder = await new TemporaryFiles().directory('mteb-report-', {
+    files: {
+      'data/README.md':
+        '---\nconfigs:\n  - config_name: default\n    data_files:\n      - split: test\n        path: qrels/test.jsonl\n  - config_name: corpus\n    data_files:\n      - split: corpus\n        path: corpus.jsonl\n  - config_name: queries\n    data_files:\n      - split: queries\n        path: queries.jsonl\n---\n',
+      'data/corpus.jsonl': lines(
+        ['apple pie', 'car battery', 'tennis racket'].map((text, index) => ({
+          _id: `d${index + 1}`,
+          title: '',
+          text,
+        })),
+      ),
+      'data/queries.jsonl': lines(
+        relevant.map((_, index) => ({
+          _id: `q${index + 1}`,
+          text: `query ${index + 1}`,
+        })),
+      ),
+      'data/qrels/test.jsonl': lines(
+        relevant.map((document, index) => ({
+          'query-id': `q${index + 1}`,
+          'corpus-id': document,
+          score: 1,
+        })),
+      ),
+    },
+  });
+  const data = join(folder.path, 'data');
+  class AtAlpha extends AbsTaskRetrieval {
+    constructor() {
+      super({
+        metadata: new TaskMetadata({
+          name: 'AtAlpha',
+          description: 'A task whose nDCG@10 difference has p = 0.05.',
+          dataset: { path: data, revision: '1' },
+          type: 'Retrieval',
+          category: 't2t',
+          modalities: ['text'],
+          evalSplits: ['test'],
+          evalLangs: ['eng-Latn'],
+          mainScore: 'ndcg_at_10',
+        }),
+      });
+    }
+  }
+  const baseline = new InOrder(false);
+  const models: MTEBModels[] = [baseline, new InOrder(true)];
+  const cache = new ResultCache(folder.path);
+  const predictionFolder = (model: MTEBModels) =>
+    join(folder.path, 'predictions', model.mtebModelMeta.modelNameAsPath());
+  for (const model of models)
+    await evaluate(model, new AtAlpha(), {
+      cache,
+      predictionFolder: predictionFolder(model),
+      clock: globalThis,
+    });
+
+  const report = await Report.from({
+    task: new AtAlpha(),
+    models,
+    cache,
+    predictionFolder,
+    baseline,
+    tested: ['ndcg_at_10', 'recall_at_10'],
+  });
+
+  const column = (name: string) => report.verdicts.columns.indexOf(name);
+  assert.deepEqual(
+    report.verdicts.rows.map((row) => [
+      row[column('score')],
+      row[column('p')],
+      row[column('deciding_p')],
+      row[column('result')],
+    ]),
+    [
+      ['ndcg_at_10', 0.05, 0.1, 'inconclusive'],
+      ['recall_at_10', 1, 1, 'inconclusive'],
+    ],
+  );
+  const html = report.toHtml();
+  assert.equal(html.split(' data-alone ').length - 1, 1);
+  assert.match(html, / · p 0\.050 alone, unclear after the correction</);
+  assert.match(html, /<li data-result="inconclusive" class="alone">Dashed:/);
+});
+
 test('a query that is a conversation shows by its id only', async () => {
   await using folder = await new TemporaryFiles().directory('mteb-report-', {
     files: {

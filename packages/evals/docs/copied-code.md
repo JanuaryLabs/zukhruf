@@ -10,9 +10,9 @@ This package keeps copies of the knowledge of `@zukhruf/mteb`: three of its pair
 Both pair two sets by key, and both refuse a key that one set does not have, with a `RangeError` that names each such key: first the keys of the baseline, then the keys of the change.
 Changes: the key is a test id, not a query. The pairs follow the order of the first adds of the baseline run, not the sorted keys, because each resample takes its random indices in the order of the pairs. A test also has a weight, so a test whose weight is not the same in the two runs is a `RangeError` too. mteb has no weights.
 
-**The verdict: better when the interval is above 0, worse when it is below 0, inconclusive else → `PairedBootstrap.#result`.**
-Both read the side of 0 with `isAbove` and `isBelow` of `ConfidenceInterval`.
-Changes: the caller gives `higherIsBetter`. With `false`, better and worse change places. mteb always reads a higher score as better.
+**The verdict: `ALPHA = 0.05` and `decide` → `ALPHA` and `decide`.**
+Both give the result of the test from its p, not from the side of 0 on which the interval lies: inconclusive when p is above 0.05 (the rule of `Holm` of `@zukhruf/statistics`, backlog #6299), else better or worse by the sign of the observed difference. At p = 0.05 exactly a percentile bound can reach 0 while p counts, so the two rules disagree there (backlog #6367, made in mteb first and mirrored here). Each report decides its Holm-adjusted p with the same `decide`, so it imports the rule from the paired bootstrap and holds no copy of it.
+Changes: the caller gives `higherIsBetter`, and the sign is read in its direction: with `false`, better and worse change places. mteb always reads a higher score as better.
 
 **The p-value: `min(1, 2 · min(share ≤ 0, share ≥ 0))` → `PairedBootstrap.#p`.**
 Both take the same shares of the same resample differences.
@@ -50,13 +50,13 @@ Changes: the page heading is the title of the `Page`, and each section is a clai
 Both test the one that was chosen before the runs alone, adjust the p-values of all the others together with `Holm` of `@zukhruf/statistics`, and decide each one by its deciding p-value: p for the primary one, the Holm-adjusted p for the others.
 Changes: the family is the scores of one pair, not each pair of models on each score, so the primary is a score's name and must be one of the scores (a `RangeError` otherwise); mteb's primary is optional. The primary row comes first.
 
-**The decision: `ALPHA = 0.05` and `decide` → `ALPHA` and `decide`.**
-Both count a deciding p-value at most 0.05 (the rule of `Holm` of `@zukhruf/statistics`, backlog #6299), and read better or worse from the sign of the observed difference.
-Changes: the sign is read in the direction of the score (`higherIsBetter`), since a score of this package can be better lower; mteb always reads a higher score as better. The result that is not beyond chance reads "no difference", not "inconclusive", the word of report ADR 0002's claims.
+**The verdict cell: mteb's result → the result of `decide`, with inconclusive shown as "no difference".**
+Both show the result of the deciding p-value in each row.
+Changes: the result that is not beyond chance reads "no difference", not "inconclusive", the word of report ADR 0002's claims.
 
 ### Not copied
 
-The verdict of each score is `PairedBootstrap.verdict` (its own copy of mteb's `pairedBootstrapTest`, above), and `Holm` is of `@zukhruf/statistics`, so neither is copied here. The per-query scores of mteb's predictions are mteb's own.
+The verdict of each score is `PairedBootstrap.verdict` (its own copy of mteb's `pairedBootstrapTest`, above), and the rule that decides a deciding p-value is `decide` of `src/scoring/paired-bootstrap.ts` (a copy of mteb's `decide` of `packages/mteb/src/significance/paired-bootstrap.ts`, above), which `Verdicts` imports, as mteb's `verdicts` imports its own. `Holm` is of `@zukhruf/statistics`. None of the three is copied here. The per-query scores of mteb's predictions are mteb's own.
 
 ## The leaf classes of FieldErrors
 

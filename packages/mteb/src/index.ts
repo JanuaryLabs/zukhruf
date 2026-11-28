@@ -169,6 +169,7 @@ export { type TaskError, TaskResult } from './results/task-result.ts';
 export { perQueryScores } from './significance/per-query-scores.ts';
 export {
   type ChangeVerdict,
+  decide,
   pairedBootstrapTest,
 } from './significance/paired-bootstrap.ts';
 export { cosSim, dotScore } from './similarity-functions.ts';

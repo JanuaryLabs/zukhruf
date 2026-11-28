@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
 
+import { test } from '@zukhruf/parameterized-test';
 import { Linear, PercentileInterval } from '@zukhruf/statistics';
 
 import {
@@ -11,6 +11,7 @@ import {
   Run,
   ScorerSet,
   type Verdict,
+  decide,
 } from '../index.ts';
 import { ConfigCase, TreeWalk, ValueMatches } from '../structured/index.ts';
 
@@ -234,3 +235,61 @@ test('an untested verdict cannot hold a difference, an interval or a p', () => {
 
   assert.equal(untested.result, 'untested');
 });
+
+// t1 falls by 1 and t2 and t3 rise by 0.01 (99 of 100 to 100 of 100), so the
+// change is (0 + 100 + 100) / 201 against (1 + 99 + 99) / 201: +1/201. A
+// resample of t1 alone is −1 and one of t2 alone +0.01. With 50 of 2000
+// resamples at −1, p = 2 · 50 / 2000 = 0.05, and NumPy's linear 2.5%
+// quantile sits at position 1999 · 0.025 = 49.975, between the 50th (−1) and
+// the 51st (+0.01): −1 + 0.975 · 1.01, below 0, so the interval holds 0 while
+// p counts. With 51 of 2000, p is 0.051.
+void test.each(
+  [
+    { against: 50, higherIsBetter: true, result: 'better' },
+    { against: 50, higherIsBetter: false, result: 'worse' },
+    { against: 51, higherIsBetter: true, result: 'inconclusive' },
+    { against: 51, higherIsBetter: false, result: 'inconclusive' },
+  ] as const,
+  ({ against, higherIsBetter, result }) =>
+    test(`a paired bootstrap with ${against} of 2000 resamples against the change reads ${result} with higherIsBetter ${higherIsBetter}, by its p and not by its interval, which holds 0`, () => {
+      const recall = (part: number, whole: number) => ({
+        ratios: new Map([['recall', new Ratio(part, whole)]]),
+      });
+      const baseline = new Run();
+      const change = new Run();
+      baseline.add('t1', recall(1, 1), 1);
+      change.add('t1', recall(0, 1), 1);
+      baseline.add('t2', recall(99, 100), 1);
+      change.add('t2', recall(100, 100), 1);
+      baseline.add('t3', recall(99, 100), 1);
+      change.add('t3', recall(100, 100), 1);
+      const draws = Array.from({ length: 2000 }, (_, resample) =>
+        Array.from({ length: 3 }, () => (resample < against ? 0 : 1)),
+      ).flat();
+      const bootstrap = new PairedBootstrap({
+        nResamples: 2000,
+        randomIndex: () => draws.shift() ?? Number.NaN,
+        interval: new PercentileInterval({
+          low: 0.025,
+          high: 0.975,
+          method: new Linear(),
+        }),
+      });
+
+      const verdict = bootstrap.verdict(baseline, change, 'recall', {
+        higherIsBetter,
+      });
+
+      assert.ok(verdict.result !== 'untested');
+      const { observed, low, high } = verdict.difference;
+      assert.deepEqual(
+        {
+          result: verdict.result,
+          p: verdict.p,
+          holdsZero: low < 0 && high > 0,
+          decided: decide(verdict.p, observed, higherIsBetter),
+        },
+        { result, p: (2 * against) / 2000, holdsZero: true, decided: result },
+      );
+    }),
+);

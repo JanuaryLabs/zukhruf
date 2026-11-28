@@ -79,7 +79,7 @@ def bootstrap(baseline: dict[str, float], change: dict[str, float], seed: int, r
     low, high = np.percentile(means, [2.5, 97.5])
     p = min(1.0, 2.0 * min(float(np.mean(means <= 0)), float(np.mean(means >= 0))))
     observed = float(np.mean(differences))
-    result = "better" if low > 0 else "worse" if high < 0 else "inconclusive"
+    result = "inconclusive" if p > 0.05 else "better" if observed > 0 else "worse"
     return {
         "observed": number(observed),
         "low": number(float(low)),
