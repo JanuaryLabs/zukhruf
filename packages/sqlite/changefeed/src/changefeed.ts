@@ -1,10 +1,12 @@
 import { ChangeWatcher, type WallClock } from '@zukhruf/async';
+import type { ConsumerGroup } from '@zukhruf/checkpoint';
 import { DataVersion } from '@zukhruf/sqlite-data-version';
 import { Snapshot } from '@zukhruf/sqlite-snapshot';
 
-import type { Batch } from './batch.ts';
+import type { ChangeEvent } from './change-event.ts';
+import { Claim, type CommitOptions, type Commits } from './claim.ts';
+import { walProgressFormat } from './formats.ts';
 import { pass, requireWal } from './pass.ts';
-import type { Position } from './position.ts';
 import type { Start } from './start.ts';
 
 export type WatchOptions = {
@@ -16,13 +18,15 @@ export type WatchOptions = {
   readonly clock: WallClock;
 };
 
-export type ChangefeedOptions<B extends Batch = Batch> = {
+export type ChangefeedOptions<W> = {
   /**
-   * Where the feed keeps what it saw. The feed owns it, and disposes it. Its
-   * kind sets the batches: a PositionFile gives a SequencedBatch.
+   * The consumer group that keeps the feed's checkpoint. The host owns its
+   * store; the feed never closes it.
    */
-  readonly position: Position<B>;
-  /** What the first pass gives, until the position is saved once. */
+  readonly checkpoints: ConsumerGroup<W>;
+  /** The name of the owner's database in the group: one stream, partition '0'. */
+  readonly stream: string;
+  /** What the first pass gives while the partition has no checkpoint. */
   readonly start: Start;
 };
 
@@ -30,36 +34,53 @@ export type ChangefeedOptions<B extends Batch = Batch> = {
  * A change event for each changed row of each table of a SQLite database
  * that another process owns.
  */
-export class Changefeed<B extends Batch = Batch> implements Disposable {
+export class Changefeed<W> implements Disposable {
   readonly #path: string;
   readonly #version: DataVersion;
-  readonly #position: Position<B>;
+  readonly #checkpoints: ConsumerGroup<W>;
+  readonly #stream: string;
   readonly #start: Start;
-  readonly #resources: DisposableStack;
+  // The claim of the last watch, which commits its batches.
+  #claim: Commits<W> = {
+    commit: () =>
+      Promise.reject(new TypeError('The feed gave no batch to commit')),
+  };
 
-  constructor(databasePath: string, { position, start }: ChangefeedOptions<B>) {
-    using resources = new DisposableStack();
-    // The feed owns its position also when the database fails to open.
-    this.#position = resources.use(position);
-    this.#start = start;
+  constructor(
+    databasePath: string,
+    { checkpoints, stream, start }: ChangefeedOptions<W>,
+  ) {
     this.#path = databasePath;
+    this.#checkpoints = checkpoints;
+    this.#stream = stream;
+    this.#start = start;
+    using resources = new DisposableStack();
     this.#version = resources.use(new DataVersion(databasePath));
     {
       using snapshot = new Snapshot(databasePath);
       requireWal(snapshot);
     }
-    this.#resources = resources.move();
+    resources.move();
   }
 
   /**
-   * Batches of change events. The feed saves the position of a batch when
-   * the loop asks for the next one.
+   * The change events of each pass, an empty batch too. The watch claims the
+   * stream's partition, which fences each older claim, and goes on from its
+   * checkpoint. A batch is saved only by a commit.
    */
   async *watch({
     interval,
     signal,
     clock,
-  }: WatchOptions): AsyncGenerator<B, void, undefined> {
+  }: WatchOptions): AsyncGenerator<readonly ChangeEvent[], void, undefined> {
+    const claim = new Claim(
+      await this.#checkpoints.claim(
+        { stream: this.#stream, partition: '0' },
+        walProgressFormat,
+        { signal },
+      ),
+    );
+    this.#claim = claim;
     // The data version is a local read: a check that takes the whole
     // interval is stuck.
     const watcher = new ChangeWatcher([this.#version], {
@@ -72,26 +93,24 @@ export class Changefeed<B extends Batch = Batch> implements Disposable {
       // The feed cannot go on without its data version.
       if (outcome?.state === 'failed') throw outcome.error;
       if (outcome?.state !== 'changed') continue;
-      const { events, update } = await pass(
-        this.#path,
-        this.#position,
-        this.#start,
-      );
-      if (events.length === 0) {
-        // A pass with no events, a baseline too, has no batch to deliver.
-        this.#position.save(update);
-        continue;
-      }
-      yield this.#position.batch(events);
-      // The loop may not have applied a batch that an abort stopped.
-      signal.throwIfAborted();
-      this.#position.save(update);
+      yield await pass(this.#path, claim, this.#start);
     }
     // The poll ends only when the signal aborts.
     signal.throwIfAborted();
   }
 
+  /**
+   * Saves every batch that the watch gave so far, all or none, as Kafka's
+   * commitSync saves the offsets of the last poll. With `write`, the host's
+   * output commits in the same transaction. A feed that a newer claim fenced
+   * throws CheckpointFencedError and runs no write. Rejects with a TypeError
+   * before the watch gave a batch.
+   */
+  commit(options?: CommitOptions<W>): Promise<void> {
+    return this.#claim.commit(options);
+  }
+
   [Symbol.dispose](): void {
-    this.#resources.dispose();
+    this.#version[Symbol.dispose]();
   }
 }

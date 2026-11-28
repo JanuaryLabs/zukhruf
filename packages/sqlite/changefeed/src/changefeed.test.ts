@@ -2,39 +2,79 @@ import assert from 'node:assert/strict';
 import { renameSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
-import { test } from 'node:test';
 import { setImmediate } from 'node:timers/promises';
 
 import { untilAborted } from '@zukhruf/async';
+import {
+  CheckpointFencedError,
+  type CheckpointStore,
+  ConsumerGroup,
+  type Format,
+  IncompatibleCheckpointError,
+  type Json,
+  MemoryCheckpointStore,
+  type StateChanges,
+} from '@zukhruf/checkpoint';
+import {
+  SqliteCheckpointStore,
+  type SqliteWrite,
+} from '@zukhruf/checkpoint/sqlite';
 import { TemporaryFiles } from '@zukhruf/fs';
+import { test } from '@zukhruf/parameterized-test';
 import * as sqliteOpen from '@zukhruf/sqlite-open';
-import { waitFor } from '@zukhruf/testing/async';
 
 import {
   Baseline,
-  type Batch,
   type ChangeEvent,
   Changefeed,
   JournalModeError,
-  PositionFile,
-  PositionInMemory,
   ReadEveryRow,
   UnavailableError,
 } from './index.ts';
 
-// A feed that keeps its position in a file and reads each row at its first
-// run.
-function durable(path: string, position: string): Changefeed {
+type Batches = AsyncGenerator<readonly ChangeEvent[], void, undefined>;
+
+// The stream of the owner's database in the host's consumer group.
+const stream = 'owner';
+
+// The host's own SQLite database, which keeps the feed's checkpoint.
+function hostOf(dir: string): DatabaseSync {
+  return sqliteOpen.open(join(dir, 'host.sqlite'));
+}
+
+// A feed whose checkpoint is in the host's database, and that reads each row
+// at its first run.
+function durable(path: string, host: DatabaseSync): Changefeed<SqliteWrite> {
   return new Changefeed(path, {
-    position: new PositionFile(position),
+    checkpoints: new ConsumerGroup(
+      'host',
+      new SqliteCheckpointStore({ database: host }),
+    ),
+    stream,
     start: new ReadEveryRow(),
   });
 }
 
-// A feed that keeps its position in memory and starts from a baseline.
-function observing(path: string): Changefeed {
+// A durable feed that starts from a baseline.
+function durableBaseline(
+  path: string,
+  host: DatabaseSync,
+): Changefeed<SqliteWrite> {
   return new Changefeed(path, {
-    position: new PositionInMemory(),
+    checkpoints: new ConsumerGroup(
+      'host',
+      new SqliteCheckpointStore({ database: host }),
+    ),
+    stream,
+    start: new Baseline(),
+  });
+}
+
+// A feed whose checkpoint is in memory, and that starts from a baseline.
+function observing(path: string): Changefeed<never> {
+  return new Changefeed(path, {
+    checkpoints: new ConsumerGroup('host', new MemoryCheckpointStore()),
+    stream,
     start: new Baseline(),
   });
 }
@@ -63,9 +103,9 @@ async function within<T>(
   }
 }
 
-// The next batch of a watch, which saves the batch before it.
+// The next batch of a watch.
 async function nextBatch(
-  batches: AsyncGenerator<Batch, void, undefined>,
+  batches: Batches,
   expected: string,
   signal: AbortSignal,
 ): Promise<ChangeEvent[]> {
@@ -75,11 +115,18 @@ async function nextBatch(
 }
 
 // A result of a watch's next(), with the events of its batch as an array.
-function eventsOf(result: IteratorResult<Batch, void>) {
+function eventsOf(result: IteratorResult<readonly ChangeEvent[], void>) {
   return {
     done: result.done,
     value: result.done ? undefined : [...result.value],
   };
+}
+
+// Stops a watch while it waits for its next pass.
+async function stopped(batches: Batches, stop: AbortController) {
+  const next = batches.next();
+  stop.abort(new Error('stopped'));
+  await assert.rejects(next, /stopped/);
 }
 
 // The events of a batch by table. The feed gives no order across tables.
@@ -87,26 +134,33 @@ function byTable(batch: ChangeEvent[]) {
   return { ...Object.groupBy(batch, (event) => event.table) };
 }
 
-// Polls the fact until it is true, and fails naming it when the test ends.
-async function until(
-  fact: () => boolean,
+// One watch of a feed: its first batch, and a stop that ends it.
+async function watched<W>(
+  feed: Changefeed<W>,
   expected: string,
   signal: AbortSignal,
-): Promise<void> {
-  await waitFor(() => assert.ok(fact(), `no ${expected}`), {
-    signal,
+) {
+  const stop = new AbortController();
+  const batches = feed.watch({
+    clock: globalThis,
     interval: 5,
+    signal: stop.signal,
   });
+  const first = await nextBatch(batches, expected, signal);
+  return {
+    batches,
+    first,
+    async [Symbol.asyncDispose]() {
+      await stopped(batches, stop);
+    },
+  };
 }
 
-// Whether the promise settled, read at once.
-function settled(promise: Promise<unknown>): () => boolean {
-  let done = false;
-  promise.then(
-    () => (done = true),
-    () => (done = true),
+// The stream and checkpoint id of each checkpoint of a consumer group.
+async function checkpointsOf<W>(group: ConsumerGroup<W>): Promise<string[]> {
+  return (await Array.fromAsync(group.list())).map(
+    (checkpoint) => `${checkpoint.stream} ${checkpoint.checkpointId}`,
   );
-  return () => done;
 }
 
 test('the first run of a durable feed reads each row of each table, keyed by the identity SQLite enforces, and skips views, virtual, shadow and internal tables', async (t) => {
@@ -129,7 +183,8 @@ test('the first run of a durable feed reads each row of each table, keyed by the
      INSERT INTO notes_fts VALUES ('searchable');
      ANALYZE;`,
   );
-  using feed = durable(path, join(dir.path, 'position.sqlite'));
+  using host = hostOf(dir.path);
+  using feed = durable(path, host);
   const stop = new AbortController();
 
   const batch = await nextBatch(
@@ -201,59 +256,37 @@ test('the first run of a durable feed reads each row of each table, keyed by the
       assert.equal(Object.getPrototypeOf(event.after), Object.prototype);
 });
 
-test('a durable feed goes on from its saved batch: a new run gives only what the owner changed while it was stopped', async (t) => {
+test('a durable feed goes on from its commit: a new run gives only what the owner changed while it was stopped', async (t) => {
   await using dir = await new TemporaryFiles().directory('changefeed-');
   const path = join(dir.path, 'owner.sqlite');
-  const position = join(dir.path, 'position.sqlite');
   using owner = owned(
     path,
     `CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT);
      INSERT INTO notes VALUES (1, 'a'), (2, 'b'), (3, 'c');`,
   );
+  using host = hostOf(dir.path);
   {
-    using feed = durable(path, position);
-    const stop = new AbortController();
-    const batches = feed.watch({
-      clock: globalThis,
-      interval: 5,
-      signal: stop.signal,
-    });
-    await nextBatch(batches, 'the reads of notes', t.signal);
-    const next = batches.next();
-    stop.abort(new Error('stopped'));
-    await assert.rejects(next, /stopped/);
+    using feed = durable(path, host);
+    await using _run = await watched(feed, 'the reads of notes', t.signal);
+    await feed.commit();
   }
   owner.exec(`INSERT INTO notes VALUES (4, 'd');
     UPDATE notes SET title = 'B' WHERE id = 2;
     DELETE FROM notes WHERE id = 3;`);
 
   const resumed = await (async () => {
-    using feed = durable(path, position);
-    const stop = new AbortController();
-    const batches = feed.watch({
-      clock: globalThis,
-      interval: 5,
-      signal: stop.signal,
-    });
-    const batch = await nextBatch(
-      batches,
+    using feed = durable(path, host);
+    await using run = await watched(
+      feed,
       'the changes while stopped',
       t.signal,
     );
-    const next = batches.next();
-    stop.abort(new Error('stopped'));
-    await assert.rejects(next, /stopped/);
-    return batch;
+    await feed.commit();
+    return run.first;
   })();
   owner.exec('DELETE FROM notes WHERE id = 4');
-  using feed = durable(path, position);
-  const stop = new AbortController();
-  const last = await nextBatch(
-    feed.watch({ clock: globalThis, interval: 5, signal: stop.signal }),
-    'the delete of note 4',
-    t.signal,
-  );
-  stop.abort();
+  using feed = durable(path, host);
+  await using last = await watched(feed, 'the delete of note 4', t.signal);
 
   assert.deepEqual(resumed, [
     {
@@ -271,41 +304,42 @@ test('a durable feed goes on from its saved batch: a new run gives only what the
     },
     { table: 'notes', op: 'delete', key: { id: 3n } },
   ]);
-  assert.deepEqual(last, [{ table: 'notes', op: 'delete', key: { id: 4n } }]);
+  assert.deepEqual(last.first, [
+    { table: 'notes', op: 'delete', key: { id: 4n } },
+  ]);
 });
 
-test('a batch that the loop leaves with break is given again at the next run', async (t) => {
+test('a batch that the loop leaves with break, and does not commit, is given again at the next run', async (t) => {
   await using dir = await new TemporaryFiles().directory('changefeed-');
   const path = join(dir.path, 'owner.sqlite');
-  const position = join(dir.path, 'position.sqlite');
   using owner = owned(
     path,
     `CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT);
      INSERT INTO notes VALUES (1, 'a');`,
   );
+  using host = hostOf(dir.path);
   {
-    using feed = durable(path, position);
+    using feed = durable(path, host);
     const batches = feed.watch({
       clock: globalThis,
       interval: 5,
       signal: new AbortController().signal,
     });
     await nextBatch(batches, 'the read of note 1', t.signal);
+    await feed.commit();
     owner.exec("INSERT INTO notes VALUES (2, 'b')");
     await nextBatch(batches, 'the insert of note 2', t.signal);
     await batches.return();
   }
 
-  using feed = durable(path, position);
-  const stop = new AbortController();
-  const batch = await nextBatch(
-    feed.watch({ clock: globalThis, interval: 5, signal: stop.signal }),
+  using feed = durable(path, host);
+  await using again = await watched(
+    feed,
     'the insert of note 2 again',
     t.signal,
   );
-  stop.abort();
 
-  assert.deepEqual(batch, [
+  assert.deepEqual(again.first, [
     {
       table: 'notes',
       op: 'insert',
@@ -315,7 +349,7 @@ test('a batch that the loop leaves with break is given again at the next run', a
   ]);
 });
 
-test('an observing feed gives no reads, then only the changes after it started', async () => {
+test('an observing feed gives an empty baseline batch, then only the changes after it started', async (t) => {
   await using dir = await new TemporaryFiles().directory('changefeed-');
   const path = join(dir.path, 'owner.sqlite');
   using owner = owned(
@@ -324,23 +358,14 @@ test('an observing feed gives no reads, then only the changes after it started',
      INSERT INTO notes VALUES (1, 'a'), (2, 'b');`,
   );
   using feed = observing(path);
-  const stop = new AbortController();
-  const batches = feed.watch({
-    clock: globalThis,
-    interval: 5,
-    signal: stop.signal,
-  });
+  await using run = await watched(feed, 'the baseline', t.signal);
 
-  const first = batches.next();
-  // The baseline pass runs in microtasks, with no I/O but node:sqlite's
-  // synchronous calls, so it ends before an immediate runs.
-  await setImmediate();
   owner.exec(
     "UPDATE notes SET title = 'A' WHERE id = 1; DELETE FROM notes WHERE id = 2",
   );
-  const batch = await first;
-  stop.abort();
+  const batch = await within(run.batches.next(), 'batch of changes', t.signal);
 
+  assert.deepEqual(run.first, []);
   assert.deepEqual(eventsOf(batch), {
     done: false,
     value: [
@@ -367,14 +392,10 @@ test('a new table gives reads, an empty table it saw gives inserts, a dropped ta
      INSERT INTO labels VALUES ('red', 'f00');
      CREATE TABLE archive (id INTEGER PRIMARY KEY);`,
   );
-  using feed = durable(path, join(dir.path, 'position.sqlite'));
-  const stop = new AbortController();
-  const batches = feed.watch({
-    clock: globalThis,
-    interval: 5,
-    signal: stop.signal,
-  });
-  await nextBatch(batches, 'the first reads', t.signal);
+  using host = hostOf(dir.path);
+  using feed = durable(path, host);
+  await using run = await watched(feed, 'the first reads', t.signal);
+  await feed.commit();
 
   owner.exec(`DROP TABLE drafts;
     CREATE TABLE folders (id INTEGER PRIMARY KEY, name TEXT);
@@ -384,10 +405,14 @@ test('a new table gives reads, an empty table it saw gives inserts, a dropped ta
     INSERT INTO labels SELECT * FROM old_labels;
     DROP TABLE old_labels;
     INSERT INTO archive VALUES (1);`);
-  const batch = await nextBatch(batches, 'the schema changes', t.signal);
+  const batch = await nextBatch(run.batches, 'the schema changes', t.signal);
+  await feed.commit();
   owner.exec('INSERT INTO archive VALUES (2)');
-  const after = await nextBatch(batches, 'the insert of archive 2', t.signal);
-  stop.abort();
+  const after = await nextBatch(
+    run.batches,
+    'the insert of archive 2',
+    t.signal,
+  );
 
   assert.deepEqual(byTable(batch), {
     archive: [
@@ -420,7 +445,7 @@ test('a new table gives reads, an empty table it saw gives inserts, a dropped ta
   assert.deepEqual(
     after,
     [{ table: 'archive', op: 'insert', key: { id: 2n }, after: { id: 2n } }],
-    'a dropped table leaves the position',
+    'a dropped table leaves the checkpoint',
   );
 });
 
@@ -434,36 +459,20 @@ test('an observing feed gives the truncate of a dropped table once', async (t) =
      CREATE TABLE archive (id INTEGER PRIMARY KEY);`,
   );
   using feed = observing(path);
-  const stop = new AbortController();
-  const batches = feed.watch({
-    clock: globalThis,
-    interval: 5,
-    signal: stop.signal,
-  });
-  const first = batches.next();
-  const firstSettled = settled(first);
-  // The baseline takes no change, so the owner changes archive until a
-  // pass after the baseline gives a batch.
-  await until(
-    () => {
-      if (firstSettled()) return true;
-      owner.exec('INSERT INTO archive DEFAULT VALUES');
-      return false;
-    },
-    'batch after the baseline',
-    t.signal,
-  );
-  await first;
+  await using run = await watched(feed, 'the baseline', t.signal);
 
   owner.exec('DROP TABLE drafts');
-  const dropped = await nextBatch(batches, 'the truncate of drafts', t.signal);
+  const dropped = await nextBatch(
+    run.batches,
+    'the truncate of drafts',
+    t.signal,
+  );
   owner.exec('INSERT INTO archive VALUES (1000)');
   const after = await nextBatch(
-    batches,
+    run.batches,
     'the insert of archive 1000',
     t.signal,
   );
-  stop.abort();
 
   assert.deepEqual(byTable(dropped).drafts, [
     { table: 'drafts', op: 'truncate' },
@@ -487,18 +496,13 @@ test('a VACUUM that gives the rows of a table with no primary key new rowids giv
      INSERT INTO tags VALUES ('a'), ('b'), ('c');
      DELETE FROM tags WHERE tag = 'a';`,
   );
-  using feed = durable(path, join(dir.path, 'position.sqlite'));
-  const stop = new AbortController();
-  const batches = feed.watch({
-    clock: globalThis,
-    interval: 5,
-    signal: stop.signal,
-  });
-  await nextBatch(batches, 'the reads of tags', t.signal);
+  using host = hostOf(dir.path);
+  using feed = durable(path, host);
+  await using run = await watched(feed, 'the reads of tags', t.signal);
+  await feed.commit();
 
   owner.exec('VACUUM');
-  const batch = await nextBatch(batches, 'the VACUUM changes', t.signal);
-  stop.abort();
+  const batch = await nextBatch(run.batches, 'the VACUUM changes', t.signal);
 
   assert.deepEqual(batch, [
     { table: 'tags', op: 'insert', key: { rowid: 1n }, after: { tag: 'b' } },
@@ -513,7 +517,7 @@ test('a VACUUM that gives the rows of a table with no primary key new rowids giv
   ]);
 });
 
-test('a database not in WAL mode is a JournalModeError at open, and at the pass after the owner replaced the file with one', async () => {
+test('a database not in WAL mode is a JournalModeError at open, and at the pass after the owner replaced the file with one', async (t) => {
   await using dir = await new TemporaryFiles().directory('changefeed-');
   const rollback = join(dir.path, 'rollback.sqlite');
   const journal = sqliteOpen.open(rollback, {
@@ -544,6 +548,7 @@ test('a database not in WAL mode is a JournalModeError at open, and at the pass 
       return true;
     },
   );
+  await nextBatch(batches, 'the baseline', t.signal);
   const next = batches.next();
   await setImmediate();
   renameSync(rollback, path);
@@ -553,9 +558,10 @@ test('a database not in WAL mode is a JournalModeError at open, and at the pass 
 test('a missing database is the UnavailableError of @zukhruf/sqlite-open', async () => {
   await using dir = await new TemporaryFiles().directory('changefeed-');
   const missing = join(dir.path, 'missing', 'owner.sqlite');
+  using host = hostOf(dir.path);
 
   assert.throws(
-    () => durable(missing, join(dir.path, 'position.sqlite')),
+    () => durable(missing, host),
     (error: unknown) => {
       assert.equal(UnavailableError, sqliteOpen.UnavailableError);
       assert.ok(error instanceof sqliteOpen.UnavailableError);
@@ -565,43 +571,31 @@ test('a missing database is the UnavailableError of @zukhruf/sqlite-open', async
   );
 });
 
-test('a pass that finds no change gives no batch, and the next batch holds only the change after it', async (t) => {
+test('a pass that finds no change gives an empty batch, and the next batch holds only the change after it', async (t) => {
   await using dir = await new TemporaryFiles().directory('changefeed-');
   const path = join(dir.path, 'owner.sqlite');
-  const position = join(dir.path, 'position.sqlite');
   using owner = owned(
     path,
     `CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT);
      INSERT INTO notes VALUES (1, 'a');`,
   );
-  using feed = durable(path, position);
-  const stop = new AbortController();
-  const batches = feed.watch({
-    clock: globalThis,
-    interval: 5,
-    signal: stop.signal,
-  });
-  await nextBatch(batches, 'the read of note 1', t.signal);
-  using observer = sqliteOpen.open(position, { readOnly: true });
-  const positionVersion = () =>
-    observer.prepare('PRAGMA data_version').get()?.data_version;
+  using host = hostOf(dir.path);
+  using feed = durable(path, host);
+  await using run = await watched(feed, 'the read of note 1', t.signal);
+  await feed.commit();
 
-  // next() saves the read of note 1 before it returns.
-  const next = batches.next();
-  const nextSettled = settled(next);
-  const saved = positionVersion();
-  // A new table with no rows: a pass with no event that saves its key
-  // columns. Its save is the sign that the pass ran.
+  // A new table with no rows: a pass with no event.
   owner.exec('CREATE TABLE archive (id INTEGER PRIMARY KEY)');
-  await until(
-    () => nextSettled() || positionVersion() !== saved,
-    'save of the pass with no event',
+  const empty = await nextBatch(run.batches, 'no event', t.signal);
+  await feed.commit();
+  owner.exec("INSERT INTO notes VALUES (2, 'b')");
+  const batch = await within(
+    run.batches.next(),
+    'batch with the insert of note 2',
     t.signal,
   );
-  owner.exec("INSERT INTO notes VALUES (2, 'b')");
-  const batch = await within(next, 'batch with the insert of note 2', t.signal);
-  stop.abort();
 
+  assert.deepEqual(empty, []);
   assert.deepEqual(eventsOf(batch), {
     done: false,
     value: [
@@ -615,46 +609,32 @@ test('a pass that finds no change gives no batch, and the next batch holds only 
   });
 });
 
-test('an abort after a batch gives the batch again at the next run of a durable feed', async (t) => {
+test('an abort after a batch that the host did not commit gives the batch again at the next run of a durable feed', async (t) => {
   await using dir = await new TemporaryFiles().directory('changefeed-');
   const path = join(dir.path, 'owner.sqlite');
-  const position = join(dir.path, 'position.sqlite');
   using _owner = owned(
     path,
     `CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT);
      INSERT INTO notes VALUES (1, 'a');`,
   );
+  using host = hostOf(dir.path);
   const read = {
     table: 'notes',
     op: 'read',
     key: { id: 1n },
     after: { id: 1n, title: 'a' },
   };
-  {
-    using feed = durable(path, position);
-    const stop = new AbortController();
-    const batches = feed.watch({
-      clock: globalThis,
-      interval: 5,
-      signal: stop.signal,
-    });
-    assert.deepEqual(await nextBatch(batches, 'the read of note 1', t.signal), [
-      read,
-    ]);
-    stop.abort(new Error('stopped'));
-    await assert.rejects(batches.next(), /stopped/);
-  }
+  const first = await (async () => {
+    using feed = durable(path, host);
+    await using run = await watched(feed, 'the read of note 1', t.signal);
+    return run.first;
+  })();
 
-  using feed = durable(path, position);
-  const stop = new AbortController();
-  const batch = await nextBatch(
-    feed.watch({ clock: globalThis, interval: 5, signal: stop.signal }),
-    'the read of note 1 again',
-    t.signal,
-  );
-  stop.abort();
+  using feed = durable(path, host);
+  await using again = await watched(feed, 'the read of note 1 again', t.signal);
 
-  assert.deepEqual(batch, [read]);
+  assert.deepEqual(first, [read]);
+  assert.deepEqual(again.first, [read]);
 });
 
 test('a primary key that can hold NULL keys a row by rowid, and an integer primary key in lower case keys it by its column, but INTEGER PRIMARY KEY DESC, which is no alias of the rowid, keys it by rowid', async (t) => {
@@ -669,17 +649,15 @@ test('a primary key that can hold NULL keys a row by rowid, and an integer prima
      CREATE TABLE ranks (id INTEGER PRIMARY KEY DESC, name TEXT);
      INSERT INTO ranks VALUES (NULL, 'a'), (NULL, 'b');`,
   );
-  using feed = durable(path, join(dir.path, 'position.sqlite'));
-  const stop = new AbortController();
-
-  const batch = await nextBatch(
-    feed.watch({ clock: globalThis, interval: 5, signal: stop.signal }),
+  using host = hostOf(dir.path);
+  using feed = durable(path, host);
+  await using run = await watched(
+    feed,
     'the reads of entries, items and ranks',
     t.signal,
   );
-  stop.abort();
 
-  assert.deepEqual(byTable(batch), {
+  assert.deepEqual(byTable(run.first), {
     entries: [
       {
         table: 'entries',
@@ -713,41 +691,31 @@ test('a primary key that can hold NULL keys a row by rowid, and an integer prima
   });
 });
 
-test('a BLOB key saved in the position comes back as the same bytes in the update and delete of a later run', async (t) => {
+test('a BLOB key in the checkpoint comes back as the same bytes in the update and delete of a later run', async (t) => {
   await using dir = await new TemporaryFiles().directory('changefeed-');
   const path = join(dir.path, 'owner.sqlite');
-  const position = join(dir.path, 'position.sqlite');
   using owner = owned(
     path,
     `CREATE TABLE files (hash BLOB PRIMARY KEY, body TEXT) WITHOUT ROWID;
      INSERT INTO files VALUES (x'00ff01', 'one'), (x'00ff02', 'two');`,
   );
+  using host = hostOf(dir.path);
   {
-    using feed = durable(path, position);
-    const stop = new AbortController();
-    const batches = feed.watch({
-      clock: globalThis,
-      interval: 5,
-      signal: stop.signal,
-    });
-    await nextBatch(batches, 'the reads of files', t.signal);
-    const next = batches.next();
-    stop.abort(new Error('stopped'));
-    await assert.rejects(next, /stopped/);
+    using feed = durable(path, host);
+    await using _run = await watched(feed, 'the reads of files', t.signal);
+    await feed.commit();
   }
   owner.exec(`UPDATE files SET body = 'ONE' WHERE hash = x'00ff01';
     DELETE FROM files WHERE hash = x'00ff02';`);
 
-  using feed = durable(path, position);
-  const stop = new AbortController();
-  const batch = await nextBatch(
-    feed.watch({ clock: globalThis, interval: 5, signal: stop.signal }),
+  using feed = durable(path, host);
+  await using run = await watched(
+    feed,
     'the update and delete of files',
     t.signal,
   );
-  stop.abort();
 
-  assert.deepEqual(batch, [
+  assert.deepEqual(run.first, [
     {
       table: 'files',
       op: 'update',
@@ -770,16 +738,19 @@ test('a feed that is disposed during its watch ends the watch with the error of 
     path,
     'CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT);',
   );
-  // An observing feed keeps its position in memory, so after the dispose
+  // An observing feed keeps its checkpoint in memory, so after the dispose
   // only the read of the data version can fail.
   const feed = observing(path);
   const stop = new AbortController();
   try {
-    const next = feed
-      .watch({ clock: globalThis, interval: 5, signal: stop.signal })
-      .next();
-    // The baseline pass ends before an immediate runs; the watch then waits
-    // for its next check.
+    const batches = feed.watch({
+      clock: globalThis,
+      interval: 5,
+      signal: stop.signal,
+    });
+    await nextBatch(batches, 'the baseline', t.signal);
+    // The watch then waits for its next check.
+    const next = batches.next();
     await setImmediate();
 
     feed[Symbol.dispose]();
@@ -793,31 +764,29 @@ test('a feed that is disposed during its watch ends the watch with the error of 
   }
 });
 
-test('a durable feed that starts from a baseline gives no reads at its first run, and a new run gives only what the owner changed while it was stopped', async (t) => {
+test('a durable feed that starts from a baseline gives an empty batch at its first run, and once that is committed a new run gives only what the owner changed after it', async (t) => {
   await using dir = await new TemporaryFiles().directory('changefeed-');
   const path = join(dir.path, 'owner.sqlite');
-  const position = join(dir.path, 'position.sqlite');
   using owner = owned(
     path,
     `CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT);
      INSERT INTO notes VALUES (1, 'a'), (2, 'b');`,
   );
-  const feed = () =>
-    new Changefeed(path, {
-      position: new PositionFile(position),
-      start: new Baseline(),
-    });
+  using host = hostOf(dir.path);
   {
-    using first = feed();
-    const stop = new AbortController();
-    const next = first
-      .watch({ clock: globalThis, interval: 5, signal: stop.signal })
-      .next();
-    // The baseline pass ends before an immediate runs, and saves at once.
-    await setImmediate();
+    using first = durableBaseline(path, host);
+    await using run = await watched(first, 'the baseline', t.signal);
+    assert.deepEqual(run.first, []);
+    await first.commit();
     owner.exec("INSERT INTO notes VALUES (3, 'c')");
     assert.deepEqual(
-      eventsOf(await within(next, 'batch with the insert of note 3', t.signal)),
+      eventsOf(
+        await within(
+          run.batches.next(),
+          'batch with the insert of note 3',
+          t.signal,
+        ),
+      ),
       {
         done: false,
         value: [
@@ -830,20 +799,17 @@ test('a durable feed that starts from a baseline gives no reads at its first run
         ],
       },
     );
-    stop.abort();
   }
   owner.exec("UPDATE notes SET title = 'A' WHERE id = 1");
 
-  using second = feed();
-  const stop = new AbortController();
-  const batch = await nextBatch(
-    second.watch({ clock: globalThis, interval: 5, signal: stop.signal }),
+  using second = durableBaseline(path, host);
+  await using run = await watched(
+    second,
     'the insert of note 3 again and the update of note 1',
     t.signal,
   );
-  stop.abort();
 
-  assert.deepEqual(batch, [
+  assert.deepEqual(run.first, [
     {
       table: 'notes',
       op: 'update',
@@ -860,40 +826,23 @@ test('a durable feed that starts from a baseline gives no reads at its first run
   ]);
 });
 
-test('a baseline of a database with no tables still starts the position: a table that the owner creates later gives reads, also in a new run', async (t) => {
+test('a committed baseline of a database with no tables starts the checkpoint: a table that the owner creates later gives reads, also in a new run', async (t) => {
   await using dir = await new TemporaryFiles().directory('changefeed-');
   const path = join(dir.path, 'owner.sqlite');
-  const position = join(dir.path, 'position.sqlite');
   using owner = owned(path, 'PRAGMA user_version = 1');
+  using host = hostOf(dir.path);
   {
-    using first = new Changefeed(path, {
-      position: new PositionFile(position),
-      start: new Baseline(),
-    });
-    const stop = new AbortController();
-    const next = first
-      .watch({ clock: globalThis, interval: 5, signal: stop.signal })
-      .next();
-    await setImmediate();
-    stop.abort(new Error('stopped'));
-    await assert.rejects(next, /stopped/);
+    using first = durableBaseline(path, host);
+    await using _run = await watched(first, 'the baseline', t.signal);
+    await first.commit();
   }
   owner.exec(`CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT);
     INSERT INTO notes VALUES (1, 'a');`);
 
-  using second = new Changefeed(path, {
-    position: new PositionFile(position),
-    start: new Baseline(),
-  });
-  const stop = new AbortController();
-  const batch = await nextBatch(
-    second.watch({ clock: globalThis, interval: 5, signal: stop.signal }),
-    'the read of note 1',
-    t.signal,
-  );
-  stop.abort();
+  using second = durableBaseline(path, host);
+  await using run = await watched(second, 'the read of note 1', t.signal);
 
-  assert.deepEqual(batch, [
+  assert.deepEqual(run.first, [
     {
       table: 'notes',
       op: 'read',
@@ -903,7 +852,7 @@ test('a baseline of a database with no tables still starts the position: a table
   ]);
 });
 
-test('a feed that keeps its position in memory and reads each row gives every row as a read at each new run', async (t) => {
+test('a feed that keeps its checkpoint in memory and reads each row gives every row as a read at each new run', async (t) => {
   await using dir = await new TemporaryFiles().directory('changefeed-');
   const path = join(dir.path, 'owner.sqlite');
   using _owner = owned(
@@ -913,17 +862,13 @@ test('a feed that keeps its position in memory and reads each row gives every ro
   );
   const read = async () => {
     using feed = new Changefeed(path, {
-      position: new PositionInMemory(),
+      checkpoints: new ConsumerGroup('host', new MemoryCheckpointStore()),
+      stream,
       start: new ReadEveryRow(),
     });
-    const stop = new AbortController();
-    const batch = await nextBatch(
-      feed.watch({ clock: globalThis, interval: 5, signal: stop.signal }),
-      'the read of note 1',
-      t.signal,
-    );
-    stop.abort();
-    return batch;
+    await using run = await watched(feed, 'the read of note 1', t.signal);
+    await feed.commit();
+    return run.first;
   };
 
   const runs = [await read(), await read()];
@@ -937,39 +882,25 @@ test('a feed that keeps its position in memory and reads each row gives every ro
   assert.deepEqual(runs, [[note], [note]]);
 });
 
-test('an integer beyond 2^53 reads exactly in a row and in a key, and the saved position gives the key back in the delete of a later run', async (t) => {
+test('an integer beyond 2^53 reads exactly in a row and in a key, and the checkpoint gives the key back in the delete of a later run', async (t) => {
   await using dir = await new TemporaryFiles().directory('changefeed-');
   const path = join(dir.path, 'owner.sqlite');
-  const position = join(dir.path, 'position.sqlite');
   using owner = owned(
     path,
     `CREATE TABLE visits (id INTEGER PRIMARY KEY, task INTEGER);
      INSERT INTO visits VALUES (9223372036854775807, 13399287446400972);`,
   );
+  using host = hostOf(dir.path);
   const first = await (async () => {
-    using feed = durable(path, position);
-    const stop = new AbortController();
-    const batches = feed.watch({
-      clock: globalThis,
-      interval: 5,
-      signal: stop.signal,
-    });
-    const batch = await nextBatch(batches, 'the read of the visit', t.signal);
-    const next = batches.next();
-    stop.abort(new Error('stopped'));
-    await assert.rejects(next, /stopped/);
-    return batch;
+    using feed = durable(path, host);
+    await using run = await watched(feed, 'the read of the visit', t.signal);
+    await feed.commit();
+    return run.first;
   })();
   owner.exec('DELETE FROM visits');
 
-  using feed = durable(path, position);
-  const stop = new AbortController();
-  const later = await nextBatch(
-    feed.watch({ clock: globalThis, interval: 5, signal: stop.signal }),
-    'the delete of the visit',
-    t.signal,
-  );
-  stop.abort();
+  using feed = durable(path, host);
+  await using later = await watched(feed, 'the delete of the visit', t.signal);
 
   assert.deepEqual(first, [
     {
@@ -979,7 +910,7 @@ test('an integer beyond 2^53 reads exactly in a row and in a key, and the saved 
       after: { id: 9223372036854775807n, task: 13399287446400972n },
     },
   ]);
-  assert.deepEqual(later, [
+  assert.deepEqual(later.first, [
     { table: 'visits', op: 'delete', key: { id: 9223372036854775807n } },
   ]);
 });
@@ -995,7 +926,8 @@ test('the first run of a table with more rows than a call takes arguments gives 
      WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 150000)
      INSERT INTO events SELECT i FROM n;`,
   );
-  using feed = durable(path, join(dir.path, 'position.sqlite'));
+  using host = hostOf(dir.path);
+  using feed = durable(path, host);
   const stop = new AbortController();
   const batches = feed.watch({
     clock: globalThis,
@@ -1011,145 +943,34 @@ test('the first run of a table with more rows than a call takes arguments gives 
   stop.abort();
 
   assert.ok(!next.done, 'the watch ended');
-  assert.equal(next.value.events.length, 150_000);
-  assert.ok(next.value.events.every((event) => event.op === 'read'));
-});
-
-test('a durable feed numbers each batch by the saves of its position, and a batch given again after a stop keeps its number', async (t) => {
-  await using dir = await new TemporaryFiles().directory('changefeed-');
-  const path = join(dir.path, 'owner.sqlite');
-  const position = join(dir.path, 'position.sqlite');
-  using owner = owned(
-    path,
-    `CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT);
-     INSERT INTO notes VALUES (1, 'a');`,
-  );
-  const feed = () =>
-    new Changefeed(path, {
-      position: new PositionFile(position),
-      start: new ReadEveryRow(),
-    });
-  const numbers = await (async () => {
-    using first = feed();
-    const stop = new AbortController();
-    const batches = first.watch({
-      clock: globalThis,
-      interval: 5,
-      signal: stop.signal,
-    });
-    const read = await within(batches.next(), 'the read of note 1', t.signal);
-    owner.exec("INSERT INTO notes VALUES (2, 'b')");
-    const inserted = await within(
-      batches.next(),
-      'the insert of note 2',
-      t.signal,
-    );
-    // The stop comes before the loop asks for the next batch, so the insert
-    // is not saved.
-    stop.abort(new Error('stopped'));
-    await assert.rejects(batches.next(), /stopped/);
-    assert.ok(!read.done && !inserted.done);
-    return [read.value.sequence, inserted.value.sequence];
-  })();
-
-  using second = feed();
-  const stop = new AbortController();
-  const again = await within(
-    second
-      .watch({ clock: globalThis, interval: 5, signal: stop.signal })
-      .next(),
-    'the insert of note 2 again',
-    t.signal,
-  );
-  stop.abort();
-
-  assert.deepEqual(numbers, [1, 2]);
-  assert.ok(!again.done);
-  assert.equal(again.value.sequence, 2);
-  assert.deepEqual(
-    [...again.value],
-    [
-      {
-        table: 'notes',
-        op: 'insert',
-        key: { id: 2n },
-        after: { id: 2n, title: 'b' },
-      },
-    ],
-  );
-});
-
-test('a feed whose position is in memory gives batches with no sequence, so a host cannot keep one across runs', async (t) => {
-  await using dir = await new TemporaryFiles().directory('changefeed-');
-  const path = join(dir.path, 'owner.sqlite');
-  using _owner = owned(
-    path,
-    `CREATE TABLE notes (id INTEGER PRIMARY KEY);
-     INSERT INTO notes VALUES (1);`,
-  );
-  using feed = new Changefeed(path, {
-    position: new PositionInMemory(),
-    start: new ReadEveryRow(),
-  });
-  const stop = new AbortController();
-
-  const next = await within(
-    feed.watch({ clock: globalThis, interval: 5, signal: stop.signal }).next(),
-    'the read of row 1',
-    t.signal,
-  );
-  stop.abort();
-
-  assert.ok(!next.done);
-  // @ts-expect-error A batch of a position in memory has no sequence.
-  assert.equal(next.value.sequence, undefined);
-  assert.deepEqual([...next.value].length, 1);
+  assert.equal(next.value.length, 150_000);
+  assert.ok(next.value.every((event) => event.op === 'read'));
 });
 
 test('an update names the columns whose values changed, also after a stop, and a new or a dropped column is the change of each row', async (t) => {
   await using dir = await new TemporaryFiles().directory('changefeed-');
   const path = join(dir.path, 'owner.sqlite');
-  const position = join(dir.path, 'position.sqlite');
   using owner = owned(
     path,
     `CREATE TABLE messages (id INTEGER PRIMARY KEY, body TEXT, is_read INTEGER, date_read INTEGER);
      INSERT INTO messages VALUES (1, 'Pay JOD 6.820', 0, NULL), (2, 'Lunch?', 0, NULL);`,
   );
+  using host = hostOf(dir.path);
   const changes = async (change: string) => {
     owner.exec(change);
-    using feed = new Changefeed(path, {
-      position: new PositionFile(position),
-      start: new Baseline(),
-    });
-    const stop = new AbortController();
-    const batches = feed.watch({
-      clock: globalThis,
-      interval: 5,
-      signal: stop.signal,
-    });
-    const batch = await nextBatch(batches, change, t.signal);
-    // The loop asks for the next batch before the stop, so this one is saved.
-    const next = batches.next();
-    stop.abort(new Error('stopped'));
-    await assert.rejects(next, /stopped/);
-    return batch.map((event) =>
+    using feed = durableBaseline(path, host);
+    await using run = await watched(feed, change, t.signal);
+    await feed.commit();
+    return run.first.map((event) =>
       event.op === 'update'
         ? `${String(event.key.id)} ${event.changed.join(',')}`
         : event.op,
     );
   };
   {
-    using baseline = new Changefeed(path, {
-      position: new PositionFile(position),
-      start: new Baseline(),
-    });
-    const stop = new AbortController();
-    const next = baseline
-      .watch({ clock: globalThis, interval: 5, signal: stop.signal })
-      .next();
-    await setImmediate();
-    stop.abort(new Error('stopped'));
-    await assert.rejects(next, /stopped/);
+    using baseline = durableBaseline(path, host);
+    await using _run = await watched(baseline, 'the baseline', t.signal);
+    await baseline.commit();
   }
 
   const read = await changes(
@@ -1167,27 +988,6 @@ test('an update names the columns whose values changed, also after a stop, and a
   assert.deepEqual(dropped, ['1 date_read', '2 date_read']);
 });
 
-// A durable feed of the owner's database that reads each row at its first
-// run, with the batches of one watch.
-function followed(path: string, position: string) {
-  const feed = durable(path, position);
-  const stop = new AbortController();
-  const batches = feed.watch({
-    clock: globalThis,
-    interval: 5,
-    signal: stop.signal,
-  });
-  return {
-    batches,
-    async [Symbol.asyncDispose]() {
-      const next = batches.next();
-      stop.abort(new Error('stopped'));
-      await assert.rejects(next, /stopped/);
-      feed[Symbol.dispose]();
-    },
-  };
-}
-
 test('while the owner keeps its WAL, each pass gives the changes of each table that its frames touched, a new table, and a dropped one', async (t) => {
   await using dir = await new TemporaryFiles().directory('changefeed-');
   const path = join(dir.path, 'owner.sqlite');
@@ -1199,16 +999,18 @@ test('while the owner keeps its WAL, each pass gives the changes of each table t
      INSERT INTO a VALUES (1, 'x');
      INSERT INTO b VALUES (1, 'y');`,
   );
-  await using feed = followed(path, join(dir.path, 'position.sqlite'));
+  using host = hostOf(dir.path);
+  using feed = durable(path, host);
+  await using run = await watched(feed, 'the first reads', t.signal);
   const ops = async (sql: string) => {
+    await feed.commit();
     owner.exec(sql);
-    return (await nextBatch(feed.batches, sql, t.signal)).map((event) =>
+    return (await nextBatch(run.batches, sql, t.signal)).map((event) =>
       event.op === 'truncate'
         ? `${event.table} truncate`
         : `${event.table} ${event.op} ${String(Object.values(event.key)[0])}`,
     );
   };
-  await nextBatch(feed.batches, 'the first reads', t.signal);
 
   const updated = await ops("UPDATE a SET v = 'x2' WHERE id = 1");
   const inserted = await ops("INSERT INTO b VALUES (2, 'z')");
@@ -1226,7 +1028,6 @@ test('while the owner keeps its WAL, each pass gives the changes of each table t
 test('changes that a WAL reset removed while the feed was stopped come at the next run, with the changes after the reset', async (t) => {
   await using dir = await new TemporaryFiles().directory('changefeed-');
   const path = join(dir.path, 'owner.sqlite');
-  const position = join(dir.path, 'position.sqlite');
   using owner = owned(
     path,
     `PRAGMA wal_autocheckpoint = 0;
@@ -1235,9 +1036,11 @@ test('changes that a WAL reset removed while the feed was stopped come at the ne
      INSERT INTO a VALUES (1, 'x');
      INSERT INTO b VALUES (1, 'y');`,
   );
+  using host = hostOf(dir.path);
   {
-    await using feed = followed(path, position);
-    await nextBatch(feed.batches, 'the first reads', t.signal);
+    using feed = durable(path, host);
+    await using _run = await watched(feed, 'the first reads', t.signal);
+    await feed.commit();
   }
   owner.exec(`UPDATE a SET v = 'x2' WHERE id = 1;
     PRAGMA wal_checkpoint(TRUNCATE);`);
@@ -1246,14 +1049,14 @@ test('changes that a WAL reset removed while the feed was stopped come at the ne
   const insert = owner.prepare('INSERT INTO b VALUES (?, ?)');
   for (let id = 2; id <= 41; id++) insert.run(id, 'z');
 
-  await using feed = followed(path, position);
-  const batch = await nextBatch(
-    feed.batches,
+  using feed = durable(path, host);
+  await using run = await watched(
+    feed,
     'the changes around the reset',
     t.signal,
   );
 
-  const tables = byTable(batch);
+  const tables = byTable(run.first);
   assert.deepEqual(tables.a, [
     {
       table: 'a',
@@ -1277,12 +1080,14 @@ test('an update of a row whose text spills onto overflow pages comes from the fr
      CREATE TABLE other (id INTEGER PRIMARY KEY);
      INSERT INTO notes VALUES (1, '${large('a')}');`,
   );
-  await using feed = followed(path, join(dir.path, 'position.sqlite'));
-  await nextBatch(feed.batches, 'the first reads', t.signal);
+  using host = hostOf(dir.path);
+  using feed = durable(path, host);
+  await using run = await watched(feed, 'the first reads', t.signal);
+  await feed.commit();
 
   owner.exec(`UPDATE notes SET body = '${large('b')}' WHERE id = 1`);
   const batch = await nextBatch(
-    feed.batches,
+    run.batches,
     'the update of the large note',
     t.signal,
   );
@@ -1291,4 +1096,553 @@ test('an update of a row whose text spills onto overflow pages comes from the fr
     batch.map((event) => (event.op === 'update' ? event.changed : event.op)),
     [['body']],
   );
+});
+
+test('a second feed of the stream fences the first: the commit of the first rejects with CheckpointFencedError and runs no write', async (t) => {
+  await using dir = await new TemporaryFiles().directory('changefeed-');
+  const path = join(dir.path, 'owner.sqlite');
+  using _owner = owned(
+    path,
+    `CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT);
+     INSERT INTO notes VALUES (1, 'a');`,
+  );
+  using host = hostOf(dir.path);
+  using older = durable(path, host);
+  await using _older = await watched(older, 'the read of note 1', t.signal);
+  using newer = durable(path, host);
+  await using _newer = await watched(newer, 'the read of note 1', t.signal);
+  let wrote = false;
+
+  await assert.rejects(
+    older.commit({
+      write: () => {
+        wrote = true;
+        return undefined;
+      },
+    }),
+    CheckpointFencedError,
+  );
+
+  assert.equal(wrote, false);
+});
+
+test('a feed that is built but never watched claims nothing, so it does not fence the feed that watches', async (t) => {
+  await using dir = await new TemporaryFiles().directory('changefeed-');
+  const path = join(dir.path, 'owner.sqlite');
+  using _owner = owned(
+    path,
+    `CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT);
+     INSERT INTO notes VALUES (1, 'a');`,
+  );
+  using host = hostOf(dir.path);
+  const group = new ConsumerGroup(
+    'host',
+    new SqliteCheckpointStore({ database: host }),
+  );
+  using feed = durable(path, host);
+  await using _run = await watched(feed, 'the read of note 1', t.signal);
+  using _idle = durable(path, host);
+
+  await feed.commit();
+
+  assert.deepEqual(await checkpointsOf(group), ['owner 1']);
+});
+
+test('a commit whose write throws commits nothing: the store keeps the earlier checkpoint, and the next run gives the batch again', async (t) => {
+  await using dir = await new TemporaryFiles().directory('changefeed-');
+  const path = join(dir.path, 'owner.sqlite');
+  using owner = owned(
+    path,
+    `CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT);
+     INSERT INTO notes VALUES (1, 'a');`,
+  );
+  using host = hostOf(dir.path);
+  host.exec('CREATE TABLE journal (note INTEGER)');
+  const group = new ConsumerGroup(
+    'host',
+    new SqliteCheckpointStore({ database: host }),
+  );
+  {
+    using feed = durable(path, host);
+    await using run = await watched(feed, 'the read of note 1', t.signal);
+    await feed.commit();
+    owner.exec("INSERT INTO notes VALUES (2, 'b')");
+    await nextBatch(run.batches, 'the insert of note 2', t.signal);
+    await assert.rejects(
+      feed.commit({
+        write: (database) => {
+          database.exec('INSERT INTO journal VALUES (2)');
+          throw new Error('the write failed');
+        },
+      }),
+      /the write failed/,
+    );
+  }
+  const kept = await checkpointsOf(group);
+  const journal = host.prepare('SELECT note FROM journal').all();
+
+  using feed = durable(path, host);
+  await using again = await watched(
+    feed,
+    'the insert of note 2 again',
+    t.signal,
+  );
+
+  assert.deepEqual(kept, ['owner 1']);
+  assert.deepEqual(journal, []);
+  assert.deepEqual(again.first, [
+    {
+      table: 'notes',
+      op: 'insert',
+      key: { id: 2n },
+      after: { id: 2n, title: 'b' },
+    },
+  ]);
+});
+
+test('a commit before the feed gave a batch rejects with a TypeError', async () => {
+  await using dir = await new TemporaryFiles().directory('changefeed-');
+  const path = join(dir.path, 'owner.sqlite');
+  using _owner = owned(path, 'CREATE TABLE notes (id INTEGER PRIMARY KEY)');
+  using host = hostOf(dir.path);
+  using feed = durable(path, host);
+
+  await assert.rejects(feed.commit(), TypeError);
+});
+
+void test.each(
+  [
+    {
+      name: 'another version',
+      version: 2,
+      json: { salt: 'a', frames: 1 },
+    },
+    { name: 'another shape', version: 1, json: { frames: 'many' } },
+  ],
+  (stored) =>
+    test(`a checkpoint whose position has ${stored.name} makes the watch reject with IncompatibleCheckpointError`, async () => {
+      await using dir = await new TemporaryFiles().directory('changefeed-');
+      const path = join(dir.path, 'owner.sqlite');
+      using _owner = owned(path, 'CREATE TABLE notes (id INTEGER PRIMARY KEY)');
+      using host = hostOf(dir.path);
+      const other: Format<Json> = {
+        version: stored.version,
+        encode: (json) => json,
+        decode: (_version, json) => json,
+      };
+      const context = await new ConsumerGroup(
+        'host',
+        new SqliteCheckpointStore({ database: host }),
+      ).claim({ stream, partition: '0' }, other);
+      await context.commit(stored.json);
+      using feed = durable(path, host);
+
+      await assert.rejects(
+        feed
+          .watch({
+            clock: globalThis,
+            interval: 5,
+            signal: new AbortController().signal,
+          })
+          .next(),
+        (error: unknown) => {
+          assert.ok(error instanceof IncompatibleCheckpointError);
+          assert.equal(error.version, stored.version);
+          return true;
+        },
+      );
+    }),
+);
+
+// A store over the memory store that keeps the state changes of each commit.
+class RecordingStore implements CheckpointStore<never> {
+  readonly commits: StateChanges[] = [];
+  readonly #store = new MemoryCheckpointStore();
+  readonly claim: CheckpointStore<never>['claim'] = (key, options) =>
+    this.#store.claim(key, options);
+  readonly read: CheckpointStore<never>['read'] = (key, options) =>
+    this.#store.read(key, options);
+  readonly get: CheckpointStore<never>['get'] = (key, state, keys, options) =>
+    this.#store.get(key, state, keys, options);
+  readonly scan: CheckpointStore<never>['scan'] = (key, state, options) =>
+    this.#store.scan(key, state, options);
+  readonly list: CheckpointStore<never>['list'] = (group, options) =>
+    this.#store.list(group, options);
+  readonly reset: CheckpointStore<never>['reset'] = (group, target, options) =>
+    this.#store.reset(group, target, options);
+  readonly commit: CheckpointStore<never>['commit'] = async (
+    key,
+    epoch,
+    checkpoint,
+    changes,
+    options,
+  ) => {
+    await this.#store.commit(key, epoch, checkpoint, changes, options);
+    this.commits.push(changes);
+  };
+}
+
+test('a commit keeps the WAL progress of its last pass as the position of the checkpoint', async (t) => {
+  await using dir = await new TemporaryFiles().directory('changefeed-');
+  const path = join(dir.path, 'owner.sqlite');
+  using _owner = owned(
+    path,
+    `CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT);
+     INSERT INTO notes VALUES (1, 'a');`,
+  );
+  const group = new ConsumerGroup('host', new MemoryCheckpointStore());
+  {
+    using feed = new Changefeed(path, {
+      checkpoints: group,
+      stream,
+      start: new ReadEveryRow(),
+    });
+    await using _run = await watched(feed, 'the reads of notes', t.signal);
+    await feed.commit();
+  }
+
+  // The host reads the stored position as JSON, as another reader of the
+  // checkpoint would.
+  const raw: Format<{ readonly salt: Json; readonly frames: Json } | null> = {
+    version: 1,
+    encode: (position) => position,
+    decode: (_version, json) =>
+      typeof json === 'object' &&
+      json !== null &&
+      'salt' in json &&
+      'frames' in json
+        ? { salt: json.salt, frames: json.frames }
+        : null,
+  };
+  const kept = await group.claim({ stream, partition: '0' }, raw);
+
+  const position = kept.checkpoint?.position;
+  assert.equal(typeof position?.salt, 'string');
+  assert.ok(
+    typeof position?.frames === 'number' && position.frames > 0,
+    `the position is ${JSON.stringify(position)}`,
+  );
+});
+
+// The number of keys of each map state in one kind of change of a commit.
+function sizes(
+  changes: ReadonlyMap<
+    string,
+    ReadonlyMap<string, unknown> | ReadonlySet<string>
+  >,
+) {
+  return Object.fromEntries(
+    [...changes].map(([state, keys]) => [state, keys.size]),
+  );
+}
+
+void test.each(
+  [
+    {
+      change: "INSERT INTO notes VALUES (4, 'd')",
+      set: { 'table:notes': 1 },
+      deleted: {},
+    },
+    {
+      change: "UPDATE notes SET title = 'B' WHERE id = 2",
+      set: { 'table:notes': 1 },
+      deleted: {},
+    },
+    {
+      change: 'DELETE FROM notes WHERE id = 3',
+      set: {},
+      deleted: { 'table:notes': 1 },
+    },
+  ],
+  ({ change, set, deleted }) =>
+    test(`a commit after "${change}" writes only the fingerprint of that row`, async (t) => {
+      await using dir = await new TemporaryFiles().directory('changefeed-');
+      const path = join(dir.path, 'owner.sqlite');
+      using owner = owned(
+        path,
+        `CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT);
+         INSERT INTO notes VALUES (1, 'a'), (2, 'b'), (3, 'c');`,
+      );
+      const store = new RecordingStore();
+      using feed = new Changefeed(path, {
+        checkpoints: new ConsumerGroup('host', store),
+        stream,
+        start: new ReadEveryRow(),
+      });
+      await using run = await watched(feed, 'the reads of notes', t.signal);
+      await feed.commit();
+      owner.exec(change);
+      await nextBatch(run.batches, change, t.signal);
+
+      await feed.commit();
+      // A new watch diffs the owner against what the commits kept: a wrong
+      // key or a wrong fingerprint would give an event. A row that comes and
+      // goes puts notes in the WAL frames, so the pass reads it again; an
+      // UPDATE to the same values writes no frame.
+      owner.exec(
+        "INSERT INTO notes VALUES (9, 'z'); DELETE FROM notes WHERE id = 9;",
+      );
+      await using again = await watched(feed, 'the next run', t.signal);
+
+      assert.deepEqual(
+        store.commits.map((commit) => ({
+          cleared: [...commit.cleared],
+          set: sizes(commit.set),
+          deleted: sizes(commit.deleted),
+        })),
+        [
+          {
+            cleared: [],
+            set: { tables: 1, 'table:notes': 3 },
+            deleted: {},
+          },
+          { cleared: [], set, deleted },
+        ],
+      );
+      assert.deepEqual(again.first, []);
+    }),
+);
+
+test('a commit with an aborted signal rejects with its reason and commits nothing, so the next run gives the batch again', async (t) => {
+  await using dir = await new TemporaryFiles().directory('changefeed-');
+  const path = join(dir.path, 'owner.sqlite');
+  using _owner = owned(
+    path,
+    `CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT);
+     INSERT INTO notes VALUES (1, 'a');`,
+  );
+  using host = hostOf(dir.path);
+  const reason = new Error('the host stopped');
+  {
+    using feed = durable(path, host);
+    await using _run = await watched(feed, 'the read of note 1', t.signal);
+    await assert.rejects(
+      feed.commit({ signal: AbortSignal.abort(reason) }),
+      (error: unknown) => error === reason,
+    );
+  }
+
+  using feed = durable(path, host);
+  await using again = await watched(feed, 'the read of note 1 again', t.signal);
+
+  assert.deepEqual(again.first, [
+    {
+      table: 'notes',
+      op: 'read',
+      key: { id: 1n },
+      after: { id: 1n, title: 'a' },
+    },
+  ]);
+});
+
+test('a commit with a write commits the rows of the write and the checkpoint together', async (t) => {
+  await using dir = await new TemporaryFiles().directory('changefeed-');
+  const path = join(dir.path, 'owner.sqlite');
+  using owner = owned(
+    path,
+    `CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT);
+     INSERT INTO notes VALUES (1, 'a');`,
+  );
+  const hostPath = join(dir.path, 'host.sqlite');
+  {
+    using host = hostOf(dir.path);
+    host.exec('CREATE TABLE journal (events INTEGER)');
+    using feed = durable(path, host);
+    await using run = await watched(feed, 'the read of note 1', t.signal);
+    await feed.commit({
+      write: (database) =>
+        void database
+          .prepare('INSERT INTO journal VALUES (?)')
+          .run(run.first.length),
+    });
+  }
+  owner.exec("INSERT INTO notes VALUES (2, 'b')");
+
+  using host = sqliteOpen.open(hostPath);
+  const journal = host
+    .prepare('SELECT events FROM journal')
+    .all()
+    .map(({ events }) => events);
+  using feed = durable(path, host);
+  await using run = await watched(feed, 'the insert of note 2', t.signal);
+
+  assert.deepEqual(journal, [1]);
+  assert.deepEqual(run.first, [
+    {
+      table: 'notes',
+      op: 'insert',
+      key: { id: 2n },
+      after: { id: 2n, title: 'b' },
+    },
+  ]);
+});
+
+test('a feed whose checkpoint is in memory takes no write', async () => {
+  await using dir = await new TemporaryFiles().directory('changefeed-');
+  const path = join(dir.path, 'owner.sqlite');
+  using _owner = owned(path, 'CREATE TABLE notes (id INTEGER PRIMARY KEY)');
+  using feed = observing(path);
+
+  await assert.rejects(
+    feed.commit({
+      // @ts-expect-error The memory store has no transaction for a write.
+      write: () => undefined,
+    }),
+    TypeError,
+  );
+});
+
+test('a dropped table loses its fingerprints and its columns: a table that the owner creates again with that name gives reads at the next run, and later only its own changes', async (t) => {
+  await using dir = await new TemporaryFiles().directory('changefeed-');
+  const path = join(dir.path, 'owner.sqlite');
+  using owner = owned(
+    path,
+    `CREATE TABLE drafts (id INTEGER PRIMARY KEY, body TEXT);
+     INSERT INTO drafts VALUES (1, 'draft');`,
+  );
+  using host = hostOf(dir.path);
+  {
+    using feed = durable(path, host);
+    await using run = await watched(feed, 'the read of draft 1', t.signal);
+    await feed.commit();
+    owner.exec('DROP TABLE drafts');
+    await nextBatch(run.batches, 'the truncate of drafts', t.signal);
+    await feed.commit();
+  }
+  owner.exec(`CREATE TABLE drafts (id INTEGER PRIMARY KEY, body TEXT);
+    INSERT INTO drafts VALUES (2, 'draft');`);
+
+  using feed = durable(path, host);
+  await using run = await watched(feed, 'the read of draft 2', t.signal);
+  await feed.commit();
+  owner.exec("INSERT INTO drafts VALUES (3, 'draft')");
+  const later = await nextBatch(run.batches, 'the insert of draft 3', t.signal);
+
+  assert.deepEqual(run.first, [
+    {
+      table: 'drafts',
+      op: 'read',
+      key: { id: 2n },
+      after: { id: 2n, body: 'draft' },
+    },
+  ]);
+  assert.deepEqual(later, [
+    {
+      table: 'drafts',
+      op: 'insert',
+      key: { id: 3n },
+      after: { id: 3n, body: 'draft' },
+    },
+  ]);
+});
+
+test('one commit after several batches saves them all: a later pass of the run does not give an earlier batch again, and a new run gives neither', async (t) => {
+  await using dir = await new TemporaryFiles().directory('changefeed-');
+  const path = join(dir.path, 'owner.sqlite');
+  using owner = owned(
+    path,
+    `CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT);
+     INSERT INTO notes VALUES (1, 'a');`,
+  );
+  using host = hostOf(dir.path);
+  const second = await (async () => {
+    using feed = durable(path, host);
+    await using run = await watched(feed, 'the read of note 1', t.signal);
+    owner.exec("INSERT INTO notes VALUES (2, 'b')");
+    const batch = await nextBatch(
+      run.batches,
+      'the insert of note 2',
+      t.signal,
+    );
+    await feed.commit();
+    return batch;
+  })();
+
+  using feed = durable(path, host);
+  await using run = await watched(feed, 'the first pass', t.signal);
+
+  assert.deepEqual(second, [
+    {
+      table: 'notes',
+      op: 'insert',
+      key: { id: 2n },
+      after: { id: 2n, title: 'b' },
+    },
+  ]);
+  assert.deepEqual(run.first, []);
+});
+
+test('the feed does not close the store of the host: after the feed is disposed, the consumer group still lists its checkpoint', async (t) => {
+  await using dir = await new TemporaryFiles().directory('changefeed-');
+  const path = join(dir.path, 'owner.sqlite');
+  using _owner = owned(
+    path,
+    `CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT);
+     INSERT INTO notes VALUES (1, 'a');`,
+  );
+  using host = hostOf(dir.path);
+  const group = new ConsumerGroup(
+    'host',
+    new SqliteCheckpointStore({ database: host }),
+  );
+  {
+    using feed = new Changefeed(path, {
+      checkpoints: group,
+      stream,
+      start: new ReadEveryRow(),
+    });
+    await using _run = await watched(feed, 'the read of note 1', t.signal);
+    await feed.commit();
+  }
+
+  assert.deepEqual(await checkpointsOf(group), ['owner 1']);
+});
+
+test('a feed of another stream, and a feed of another consumer group, on the same store neither fence the feed nor share its checkpoint', async (t) => {
+  await using dir = await new TemporaryFiles().directory('changefeed-');
+  const path = join(dir.path, 'owner.sqlite');
+  using _owner = owned(
+    path,
+    `CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT);
+     INSERT INTO notes VALUES (1, 'a');`,
+  );
+  using host = hostOf(dir.path);
+  const store = new SqliteCheckpointStore({ database: host });
+  const feedOf = (group: string, name: string) =>
+    new Changefeed(path, {
+      checkpoints: new ConsumerGroup(group, store),
+      stream: name,
+      start: new ReadEveryRow(),
+    });
+  using feed = feedOf('host', stream);
+  await using _run = await watched(feed, 'the read of note 1', t.signal);
+  await feed.commit();
+  using otherStream = feedOf('host', 'copy');
+  await using streamRun = await watched(
+    otherStream,
+    'the read of note 1 of another stream',
+    t.signal,
+  );
+  using otherGroup = feedOf('mirror', stream);
+  await using groupRun = await watched(
+    otherGroup,
+    'the read of note 1 of another group',
+    t.signal,
+  );
+
+  await feed.commit();
+
+  const read = [
+    {
+      table: 'notes',
+      op: 'read',
+      key: { id: 1n },
+      after: { id: 1n, title: 'a' },
+    },
+  ];
+  assert.deepEqual(streamRun.first, read);
+  assert.deepEqual(groupRun.first, read);
+  assert.deepEqual(await checkpointsOf(new ConsumerGroup('host', store)), [
+    'owner 2',
+  ]);
 });

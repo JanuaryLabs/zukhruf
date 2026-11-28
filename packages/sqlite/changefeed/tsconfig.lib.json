@@ -9,9 +9,6 @@
   "exclude": ["src/**/*.test.ts"],
   "references": [
     {
-      "path": "../transaction/tsconfig.lib.json"
-    },
-    {
       "path": "../snapshot/tsconfig.lib.json"
     },
     {
@@ -24,10 +21,13 @@
       "path": "../../snapshot-differential/tsconfig.lib.json"
     },
     {
+      "path": "../../checkpoint/tsconfig.lib.json"
+    },
+    {
       "path": "../../async/tsconfig.lib.json"
     },
     {
-      "path": "../../testing/tsconfig.lib.json"
+      "path": "../../parameterized-test/tsconfig.lib.json"
     },
     {
       "path": "../../fs/tsconfig.lib.json"

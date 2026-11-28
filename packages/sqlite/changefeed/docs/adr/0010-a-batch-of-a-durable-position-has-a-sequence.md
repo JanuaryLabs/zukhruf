@@ -1,5 +1,7 @@
 # A batch of a durable position has a sequence
 
+Superseded on 2026-11-28 (#6280) by [ADR 0012](./0012-the-feed-keeps-its-position-in-a-consumer-group-of-zukhruf-checkpoint-and-the-host-commits.md): a batch is a `readonly ChangeEvent[]` with no sequence. A host that must apply each batch one time commits its output in the `write` of the commit. A `MemoryCheckpointStore` takes no `write`, so a feed in memory still cannot claim it.
+
 Delivery of a durable feed is at least once (ADR 0004). A host that cannot apply an event two times with no effect must find a batch that comes again. Ambient in context-compiler keeps a fingerprint of each event for this, and a hand-off table for a stop between its journal and its queue.
 
 Kafka gives each record an offset, and Debezium gives each event the position of the log. A consumer keeps the last offset that it applied in the transaction of its own work, and skips a record whose offset it has: an idempotent consumer.

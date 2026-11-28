@@ -6,8 +6,14 @@ import {
 
 import type { ChangeEvent } from './change-event.ts';
 import { changedColumns, columnHashes } from './column-hashes.ts';
-import type { TablePosition } from './position.ts';
 import type { KeyedRow, Table } from './tables.ts';
+
+// What the feed saw of one table: the columns that its fingerprints hash, and
+// one fingerprint for each key.
+type SavedTable = {
+  readonly columns: readonly string[];
+  readonly state: SnapshotState;
+};
 
 /** The change events of one table in a pass, and its new snapshot. */
 export type TableChanges = {
@@ -15,12 +21,11 @@ export type TableChanges = {
   readonly state: SnapshotState;
 };
 
-// The change events of one table against what the position saved of it, and
-// its new snapshot. null: the position does not have the table, so each row
-// is a read.
+// The change events of one table against what the feed saw of it, and its
+// new snapshot. null: the feed did not see the table, so each row is a read.
 export async function tableChanges(
   table: Table,
-  saved: TablePosition | null,
+  saved: SavedTable | null,
 ): Promise<TableChanges> {
   const events: ChangeEvent[] = [];
   for await (const change of differentialOf(table).diff(

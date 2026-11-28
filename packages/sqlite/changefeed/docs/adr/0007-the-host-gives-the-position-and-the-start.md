@@ -1,5 +1,7 @@
 # The host gives the position and the start
 
+Superseded in part on 2026-11-28 (#6280) for the position. The host gives a `ConsumerGroup` and a `stream` in place of a `Position`, and owns the store ([ADR 0012](./0012-the-feed-keeps-its-position-in-a-consumer-group-of-zukhruf-checkpoint-and-the-host-commits.md)). The start stays as this ADR decided it.
+
 ADR 0004 let the presence of a position path set the kind of the feed. With a path, the position was a file, and the first run gave each row as a read event. Without a path, the position was in memory, and each run started with a baseline. Thus one optional argument set two separate things: where the feed keeps its position, and what the first pass gives.
 
 ADR 0004 considered a separate start option, and rejected it: "No consumer needs a durable feed that starts from now." Ambient, in context-compiler, is that consumer. It follows 21 imports with about 7.7 million rows (2026-11-07). It sends a notice for a change, not for each row that was there before it started. With a position file, its first run gave 7.7 million read events. With no position, it did not see the changes of the time when it was stopped.
